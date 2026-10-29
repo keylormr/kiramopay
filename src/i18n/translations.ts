@@ -267,8 +267,8 @@ export type TranslationKeys = {
   support: string;
   help_center: string;
   faq: string;
-  chat_support: string;
-  support_soon_desc: string;
+  support_write_title: string;
+  support_write_desc: string;
   about: string;
   version: string;
 
@@ -296,6 +296,9 @@ export type TranslationKeys = {
 
   // Additional UI
   add_money: string;
+  add_money_today_title: string;
+  add_money_today_desc: string;
+  add_money_bank_soon: string;
   add_account: string;
   open_new_account: string;
   accounts_other_ccy_title: string;
@@ -304,7 +307,6 @@ export type TranslationKeys = {
   accounts_go_crypto: string;
   insufficient_funds: string;
   card: string;
-  deposit_crypto: string;
   amount_to_send: string;
   amount_to_request: string;
   from: string;
@@ -313,6 +315,9 @@ export type TranslationKeys = {
   date: string;
   category: string;
   transaction_id: string;
+  transaction_type: string;
+  transaction_to: string;
+  transaction_note: string;
   tx_status_completed: string;
   tx_status_pending: string;
   tx_status_processing: string;
@@ -336,7 +341,6 @@ export type TranslationKeys = {
   this_month: string;
   expenses: string;
   available_247: string;
-  request_increase: string;
   daily_limit: string;
   monthly_limit: string;
   per_transaction: string;
@@ -401,6 +405,47 @@ export type TranslationKeys = {
   business_report_range_365: string;
   business_sales_today: string;
   business_sales_total: string;
+  business_period_label: string;
+  business_period_today: string;
+  business_period_week: string;
+  business_period_month: string;
+  business_period_prev_month: string;
+  business_day_today: string;
+  business_day_yesterday: string;
+  business_sales_title: string;
+  business_sales_vs_yesterday: string;
+  business_sales_vs_week: string;
+  business_sales_vs_month: string;
+  business_sales_prev_none_today: string;
+  business_sales_prev_none_week: string;
+  business_sales_prev_none_month: string;
+  business_sales_compare_locked: string;
+  business_sales_summary_failed: string;
+  business_no_disponible: string;
+  business_move_type_charge: string;
+  business_move_type_refund: string;
+  business_move_type_withdrawal: string;
+  business_move_none: string;
+  business_move_day_total_unavailable: string;
+  business_move_more: string;
+  business_move_more_failed: string;
+  business_move_withdrawals_failed: string;
+  business_detail_charge: string;
+  business_detail_refund: string;
+  business_detail_withdrawal: string;
+  business_detail_payer: string;
+  business_detail_reference: string;
+  business_detail_location: string;
+  business_detail_withdrawn_by: string;
+  business_detail_no_location: string;
+  business_detail_no_cashier: string;
+  business_status_refunded: string;
+  business_you_title: string;
+  business_your_role: string;
+  business_role_owner: string;
+  business_role_owner_desc: string;
+  business_owner_label: string;
+  business_owner_contact: string;
   business_commission_paid: string;
   business_back_to_personal: string;
   business_load_failed_title: string;
@@ -423,12 +468,13 @@ export type TranslationKeys = {
   card_limits_desc: string;
   card_cancel: string;
   card_cancel_confirm: string;
-  card_atm_limit: string;
   card_created_title: string;
   card_created_desc: string;
   // La tarjeta no pertenece a ninguna red de pago: se rotula y se avisa.
   card_only_in_app: string;
   card_decorative_note: string;
+  card_err_create: string;
+  card_err_no_name: string;
   card_number_label: string;
   card_expiry_label: string;
   card_cvv_label: string;
@@ -499,6 +545,7 @@ export type TranslationKeys = {
   sinpe_transfer_success: string;
   sinpe_self_send_error: string;
   sinpe_phone_invalid: string;
+  sinpe_phone_incomplete: string;
   sinpe_invalid_amount: string;
   sinpe_recipient_not_user: string;
   sinpe_err_sin_confirmar: string;
@@ -601,6 +648,7 @@ export type TranslationKeys = {
   crypto_err_insufficient_asset: string;
   crypto_err_insufficient_funds: string;
   crypto_err_invalid_amount: string;
+  crypto_err_invalid_pair: string;
   crypto_err_repeated_request: string;
   crypto_err_price_unavailable: string;
   crypto_err_price_moved: string;
@@ -610,6 +658,8 @@ export type TranslationKeys = {
   crypto_err_generic: string;
   crypto_action_needs_price: string;
   crypto_value_unavailable: string;
+  crypto_crc_unavailable: string;
+  crypto_sell_crc_needs_rate: string;
   crypto_refresh_prices: string;
   crypto_no_assets_to_convert: string;
   crypto_my_portfolio: string;
@@ -824,6 +874,9 @@ export type TranslationKeys = {
   loyalty_unavailable: string;
   loyalty_redeem_failed: string;
   business_sales_window: string;
+  business_sales_window_one: string;
+  business_charges_count_one: string;
+  business_charges_count: string;
   business_sales_load_failed: string;
   error_retry: string;
   update_required_title: string;
@@ -940,6 +993,7 @@ export type TranslationKeys = {
   analytics_cat_cash: string;
   analytics_cat_other: string;
   analytics_cat_savings: string;
+  analytics_cat_crypto: string;
   tx_title_sinpe_send: string;
   tx_title_sinpe_receive: string;
   tx_title_qr_payment: string;
@@ -965,6 +1019,8 @@ export type TranslationKeys = {
   tx_title_crypto_buy: string;
   tx_title_crypto_sell: string;
   tx_title_crypto_send: string;
+  tx_title_merchant_withdrawal: string;
+  tx_title_refund: string;
   demo_tx_sinpe_diego: string;
   demo_tx_pago_ice: string;
   demo_rec_sinpe_diego: string;
@@ -996,6 +1052,14 @@ export type TranslationKeys = {
   admin_promo_warning: string;
   admin_promo_done: string;
   admin_promo_failed: string;
+  admin_capital_menu: string;
+  admin_capital_menu_desc: string;
+  admin_capital_title: string;
+  admin_capital_explain: string;
+  admin_capital_shortfall: string;
+  admin_capital_ok: string;
+  admin_capital_failed: string;
+  admin_capital_empty: string;
   // Las tarjetas de resumen suman lo que se trajo, no todo el historial: la
   // pantalla lo dice en vez de presentar un subtotal como si fuera el total.
   tx_totals_scope: string;
@@ -1235,14 +1299,19 @@ export type TranslationKeys = {
   home_spent_failed: string;
   home_vs_last_month: string;
   balance_usd_estimate: string;
+  fx_total_unavailable: string;
+  fx_total_unavailable_short: string;
   sinpe_contact_saved: string;
   qr_te_solicitan: string;
   qr_mi_codigo: string;
   qr_rotulo_mostrador: string;
   qr_rotulo_ayuda: string;
+  qr_personal_ayuda: string;
   qr_cobrar_monto: string;
   qr_cobrando: string;
-  qr_vence_en_min: string;
+  qr_vence_en: string;
+  duration_hours: string;
+  duration_minutes: string;
   qr_cambiar_monto: string;
   qr_quitar_monto: string;
   qr_cancelar_cobro: string;
@@ -1251,6 +1320,7 @@ export type TranslationKeys = {
   qr_le_pagas_a: string;
   qr_verificando: string;
   qr_solicitudes_activas: string;
+  qr_ver_qr: string;
   qr_sin_solicitudes: string;
   qr_err_revocado: string;
   qr_err_reemplazado: string;
@@ -1308,7 +1378,16 @@ export type TranslationKeys = {
   splitpay_share_paid: string;
   splitpay_share_pending: string;
   splitpay_share_declined: string;
+  splitpay_status_active: string;
+  splitpay_status_settled: string;
+  splitpay_status_cancelled: string;
   splitpay_detail: string;
+  splitpay_detail_state_active: string;
+  splitpay_detail_state_settled: string;
+  splitpay_detail_state_cancelled: string;
+  splitpay_detail_cancelled_note: string;
+  splitpay_share_not_charged: string;
+  splitpay_cancel_blocked_paid: string;
   splitpay_decline_share: string;
   splitpay_cancel_split: string;
   splitpay_confirm_decline: string;
@@ -1339,6 +1418,10 @@ export type TranslationKeys = {
   loyalty_loading_slow: string;
   loyalty_tier: string;
   loyalty_tier_max: string;
+  loyalty_tier_bronze: string;
+  loyalty_tier_silver: string;
+  loyalty_tier_gold: string;
+  loyalty_tier_platinum: string;
   loyalty_lifetime: string;
   loyalty_available: string;
   loyalty_rewards: string;
@@ -1353,6 +1436,10 @@ export type TranslationKeys = {
   loyalty_redeem: string;
   loyalty_next_tier: string;
   loyalty_max_per_tx: string;
+  loyalty_reward_cashback_name: string;
+  loyalty_reward_cashback_desc: string;
+  loyalty_tx_redeem: string;
+  loyalty_tx_referral: string;
 
   // Home extra cards
   home_split: string;
@@ -1579,6 +1666,7 @@ export type TranslationKeys = {
   // le puede liberar a nadie.
   escrow_seller_not_found: string;
   escrow_amount: string;
+  escrow_amount_hint: string;
   escrow_desc_label: string;
   escrow_desc_hint: string;
   escrow_create_btn: string;
@@ -1586,6 +1674,7 @@ export type TranslationKeys = {
   escrow_role_seller: string;
   escrow_you_buyer: string;
   escrow_you_seller: string;
+  escrow_date_created: string;
   escrow_status_pending: string;
   escrow_status_funded: string;
   escrow_status_released: string;
@@ -1820,8 +1909,6 @@ export type TranslationKeys = {
   merchant_admin_tab_pending: string;
   merchant_admin_tab_plan: string;
   merchant_admin_plan_desc: string;
-  merchant_admin_plan_id_label: string;
-  merchant_admin_plan_id_invalid: string;
   merchant_admin_plan_base_desc: string;
   merchant_admin_plan_analitica_desc: string;
   merchant_admin_plan_review: string;
@@ -1866,6 +1953,15 @@ export type TranslationKeys = {
   merchant_admin_err_own: string;
   merchant_admin_close_err_own: string;
   merchant_admin_close_done: string;
+  merchant_admin_plan_pick_label: string;
+  merchant_admin_plan_current: string;
+  merchant_admin_err_commission: string;
+  merchant_err_category: string;
+  merchant_err_required: string;
+  merchant_err_cedula_type: string;
+  merchant_err_too_long: string;
+  merchant_err_duplicate: string;
+  profile_demo_account: string;
   business_closed_menu: string;
   business_closed_menu_desc: string;
   business_closed_intro: string;
@@ -1916,6 +2012,12 @@ export type TranslationKeys = {
   // la llave se conserva. Y la repeticion de uno que ya estaba hecho.
   bill_err_sin_confirmar: string;
   recharge_err_sin_confirmar: string;
+  services_unavailable_title: string;
+  services_unavailable_hint: string;
+  services_catalog_error: string;
+  services_no_providers: string;
+  bill_err_proveedor: string;
+  recharge_err_operador: string;
   bill_ya_hecho: string;
   recharge_ya_hecho: string;
   servicio_ya_hecho_desc: string;
@@ -2092,10 +2194,24 @@ const loaders: Record<Exclude<Language, 'es'>, () => Promise<{ default: Translat
   hi: () => import('./languages/hi'),
 };
 
+// Los diccionarios que ya llegaron. Quien pinta (LanguageProvider, la pantalla
+// de error) los lee de aqui en su primer render: sin esto el primer pintado era
+// siempre en espanol y el idioma de la persona entraba despues, cuando el trozo
+// terminaba de bajar; si no terminaba (justo lo que pasa con una red mala o un
+// servidor dormido), la pantalla de arranque se quedaba en espanol.
+const cargados: Partial<Record<Language, TranslationKeys>> = { es };
+
+/** El diccionario del idioma si ya llego, sin esperar nada. */
+export function diccionarioCargado(lang: Language): TranslationKeys | undefined {
+  return cargados[lang];
+}
+
 // loadLanguage resolves a language's messages: Spanish is already bundled;
 // the others are fetched via a dynamic import (their own chunk).
 export async function loadLanguage(lang: Language): Promise<TranslationKeys> {
-  if (lang === 'es') return es;
-  const mod = await loaders[lang]();
+  const ya = cargados[lang];
+  if (ya) return ya;
+  const mod = await loaders[lang as Exclude<Language, 'es'>]();
+  cargados[lang] = mod.default;
   return mod.default;
 }

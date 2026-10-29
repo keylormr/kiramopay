@@ -72,6 +72,12 @@ type Agreement struct {
 	// "entrega" (el vendedor no marco la entrega) o "revision" (el comprador
 	// no libero ni reclamo).
 	ClosedByExpiry string `json:"closed_by_expiry,omitempty"`
+
+	// CounterpartyName es el nombre de la OTRA parte, la que no es quien
+	// consulta: el vendedor para el comprador y al reves. Es un dato de la
+	// respuesta, no del acuerdo: no se guarda ni viaja en los avisos a los
+	// webhooks (ConContraparte devuelve una copia).
+	CounterpartyName string `json:"counterparty_name,omitempty"`
 }
 
 // Plazos son los dias que tiene cada parte para actuar. Ver EscrowConfig.

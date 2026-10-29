@@ -463,8 +463,12 @@ type SolicitudAdmin struct {
 // ListarVerificadas devuelve la cola: las solicitudes con el contacto ya
 // comprobado, la mas antigua primero.
 func (s *Service) ListarVerificadas(ctx context.Context, limite int) ([]SolicitudAdmin, error) {
-	if limite <= 0 || limite > 100 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope. Antes volvia
+	// al valor por defecto, y `limit=500` traia menos filas que `limit=100`.
+	if limite <= 0 {
 		limite = 50
+	} else if limite > 100 {
+		limite = 100
 	}
 	filas, err := s.pool.Query(ctx, `
 		SELECT id::text, contact_kind, status, created_at, verified_at, COALESCE(user_id::text, '')
@@ -569,21 +573,21 @@ func (s *Service) Procesar(ctx context.Context, solicitudID, adminID string) (*A
 
 // frasesDeBloqueo es lo que se le escribe a la persona por cada cosa pendiente.
 // Van aqui, y no en el front, porque salen por correo y no hay pantalla que las
-// traduzca; en voseo, como el resto del correo. Un codigo que no este aqui cae
+// traduzca; en tuteo, como el resto del correo. Un codigo que no este aqui cae
 // en la frase generica (motivosDe).
 var frasesDeBloqueo = map[string]string{
-	BloqueoSaldo:             "tenés saldo en tu billetera: envialo, retiralo o gastalo hasta dejarla en cero",
-	BloqueoAhorros:           "tenés dinero en tus metas de ahorro: pasalo a tu billetera",
-	BloqueoCripto:            "tenés criptomonedas: vendelas o envialas",
-	BloqueoStaking:           "tenés cripto en staking: retirala",
-	BloqueoSaldoRegional:     "tenés saldo en una billetera regional",
-	BloqueoSaldoComercio:     "tu comercio tiene saldo: pasalo a tu billetera",
-	BloqueoCobrosAbiertos:    "tu comercio tiene cobros por QR sin pagar: cancelalos",
-	BloqueoMovimientoEnCurso: "tenés un movimiento en proceso: esperá a que termine",
-	BloqueoEscrowAbierto:     "tenés un acuerdo de garantía abierto: cerralo o esperá a que se liquide",
-	BloqueoPayoutEnCurso:     "tenés un retiro en proceso: esperá a que termine",
-	BloqueoTransfronterizo:   "tenés una transferencia internacional en proceso: esperá a que termine",
-	BloqueoMarketplace:       "tenés un viaje o un pedido en curso: esperá a que termine",
+	BloqueoSaldo:             "tienes saldo en tu billetera: envíalo, retíralo o gástalo hasta dejarla en cero",
+	BloqueoAhorros:           "tienes dinero en tus metas de ahorro: pásalo a tu billetera",
+	BloqueoCripto:            "tienes criptomonedas: véndelas o envíalas",
+	BloqueoStaking:           "tienes cripto en staking: retírala",
+	BloqueoSaldoRegional:     "tienes saldo en una billetera regional",
+	BloqueoSaldoComercio:     "tu comercio tiene saldo: pásalo a tu billetera",
+	BloqueoCobrosAbiertos:    "tu comercio tiene cobros por QR sin pagar: cancélalos",
+	BloqueoMovimientoEnCurso: "tienes un movimiento en proceso: espera a que termine",
+	BloqueoEscrowAbierto:     "tienes un acuerdo de garantía abierto: ciérralo o espera a que se liquide",
+	BloqueoPayoutEnCurso:     "tienes un retiro en proceso: espera a que termine",
+	BloqueoTransfronterizo:   "tienes una transferencia internacional en proceso: espera a que termine",
+	BloqueoMarketplace:       "tienes un viaje o un pedido en curso: espera a que termine",
 }
 
 // Rechazar cierra una solicitud de la cola sin iniciar nada (por ejemplo, cuando

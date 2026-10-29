@@ -33,6 +33,13 @@ describe('categoriaMovimiento', () => {
     expect(iconos.size).toBe(CATEGORIAS_MOVIMIENTO.length);
   });
 
+  // Los movimientos de cripto (compra, venta, envio) caian en "Otros".
+  it('cripto es una categoria propia, con su etiqueta', () => {
+    expect(normalizarCategoria('crypto')).toBe('crypto');
+    const t = (clave: string) => `[${clave}]`;
+    expect(etiquetaDeCategoria('crypto', t)).toBe('[analytics_cat_crypto]');
+  });
+
   it('la etiqueta pasa por el diccionario', () => {
     const t = (clave: string) => `[${clave}]`;
     expect(etiquetaDeCategoria('transfers', t)).toBe('[analytics_cat_transfers]');

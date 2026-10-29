@@ -26,6 +26,11 @@ interface RawAgreement {
   review_by?: string;
   closed_by_expiry?: string;
   disputed_at?: string;
+  funded_at?: string;
+  released_at?: string;
+  refunded_at?: string;
+  cancelled_at?: string;
+  counterparty_name?: string;
 }
 
 function mapAgreement(r: RawAgreement): EscrowAgreement {
@@ -46,6 +51,11 @@ function mapAgreement(r: RawAgreement): EscrowAgreement {
     closedByExpiry:
       r.closed_by_expiry === 'entrega' || r.closed_by_expiry === 'revision' ? r.closed_by_expiry : undefined,
     disputedAt: r.disputed_at || undefined,
+    fundedAt: r.funded_at || undefined,
+    releasedAt: r.released_at || undefined,
+    refundedAt: r.refunded_at || undefined,
+    cancelledAt: r.cancelled_at || undefined,
+    counterpartyName: r.counterparty_name || undefined,
   };
 }
 

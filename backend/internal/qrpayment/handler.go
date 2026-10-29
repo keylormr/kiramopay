@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kiramopay/backend/internal/middleware"
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/transaction"
@@ -35,10 +37,7 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 
 	merchant, err := h.service.RegisterMerchant(r.Context(), userID, &req)
 	if err != nil {
-		if responderSiCategoriaInvalida(w, err) {
-			return
-		}
-		response.Error(w, http.StatusBadRequest, "REGISTER_FAILED", err.Error())
+		responderErrorDelComercio(w, "REGISTER_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusCreated, merchant)
@@ -49,6 +48,12 @@ func (h *Handler) RegisterMerchant(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
+	// Un id que ni tiene la forma del de un comercio es un comercio que no
+	// existe, igual que en el retiro.
+	if _, err := uuid.Parse(merchantID); err != nil {
+		response.Error(w, http.StatusNotFound, "MERCHANT_NOT_FOUND", ErrComercioNoEncontrado.Error())
+		return
+	}
 	var req RegisterMerchantRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -56,10 +61,10 @@ func (h *Handler) UpdateMerchant(w http.ResponseWriter, r *http.Request) {
 	}
 	m, err := h.service.UpdateMerchant(r.Context(), merchantID, userID, &req)
 	if err != nil {
-		if responderSiCerro(w, err) || responderSiCategoriaInvalida(w, err) {
+		if responderSiCerro(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "UPDATE_FAILED", err.Error())
+		responderErrorDelComercio(w, "UPDATE_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, m)
@@ -150,16 +155,67 @@ func responderSiCerro(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-// responderSiCategoriaInvalida responde 400 INVALID_CATEGORY cuando la categoria
-// del comercio no es una de CategoriasDeComercio, y dice si lo hizo. Lo usan el
-// registro y la edicion: el texto de la pantalla lo escribe el cliente a partir
-// del codigo.
-func responderSiCategoriaInvalida(w http.ResponseWriter, err error) bool {
-	if !errors.Is(err, ErrCategoriaInvalida) {
-		return false
+// responderErrorDelComercio da su respuesta a cada rechazo de registrar, editar
+// y revisar un comercio. `generico` es el codigo que ya usaba la ruta
+// (REGISTER_FAILED, UPDATE_FAILED...): queda para lo inesperado, que es un 500.
+//
+// Antes todo salia como 400 con err.Error(): la frase de validacion en ingles y,
+// cuando fallaba la base, la del controlador ("ERROR: value too long for type
+// character varying(200)", "failed to connect to ..."). Ahora cada rechazo
+// conocido lleva su codigo, y en el 500 la causa va al log (response.Error la
+// escribe ahi y al cliente le manda un mensaje generico).
+//
+// Lo que la persona lee lo escribe la PANTALLA, a partir del codigo; el mensaje
+// es para quien integra la API y va en ingles.
+func responderErrorDelComercio(w http.ResponseWriter, generico string, err error) {
+	casos := []struct {
+		err    error
+		http   int
+		codigo string
+	}{
+		{ErrCategoriaInvalida, http.StatusBadRequest, "INVALID_CATEGORY"},
+		{ErrNombreDeComercioRequerido, http.StatusBadRequest, "MERCHANT_NAME_REQUIRED"},
+		{ErrCedulaRequerida, http.StatusBadRequest, "MERCHANT_CEDULA_REQUIRED"},
+		{ErrRazonSocialRequerida, http.StatusBadRequest, "MERCHANT_LEGAL_NAME_REQUIRED"},
+		{ErrTipoDeCedulaInvalido, http.StatusBadRequest, "MERCHANT_CEDULA_TYPE_INVALID"},
+		{ErrDatoDeComercioMuyLargo, http.StatusBadRequest, "MERCHANT_FIELD_TOO_LONG"},
+		{ErrComisionFueraDeRango, http.StatusBadRequest, "COMMISSION_OUT_OF_RANGE"},
+		// Un comercio que no existe y uno que no es de quien lo edita no se
+		// distinguen, para no decirle a nadie que comercios existen.
+		{ErrComercioNoEncontrado, http.StatusNotFound, "MERCHANT_NOT_FOUND"},
 	}
-	response.Error(w, http.StatusBadRequest, "INVALID_CATEGORY", ErrCategoriaInvalida.Error())
-	return true
+	for _, c := range casos {
+		if errors.Is(err, c.err) {
+			response.Error(w, c.http, c.codigo, c.err.Error())
+			return
+		}
+	}
+	// Lo que la ruta no previo y la base rechazo se reconoce por el SQLSTATE y no
+	// por el texto, que cambia con el idioma del servidor de base de datos.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "23505": // unique_violation
+			response.Error(w, http.StatusConflict, "MERCHANT_DUPLICATE", "merchant already exists")
+			return
+		case "22001": // string_data_right_truncation
+			response.Error(w, http.StatusBadRequest, "MERCHANT_FIELD_TOO_LONG", ErrDatoDeComercioMuyLargo.Error())
+			return
+		}
+	}
+	response.Error(w, http.StatusInternalServerError, generico, err.Error())
+}
+
+// idDeComercioDeAdministracion lee el {id} de una ruta de administracion; uno que
+// no es un UUID es un 400 INVALID_ID, como en el plan y el cierre. Sin esto la
+// base fallaba al compararlo y su texto salia en la respuesta.
+func idDeComercioDeAdministracion(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_ID", "id must be a UUID")
+		return "", false
+	}
+	return id.String(), true
 }
 
 // responderSiEsPropio responde 403 ADMIN_IS_AFFECTED_PARTY cuando el
@@ -200,9 +256,44 @@ func (h *Handler) GetMerchants(w http.ResponseWriter, r *http.Request) {
 
 // ── Team: staff, locations, catalog (phase 3) ────────────────────────────────
 
-// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments?limit=&before=.
+// leerPeriodo lee ?period=. Con obligatorio=false, sin el no hay periodo y todo
+// sigue como antes (presente=false). Uno que la pantalla no ofrece es un 400
+// INVALID_PERIOD: no se adivina, ni se cae a otro.
+func leerPeriodo(w http.ResponseWriter, r *http.Request, obligatorio bool) (p Periodo, presente, ok bool) {
+	crudo := r.URL.Query().Get("period")
+	if crudo == "" && !obligatorio {
+		return "", false, true
+	}
+	p, valido := ParsePeriodo(crudo)
+	if !valido {
+		response.Error(w, http.StatusBadRequest, "INVALID_PERIOD", "period must be today, week, month or prev_month")
+		return "", false, false
+	}
+	return p, true, true
+}
+
+// desfaseDelCliente es ?tz=: los minutos al oeste de UTC que da getTimezoneOffset().
+func desfaseDelCliente(r *http.Request) int {
+	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
+	return tz
+}
+
+// responderLectura contesta el error de una lectura del comercio: quien no es
+// del equipo (o un comercio que no existe) es un 404, sin decir cual; lo demas
+// es una falla del servidor, no un "no existe".
+func responderLectura(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrComercioNoEncontrado) {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+	response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", "internal server error")
+}
+
+// GetMerchantPayments — GET /api/v1/qr/merchants/{id}/payments?period=&tz=&limit=&before=.
 // The shop's sales feed, visible to the whole team (owner, manager, cashier),
-// newest first. `before` is the id of the last payment already shown.
+// newest first. `before` is the id of the last payment already shown. Con
+// `period` (+ `tz`) trae solo las de ese periodo, contado en el dia de quien
+// mira.
 func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	merchantID := chi.URLParam(r, "id")
@@ -217,15 +308,78 @@ func (h *Handler) GetMerchantPayments(w http.ResponseWriter, r *http.Request) {
 		}
 		antesDe = id.String()
 	}
-	payments, err := h.service.VentasDelComercio(r.Context(), merchantID, userID, limite, antesDe)
-	if err != nil {
-		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+	periodo, hayPeriodo, ok := leerPeriodo(w, r, false)
+	if !ok {
 		return
+	}
+	var payments []QRPaymentRecord
+	var err error
+	if hayPeriodo {
+		payments, err = h.service.VentasDelComercioEnPeriodo(r.Context(), merchantID, userID, periodo, desfaseDelCliente(r), limite, antesDe, time.Now())
+		if err != nil {
+			responderLectura(w, err)
+			return
+		}
+	} else {
+		payments, err = h.service.VentasDelComercio(r.Context(), merchantID, userID, limite, antesDe)
+		if err != nil {
+			response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
 	}
 	if payments == nil {
 		payments = []QRPaymentRecord{}
 	}
 	response.JSON(w, http.StatusOK, payments)
+}
+
+// GetMerchantDailyTotals — GET /api/v1/qr/merchants/{id}/payments/daily?period=&tz=.
+// Las ventas de cada dia del periodo, por moneda, para el total de cada dia de
+// la lista de movimientos. El periodo es obligatorio.
+func (h *Handler) GetMerchantDailyTotals(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	periodo, _, ok := leerPeriodo(w, r, true)
+	if !ok {
+		return
+	}
+	dias, err := h.service.TotalesPorDia(r.Context(), merchantID, userID, periodo, desfaseDelCliente(r), time.Now())
+	if err != nil {
+		responderLectura(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, dias)
+}
+
+// GetMerchantWithdrawals — GET /api/v1/qr/merchants/{id}/withdrawals?period=&tz=.
+// Los retiros del saldo del negocio en el periodo. Dueno o encargado.
+func (h *Handler) GetMerchantWithdrawals(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	periodo, _, ok := leerPeriodo(w, r, true)
+	if !ok {
+		return
+	}
+	retiros, err := h.service.RetirosDelComercio(r.Context(), merchantID, userID, periodo, desfaseDelCliente(r), time.Now())
+	if err != nil {
+		responderLectura(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, retiros)
+}
+
+// GetMerchantSummary — GET /api/v1/qr/merchants/{id}/summary?tz=360.
+// Las ventas de hoy, de los ultimos 7 dias, del mes y del mes anterior, por
+// moneda. Un cajero recibe solo hoy; la comparacion es del plan analitica.
+func (h *Handler) GetMerchantSummary(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	merchantID := chi.URLParam(r, "id")
+	resumen, err := h.service.ResumenDelComercio(r.Context(), merchantID, userID, desfaseDelCliente(r), time.Now())
+	if err != nil {
+		responderLectura(w, err)
+		return
+	}
+	response.JSON(w, http.StatusOK, resumen)
 }
 
 // GetMerchantReport — GET /api/v1/qr/merchants/{id}/report?days=30&tz=360.
@@ -236,7 +390,17 @@ func (h *Handler) GetMerchantReport(w http.ResponseWriter, r *http.Request) {
 	merchantID := chi.URLParam(r, "id")
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
-	report, err := h.service.MerchantReport(r.Context(), merchantID, userID, days, tz)
+	periodo, hayPeriodo, ok := leerPeriodo(w, r, false)
+	if !ok {
+		return
+	}
+	var report *MerchantReport
+	var err error
+	if hayPeriodo {
+		report, err = h.service.MerchantReportDelPeriodo(r.Context(), merchantID, userID, periodo, tz, time.Now())
+	} else {
+		report, err = h.service.MerchantReport(r.Context(), merchantID, userID, days, tz)
+	}
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 		return
@@ -255,7 +419,17 @@ func (h *Handler) GetMerchantReportCSV(w http.ResponseWriter, r *http.Request) {
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	tz, _ := strconv.Atoi(r.URL.Query().Get("tz"))
 
-	rep, err := h.service.ReporteExportable(r.Context(), merchantID, userID, days, tz)
+	periodo, hayPeriodo, ok := leerPeriodo(w, r, false)
+	if !ok {
+		return
+	}
+	var rep *MerchantReport
+	var err error
+	if hayPeriodo {
+		rep, err = h.service.ReporteExportableDelPeriodo(r.Context(), merchantID, userID, periodo, tz, time.Now())
+	} else {
+		rep, err = h.service.ReporteExportable(r.Context(), merchantID, userID, days, tz)
+	}
 	if err != nil {
 		if errors.Is(err, ErrPlanAnaliticaRequerido) {
 			response.ErrorConDetalle(w, http.StatusForbidden, "PLAN_REQUIRED",
@@ -496,13 +670,17 @@ func (h *Handler) ListPendingMerchants(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	id := chi.URLParam(r, "id")
-	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID)
+	id, ok := idDeComercioDeAdministracion(w, r)
+	if !ok {
+		return
+	}
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.ApproveMerchant(r.Context(), id, adminID, ac)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "APPROVE_FAILED", err.Error())
+		responderErrorDelComercio(w, "APPROVE_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)
@@ -510,16 +688,20 @@ func (h *Handler) ApproveMerchant(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	id := chi.URLParam(r, "id")
+	id, ok := idDeComercioDeAdministracion(w, r)
+	if !ok {
+		return
+	}
 	var req VerificationDecisionRequest
 	// Body is optional; an empty/invalid body just means no reason was given.
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason)
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.RejectMerchant(r.Context(), id, adminID, req.Reason, ac)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "REJECT_FAILED", err.Error())
+		responderErrorDelComercio(w, "REJECT_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)
@@ -527,18 +709,22 @@ func (h *Handler) RejectMerchant(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SetCommission(w http.ResponseWriter, r *http.Request) {
 	adminID := middleware.GetUserID(r.Context())
-	id := chi.URLParam(r, "id")
+	id, ok := idDeComercioDeAdministracion(w, r)
+	if !ok {
+		return
+	}
 	var req SetCommissionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
-	merchant, err := h.service.SetCommission(r.Context(), id, adminID, req.CommissionBps)
+	ac := ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
+	merchant, err := h.service.SetCommission(r.Context(), id, adminID, req.CommissionBps, ac)
 	if err != nil {
 		if responderSiCerro(w, err) || responderSiEsPropio(w, err) {
 			return
 		}
-		response.Error(w, http.StatusBadRequest, "SET_COMMISSION_FAILED", err.Error())
+		responderErrorDelComercio(w, "SET_COMMISSION_FAILED", err)
 		return
 	}
 	response.JSON(w, http.StatusOK, merchant)

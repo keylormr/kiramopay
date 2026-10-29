@@ -24,6 +24,20 @@ interface BottomSheetProps {
   dismissable?: boolean;
 }
 
+/**
+ * Sitio, en px, que el contenedor con scroll de la hoja deja alrededor del
+ * contenido para que no se corte la sombra del boton principal
+ * (`--shadow-primary: 0 8px 20px`: 20 px a los lados, 12 arriba, 28 abajo).
+ *
+ * Lados y abajo valen lo mismo que el relleno de la hoja (p-6 = 24 px): el
+ * contenedor llega justo al borde de la hoja y NO mas alla. Pasarse por abajo
+ * dejaba al boton principal "visible" para el navegador (dentro del area que se
+ * desplaza) con unos pixeles bajo el borde de la pantalla, y al desplazarlo a la
+ * vista quedaba cortado (e2e/hoja-de-envio-en-pantalla-chica.spec.ts). Los 4 px
+ * de cola que se pierden abajo son el 1 % de opacidad de la sombra: no se ven.
+ */
+const HOLGURA_SOMBRA = { lado: 24, arriba: 12, abajo: 24 } as const;
+
 const ENFOCABLES = [
   'a[href]',
   'button:not([disabled])',
@@ -177,8 +191,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
         {/* Drag handle (mobile only) */}
         <div className="shrink-0 w-10 h-1.5 bg-[var(--color-border-strong)] dark:bg-[var(--color-border-strong-dark)] rounded-full mx-auto mb-5 sm:hidden" />
 
+        {/* El titulo tiene fondo propio y relleno en vez de margen: el contenedor
+            con scroll sube HOLGURA_SOMBRA.arriba px sobre el hueco que deja el
+            titulo, y sin este fondo el contenido que se desplaza se veria pasar
+            justo debajo del titulo en vez de cortarse 20 px mas abajo. */}
         {title && (
-          <div className="shrink-0 flex justify-between items-center mb-5">
+          <div className="relative z-10 shrink-0 flex justify-between items-center pb-5 bg-[var(--color-surface-1)] dark:bg-[var(--color-surface-1-dark)]">
             <div className="flex items-center gap-1.5 min-w-0">
               <h2
                 id={idTitulo}
@@ -202,7 +220,26 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
           </div>
         )}
 
-        <div className="min-h-0 overflow-y-auto no-scrollbar">
+        {/* El contenido se desplaza aqui dentro. Un contenedor con overflow
+            recorta TODO lo que sale de su caja, tambien las sombras: la del
+            boton principal (--shadow-primary, 0 8px 20px) se extiende 20 px a
+            cada lado y 28 px hacia abajo, y quedaba cortada en el borde del
+            boton como un rectangulo azul palido. El relleno le da sitio a la
+            sombra; el margen negativo igual de grande devuelve al contenido a
+            donde estaba, asi que la hoja no cambia de tamano. */}
+        <div
+          className="min-h-0 overflow-y-auto no-scrollbar"
+          style={{
+            paddingTop: HOLGURA_SOMBRA.arriba,
+            paddingRight: HOLGURA_SOMBRA.lado,
+            paddingBottom: HOLGURA_SOMBRA.abajo,
+            paddingLeft: HOLGURA_SOMBRA.lado,
+            marginTop: -HOLGURA_SOMBRA.arriba,
+            marginRight: -HOLGURA_SOMBRA.lado,
+            marginBottom: -HOLGURA_SOMBRA.abajo,
+            marginLeft: -HOLGURA_SOMBRA.lado,
+          }}
+        >
           {children}
         </div>
       </div>

@@ -2,7 +2,7 @@ package splitpay
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -71,19 +71,73 @@ func (r *Repository) GetGroup(ctx context.Context, groupID string) (*SplitGroup,
 	return &g, nil
 }
 
-func (r *Repository) UpdateGroupStatus(ctx context.Context, groupID, status string) error {
-	query := `UPDATE split_groups SET status = $2 WHERE id = $1`
-	if status == "settled" {
-		query = `UPDATE split_groups SET status = $2, settled_at = NOW() WHERE id = $1`
-	}
-	result, err := r.db.Exec(ctx, query, groupID, status)
+// CancelarSiNadiePago cancela la division SOLO si nadie ajeno al creador pago, y
+// mira y escribe bajo el mismo candado del grupo.
+//
+// Pagar y cancelar se pisaban: la cancelacion comprobaba "nadie pago" con una
+// lectura suelta y escribia despues, y entre las dos un pago podia confirmar. El
+// resultado era una division CANCELADA con una cuota pagada, que es justo lo que
+// la decision del dueno prohibe. El candado cierra el hueco desde los dos lados:
+//   - la cancelacion toma el grupo FOR UPDATE y recien despues cuenta los pagos.
+//     En READ COMMITTED esa segunda consulta ve todo lo confirmado, incluido un
+//     pago que tenia el grupo FOR SHARE y acaba de confirmar;
+//   - el pago toma el grupo FOR SHARE dentro de su propia transaccion
+//     (BloquearGrupoActivoEnTx) antes de reclamar la cuota, asi que espera a que
+//     una cancelacion en curso termine y entonces encuentra el grupo cancelado.
+//
+// Los pagos entre si no se bloquean (FOR SHARE no choca con FOR SHARE).
+//
+// Cancelar una division ya cancelada no falla: es la misma peticion repetida.
+// Una liquidada no se cancela: ya cerro.
+//
+// Las dos lecturas van en consultas SEPARADAS a proposito: una subconsulta dentro
+// de la que toma el candado usaria la foto del inicio de la sentencia y no veria
+// el pago que se confirmo mientras se esperaba el candado.
+func (r *Repository) CancelarSiNadiePago(ctx context.Context, groupID string) error {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("split group not found")
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	var estado string
+	if err := tx.QueryRow(ctx,
+		`SELECT status FROM split_groups WHERE id = $1 FOR UPDATE`, groupID).Scan(&estado); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrGroupNotFound
+		}
+		return err
 	}
-	return nil
+	switch estado {
+	case "active":
+	case "cancelled":
+		return nil
+	default:
+		return ErrNotActive
+	}
+
+	// `IS DISTINCT FROM`: una cuota cuya cuenta se elimino queda con user_id nulo
+	// y SIGUE siendo una cuota ajena pagada. Un `<>` la dejaria fuera.
+	var hayPagos bool
+	if err := tx.QueryRow(ctx,
+		`SELECT EXISTS (
+		     SELECT 1
+		       FROM split_shares s
+		       JOIN split_groups g ON g.id = s.group_id
+		      WHERE s.group_id = $1
+		        AND s.status = 'paid'
+		        AND s.user_id IS DISTINCT FROM g.creator_id)`, groupID).Scan(&hayPagos); err != nil {
+		return err
+	}
+	if hayPagos {
+		return ErrSplitHasPayments
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE split_groups SET status = 'cancelled' WHERE id = $1`, groupID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) ListUserGroups(ctx context.Context, userID string) ([]SplitGroup, error) {
@@ -193,8 +247,48 @@ func ReclamarCuotaEnTx(ctx context.Context, tx pgx.Tx, groupID, userID string) e
 	return reclamarCuota(ctx, tx, sqlReclamarPago, groupID, userID)
 }
 
+// BloquearGrupoActivoEnTx toma el grupo FOR SHARE y exige que siga activo.
+//
+// Es la mitad de pagar de lo que CancelarSiNadiePago necesita para que pagar y
+// cancelar no se pisen: mientras esta transaccion no confirme, una cancelacion
+// espera; y si la cancelacion confirmo primero, aqui el grupo ya esta cancelado
+// y el pago se rechaza antes de reclamar la cuota. Lee el estado BAJO el
+// candado: la lectura suelta que hace el servicio al empezar el pago es solo
+// informativa y puede estar vieja.
+//
+// Va en la misma transaccion que el reclamo de la cuota, y antes de el.
+func BloquearGrupoActivoEnTx(ctx context.Context, tx pgx.Tx, groupID string) error {
+	var estado string
+	if err := tx.QueryRow(ctx,
+		`SELECT status FROM split_groups WHERE id = $1 FOR SHARE`, groupID).Scan(&estado); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrGroupNotFound
+		}
+		return err
+	}
+	if estado != "active" {
+		return ErrNotActive
+	}
+	return nil
+}
+
+// PayShare reclama la cuota SIN mover dinero (cuota de monto cero, o la marca de
+// un pago ya hecho). Tambien respeta el candado del grupo: una cuota no pasa a
+// pagada en una division cancelada.
 func (r *Repository) PayShare(ctx context.Context, groupID, userID string) error {
-	return reclamarCuota(ctx, r.db, sqlReclamarPago, groupID, userID)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	if err := BloquearGrupoActivoEnTx(ctx, tx, groupID); err != nil {
+		return err
+	}
+	if err := ReclamarCuotaEnTx(ctx, tx, groupID, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) DeclineShare(ctx context.Context, groupID, userID string) error {

@@ -39,7 +39,7 @@ var (
 	// afecta filas. Quien llama lo traduce leyendo el estado real.
 	ErrCobroNoReclamable = errors.New("el cobro ya no se puede reclamar")
 
-	ErrNoPodesPagarte = errors.New("no podes pagarte a vos mismo")
+	ErrNoPodesPagarte = errors.New("no puedes pagarte a ti mismo")
 	ErrMontoRequerido = errors.New("este codigo necesita que indiques el monto")
 
 	// ErrComercioNoDisponible: el codigo es de un comercio que todavia no esta
@@ -115,6 +115,26 @@ var (
 	// ofrece la app (CategoriasDeComercio). El handler responde 400
 	// INVALID_CATEGORY.
 	ErrCategoriaInvalida = errors.New("invalid merchant category")
+)
+
+// Errores de registrar o editar el perfil del comercio y de fijarle la comision.
+// El texto es el que siempre salio en el mensaje, para quien integra la API; lo
+// que la persona lee lo escribe la pantalla a partir del codigo. Antes salian
+// como fmt.Errorf sueltos, y la ruta no podia distinguirlos de un fallo de la
+// base: todo era un 400 con el texto tal cual.
+var (
+	ErrNombreDeComercioRequerido = errors.New("merchant name is required")
+	ErrCedulaRequerida           = errors.New("cedula is required")
+	ErrRazonSocialRequerida      = errors.New("legal name is required")
+	ErrTipoDeCedulaInvalido      = errors.New("invalid cedula type")
+
+	// ErrDatoDeComercioMuyLargo: el nombre, la razon social o la cedula no caben
+	// en su columna (MaxNombreDeComercio, MaxRazonSocial, MaxCedulaDeComercio).
+	// La base lo rechaza con 22001 y el texto del controlador; se dice antes.
+	ErrDatoDeComercioMuyLargo = errors.New("a merchant field is too long")
+
+	// ErrComisionFueraDeRango: la comision no esta entre 0 y 10000 puntos basicos.
+	ErrComisionFueraDeRango = errors.New("commission must be between 0 and 10000 bps")
 )
 
 // Errores del administrador que es dueno del comercio (PR 295 en adelante: una

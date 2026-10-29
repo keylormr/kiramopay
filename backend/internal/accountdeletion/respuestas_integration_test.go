@@ -536,7 +536,7 @@ func TestConfirmar_UnaCuentaBajoRevisionNoDiceNada(t *testing.T) {
 }
 
 // La solicitud web que no pudo empezar tambien es una respuesta debida: va por
-// la bandeja, en voseo, y la pagina dice que resolver.
+// la bandeja, en tuteo, y la pagina dice que resolver.
 func TestRespuesta_LaSolicitudWebBloqueadaVaPorLaBandeja(t *testing.T) {
 	pool := testutil.TestDB(t)
 	a := sembrar(t, pool)
@@ -556,8 +556,8 @@ func TestRespuesta_LaSolicitudWebBloqueadaVaPorLaBandeja(t *testing.T) {
 		t.Errorf("respuesta para la pagina: %+v", out)
 	}
 	aviso := esperar(t, correo.ch)
-	if aviso.Para != a.Correo || !strings.Contains(aviso.Texto, "tenés saldo en tu billetera") || !strings.Contains(aviso.Texto, "No se borró nada") {
-		t.Errorf("el aviso debe ir en voseo y decir que resolver: %+v", aviso)
+	if aviso.Para != a.Correo || !strings.Contains(aviso.Texto, "tienes saldo en tu billetera") || !strings.Contains(aviso.Texto, "No se borró nada") {
+		t.Errorf("el aviso debe ir en tuteo y decir que resolver: %+v", aviso)
 	}
 	r := esperarRespuesta(t, pool, a.ID, "entregada", func(r filaRespuesta) bool { return r.Entregada })
 	if r.Tipo != RespuestaBloqueada || !slices.Equal(r.Bloqueos, []string{BloqueoSaldo}) || r.SeEliminaEl != nil {

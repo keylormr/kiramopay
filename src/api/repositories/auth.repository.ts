@@ -171,6 +171,13 @@ export interface IAuthRepository {
   refresh(refreshToken: string): Promise<ApiResponse<TokenPair>>;
   logout(): Promise<ApiResponse<void>>;
   /**
+   * Avisa que la PERSONA acaba de actuar (POST /auth/activity). Es lo unico que
+   * mantiene viva la sesion ante el cierre por inactividad del servidor; una
+   * peticion de fondo o una renovacion del token no cuentan. Quien lo llama es
+   * useActividadDeSesion, a lo sumo una vez por minuto.
+   */
+  registrarActividad(): Promise<ApiResponse<void>>;
+  /**
    * Pregunta si la cuenta se puede eliminar ahora, sin tocar nada. Los codigos
    * de `bloqueos` son lo que la persona puede resolver antes.
    */

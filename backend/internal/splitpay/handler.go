@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/kiramopay/backend/internal/ledger"
 	"github.com/kiramopay/backend/internal/middleware"
+	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/pkg/response"
 )
 
@@ -144,16 +145,59 @@ func (h *Handler) PayShare(w http.ResponseWriter, r *http.Request) {
 	response.NoContent(w)
 }
 
+// motivosDelModulo son los rechazos propios de la division: salen con su texto
+// fijo, sin el prefijo del modulo ni el rastro de las capas por las que subio.
+var motivosDelModulo = []struct {
+	err error
+	msg string
+}{
+	{ErrGroupNotFound, "split not found"},
+	{ErrNotActive, "split is no longer active"},
+	{ErrNoShareForUser, "no share for this user in the split"},
+	{ErrCuotaNoReclamable, "the share is no longer pending"},
+	{ErrUnauthenticated, "user not authenticated"},
+}
+
 // respuestaDelPago traduce el rechazo del pago de una cuota.
+//
+// Los motivos del dinero salen con el MISMO codigo que en el resto de las
+// salidas (SINPE, recibos, pagos), para que la pantalla los explique igual. El
+// texto que viaja es el del motivo y no err.Error(): el error sube envuelto en
+// prefijos internos ("settle split share: ...") y un 4xx sale tal cual. Lo que
+// no se reconoce es un 500: nada que corregir en el pedido, y response.Error
+// deja el detalle en el log y no lo manda al cliente.
 func respuestaDelPago(err error) (int, string, string) {
+	switch {
 	// Quien creo el reparto pidio eliminar su cuenta: el libro rechazo limpio y
 	// nada se movio. Sin el texto interno, que le diria a un tercero que esa
 	// cuenta esta cerrada.
-	if errors.Is(err, ledger.ErrCuentaCerrada) {
+	case errors.Is(err, ledger.ErrCuentaCerrada):
 		return http.StatusUnprocessableEntity, "RECIPIENT_UNAVAILABLE",
 			"the recipient account cannot receive money"
+	// El segundo factor: desde 100.000 colones el pago pide un desafio
+	// verificado. Se verifica y se reintenta la misma peticion.
+	case errors.Is(err, transaction.ErrMFARequired):
+		return http.StatusPreconditionRequired, "MFA_REQUIRED",
+			"verified MFA challenge required for this amount"
+	case errors.Is(err, transaction.ErrSaldoInsuficiente),
+		errors.Is(err, ledger.ErrInsufficientFunds):
+		return http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
+			transaction.ErrSaldoInsuficiente.Error()
+	case errors.Is(err, transaction.ErrDailyLimitExceeded):
+		return http.StatusUnprocessableEntity, "DAILY_LIMIT_EXCEEDED",
+			transaction.ErrDailyLimitExceeded.Error()
+	case errors.Is(err, transaction.ErrMonthlyLimitExceeded):
+		return http.StatusUnprocessableEntity, "MONTHLY_LIMIT_EXCEEDED",
+			transaction.ErrMonthlyLimitExceeded.Error()
+	case errors.Is(err, transaction.ErrBloqueadoPorRiesgo):
+		return http.StatusBadRequest, "TRANSFER_BLOCKED", transaction.ErrBloqueadoPorRiesgo.Error()
 	}
-	return http.StatusBadRequest, "PAY_FAILED", err.Error()
+	for _, m := range motivosDelModulo {
+		if errors.Is(err, m.err) {
+			return http.StatusBadRequest, "PAY_FAILED", m.msg
+		}
+	}
+	return http.StatusInternalServerError, "PAY_FAILED", err.Error()
 }
 
 func (h *Handler) DeclineShare(w http.ResponseWriter, r *http.Request) {
@@ -172,8 +216,30 @@ func (h *Handler) CancelSplit(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "id")
 
 	if err := h.service.CancelSplit(r.Context(), userID, groupID); err != nil {
-		response.Error(w, http.StatusBadRequest, "CANCEL_FAILED", err.Error())
+		status, code, msg := respuestaDeLaCancelacion(err)
+		response.Error(w, status, code, msg)
 		return
 	}
 	response.NoContent(w)
+}
+
+// respuestaDeLaCancelacion traduce el rechazo de cancelar una division.
+//
+// Una division donde alguien ya pago sale con su propio codigo y un 409: la
+// peticion es valida, es el estado de la division lo que la impide, y la pantalla
+// lo explica en el idioma de la persona a partir del CODIGO. Los demas motivos del
+// modulo conservan CANCEL_FAILED. Lo que no se reconoce (un fallo de la base) es
+// un 500: nada que corregir en el pedido, y response.Error deja el detalle en el
+// log y no lo manda al cliente.
+func respuestaDeLaCancelacion(err error) (int, string, string) {
+	if errors.Is(err, ErrSplitHasPayments) {
+		return http.StatusConflict, "SPLIT_HAS_PAYMENTS",
+			"the split already has payments and can no longer be cancelled"
+	}
+	for _, motivo := range []error{ErrGroupNotFound, ErrNotCreator, ErrNotActive} {
+		if errors.Is(err, motivo) {
+			return http.StatusBadRequest, "CANCEL_FAILED", motivo.Error()
+		}
+	}
+	return http.StatusInternalServerError, "CANCEL_FAILED", err.Error()
 }

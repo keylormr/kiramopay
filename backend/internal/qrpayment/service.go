@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -119,24 +120,49 @@ func NewService(repo *Repository, tx *transaction.Service, users userLookup, opt
 // (50 basis points = 0.50%), mirroring the DB column default.
 const DefaultCommissionBps = 50
 
+// Lo que cabe en las columnas del comercio (migraciones 007 y 038: name
+// VARCHAR(200), legal_name VARCHAR(200), cedula VARCHAR(50)). La base cuenta
+// caracteres, no bytes, y aqui se cuentan igual.
+const (
+	MaxNombreDeComercio = 200
+	MaxRazonSocial      = 200
+	MaxCedulaDeComercio = 50
+)
+
+// validarPerfilDelComercio revisa lo que registrar y editar piden por igual: los
+// tres datos obligatorios y que quepan en su columna. Sin esto un nombre de mas
+// de 200 caracteres llegaba a la base, que lo rechazaba con 22001 y su texto, y
+// la ruta lo devolvia tal cual.
+func validarPerfilDelComercio(req *RegisterMerchantRequest) error {
+	switch {
+	case req.Name == "":
+		return ErrNombreDeComercioRequerido
+	case req.Cedula == "":
+		return ErrCedulaRequerida
+	case req.LegalName == "":
+		return ErrRazonSocialRequerida
+	case utf8.RuneCountInString(req.Name) > MaxNombreDeComercio,
+		utf8.RuneCountInString(req.LegalName) > MaxRazonSocial,
+		utf8.RuneCountInString(req.Cedula) > MaxCedulaDeComercio:
+		return ErrDatoDeComercioMuyLargo
+	}
+	return nil
+}
+
+func tipoDeCedulaValido(t string) bool { return t == "fisica" || t == "juridica" }
+
 // ── Merchants ────────────────────────────────────────────────────────────────
 
 func (s *Service) RegisterMerchant(ctx context.Context, userID string, req *RegisterMerchantRequest) (*Merchant, error) {
-	if req.Name == "" {
-		return nil, fmt.Errorf("merchant name is required")
-	}
-	if req.Cedula == "" {
-		return nil, fmt.Errorf("cedula is required")
-	}
-	if req.LegalName == "" {
-		return nil, fmt.Errorf("legal name is required")
+	if err := validarPerfilDelComercio(req); err != nil {
+		return nil, err
 	}
 	cedulaType := req.CedulaType
 	if cedulaType == "" {
 		cedulaType = "fisica"
 	}
-	if cedulaType != "fisica" && cedulaType != "juridica" {
-		return nil, fmt.Errorf("invalid cedula type")
+	if !tipoDeCedulaValido(cedulaType) {
+		return nil, ErrTipoDeCedulaInvalido
 	}
 	if !categoriaDeComercioValida(req.Category) {
 		return nil, ErrCategoriaInvalida
@@ -716,22 +742,28 @@ func (s *Service) GetPaymentHistory(ctx context.Context, userID string) ([]QRPay
 func (s *Service) UpdateMerchant(ctx context.Context, merchantID, userID string, req *RegisterMerchantRequest) (*Merchant, error) {
 	current, err := s.repo.GetMerchant(ctx, merchantID)
 	if err != nil {
-		return nil, fmt.Errorf("merchant not found")
+		// Un comercio que no esta (o un id que ni tiene forma de UUID) no existe;
+		// una caida de la base no: sale como un fallo del servidor, no como
+		// "no encontrado".
+		if noEsUnComercio(err) {
+			return nil, ErrComercioNoEncontrado
+		}
+		return nil, fmt.Errorf("read merchant: %w", err)
 	}
+	// Mismo error que si no existiera: no se confirma que ids son reales.
 	if current.UserID != userID {
-		return nil, fmt.Errorf("merchant not found")
+		return nil, ErrComercioNoEncontrado
 	}
 	if current.ClosedAt != nil {
 		return nil, ErrComercioCerrado
 	}
-	if req.Name == "" {
-		return nil, fmt.Errorf("merchant name is required")
+	if err := validarPerfilDelComercio(req); err != nil {
+		return nil, err
 	}
-	if req.Cedula == "" {
-		return nil, fmt.Errorf("cedula is required")
-	}
-	if req.LegalName == "" {
-		return nil, fmt.Errorf("legal name is required")
+	// Un tipo en blanco conserva el actual; uno que no existe llegaba a la base,
+	// que lo rechazaba con su CHECK y el texto del controlador.
+	if req.CedulaType != "" && !tipoDeCedulaValido(req.CedulaType) {
+		return nil, ErrTipoDeCedulaInvalido
 	}
 	// Las filas anteriores a esta validacion pueden traer una categoria que la
 	// app no ofrece: su dueno las edita sin cambiarla. Lo que no se acepta es
@@ -789,8 +821,11 @@ func (s *Service) VentasDelComercio(ctx context.Context, merchantID, userID stri
 	if err != nil || role == "" {
 		return nil, fmt.Errorf("merchant not found")
 	}
-	if limit <= 0 || limit > 200 {
+	// Sin pedido son 50; pedir mas que el tope devuelve el tope.
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 200 {
+		limit = 200
 	}
 	return s.repo.GetMerchantPayments(ctx, merchantID, limit, antesDe)
 }
@@ -1111,15 +1146,17 @@ func (s *Service) armarReporte(ctx context.Context, m *Merchant, v ventanaReport
 	}
 	since := v.desde.UTC()
 
-	daily, err := s.repo.ReportDaily(ctx, m.ID, since, tzOffsetMin)
+	hasta := v.limiteSuperior()
+
+	daily, err := s.repo.ReportDaily(ctx, m.ID, since, hasta, tzOffsetMin)
 	if err != nil {
 		return nil, fmt.Errorf("report daily: %w", err)
 	}
-	byLocation, err := s.repo.ReportByLocation(ctx, m.ID, since)
+	byLocation, err := s.repo.ReportByLocation(ctx, m.ID, since, hasta)
 	if err != nil {
 		return nil, fmt.Errorf("report by location: %w", err)
 	}
-	byCollector, err := s.repo.ReportByCollector(ctx, m.ID, since)
+	byCollector, err := s.repo.ReportByCollector(ctx, m.ID, since, hasta)
 	if err != nil {
 		return nil, fmt.Errorf("report by collector: %w", err)
 	}
@@ -1147,7 +1184,7 @@ func (s *Service) armarReporte(ctx context.Context, m *Merchant, v ventanaReport
 	rep := &MerchantReport{
 		Days:        v.dias,
 		From:        v.desde.Format(formatoDia),
-		To:          v.hasta.Format(formatoDia),
+		To:          v.hastaDia(),
 		Totals:      totals,
 		Daily:       daily,
 		ByLocation:  byLocation,
@@ -1176,8 +1213,39 @@ func (s *Service) ListPendingMerchants(ctx context.Context) ([]Merchant, error) 
 //
 // Un comercio cerrado no se aprueba ni se rechaza: la sentencia no lo toca, y se
 // dice ErrComercioCerrado.
-func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string) (*Merchant, error) {
-	return s.decidirVerificacion(ctx, merchantID, "verified", adminID, "")
+//
+// La decision queda en el rastro de auditoria (ver auditarDecisionDeAdmin): un
+// comercio aprobado puede cobrar, asi que quien lo aprobo tiene que poder
+// saberse.
+func (s *Service) ApproveMerchant(ctx context.Context, merchantID, adminID string, ac ActorContext) (*Merchant, error) {
+	m, err := s.decidirVerificacion(ctx, merchantID, "verified", adminID, "")
+	if err != nil {
+		return nil, err
+	}
+	s.auditarDecisionDeAdmin(adminID, merchantID, "admin_merchant_approved", ac, map[string]interface{}{
+		"estado_nuevo": m.VerificationStatus,
+	})
+	return m, nil
+}
+
+// auditarDecisionDeAdmin deja el rastro de una decision del administrador sobre
+// un comercio, con riesgo alto como el cambio de plan. Solo se llama cuando la
+// decision se aplico: lo rechazado no cambio nada y no deja fila. Sin logger
+// (pruebas que no lo necesitan) no hace nada.
+func (s *Service) auditarDecisionDeAdmin(adminID, merchantID, accion string, ac ActorContext, detalle map[string]interface{}) {
+	if s.auditLogger == nil {
+		return
+	}
+	s.auditLogger.Log(audit.Event{
+		UserID:       adminID,
+		Action:       accion,
+		ResourceType: "merchant",
+		ResourceID:   merchantID,
+		IPAddress:    ac.IPAddress,
+		UserAgent:    ac.UserAgent,
+		Details:      detalle,
+		RiskLevel:    "high",
+	})
 }
 
 func (s *Service) decidirVerificacion(ctx context.Context, merchantID, status, adminID, reason string) (*Merchant, error) {
@@ -1227,24 +1295,42 @@ func (s *Service) AsignarPlanComercio(ctx context.Context, merchantID, adminID, 
 	return m, nil
 }
 
-func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string) (*Merchant, error) {
-	return s.decidirVerificacion(ctx, merchantID, "rejected", adminID, reason)
+// RejectMerchant rechaza la verificacion del comercio con un motivo. Queda en
+// el rastro de auditoria igual que la aprobacion.
+func (s *Service) RejectMerchant(ctx context.Context, merchantID, adminID, reason string, ac ActorContext) (*Merchant, error) {
+	m, err := s.decidirVerificacion(ctx, merchantID, "rejected", adminID, reason)
+	if err != nil {
+		return nil, err
+	}
+	s.auditarDecisionDeAdmin(adminID, merchantID, "admin_merchant_rejected", ac, map[string]interface{}{
+		"estado_nuevo": m.VerificationStatus,
+		"motivo":       reason,
+	})
+	return m, nil
 }
 
 // SetCommission updates a merchant's commission rate (basis points). The platform
 // sets the rate, so this is an admin action, and never by the merchant's owner.
-func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string, bps int) (*Merchant, error) {
+// La comision se descuenta de cada cobro: el cambio queda en el rastro de
+// auditoria con la comision nueva.
+func (s *Service) SetCommission(ctx context.Context, merchantID, adminID string, bps int, ac ActorContext) (*Merchant, error) {
 	if bps < 0 || bps > 10000 {
-		return nil, fmt.Errorf("commission must be between 0 and 10000 bps")
+		return nil, ErrComisionFueraDeRango
 	}
 	if err := s.administradorNoEsElDueno(ctx, merchantID, adminID); err != nil {
 		return nil, err
 	}
 	m, err := s.repo.UpdateCommission(ctx, merchantID, bps)
-	if err != nil && s.estaCerrado(ctx, merchantID) {
-		return nil, ErrComercioCerrado
+	if err != nil {
+		if s.estaCerrado(ctx, merchantID) {
+			return nil, ErrComercioCerrado
+		}
+		return nil, err
 	}
-	return m, err
+	s.auditarDecisionDeAdmin(adminID, merchantID, "admin_merchant_commission_set", ac, map[string]interface{}{
+		"comision_bps_nueva": m.CommissionBps,
+	})
+	return m, nil
 }
 
 // administradorNoEsElDueno rechaza al administrador que actua sobre un comercio

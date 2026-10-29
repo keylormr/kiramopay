@@ -13,9 +13,12 @@ import type { TranslationKeys } from '../translations';
 // La segunda parte es el imperativo con el pronombre pegado ("Pedile",
 // "Ponele", "Revisalos", "imprimilo"): en voseo va sin tilde y en tuteo la
 // lleva ("Pídele", "Revísalos", "imprímelo"). La lista vieja no lo veia y
-// ocho textos lo conservaban.
+// ocho textos lo conservaban. La tercera es el voseo sin tilde ("No tenes
+// solicitudes"): "tenes", "podes" y "queres" no existen en tuteo ("tienes",
+// "puedes", "quieres"), asi que no hay con que confundirlos.
 const VOSEO = new RegExp(
   '(?<![a-záéíóúñ])(' +
+    'tenes|podes|queres|volve|elegi|' +
     'vos|podés|tenés|querés|sabés|enviás|escaneá|revisá|agregá|tocá|elegí|escribí|mirá|probá|hacé|poné|decí|confirmá|' +
     'pedile|pedila|pedilo|ponele|ponelo|decile|decilo|mandale|mandalo|avisale|avisanos|escribile|escribinos|' +
     'contale|contanos|mostrale|mostralo|pasale|pasalo|revisalos?|revisalas?|imprimilos?|pegalos?|copialos?|' +
@@ -45,5 +48,36 @@ describe('los avisos de cripto nombran la lista como la pantalla', () => {
     const lista = d.recent_crypto_tx.toLowerCase();
     expect(d.crypto_already_done_hint.toLowerCase()).toContain(lista);
     expect(d.crypto_err_repeated_request.toLowerCase()).toContain(lista);
+  });
+});
+
+// Anglicismos con equivalente corriente. "BALANCE TOTAL" y "Mi Portfolio" se
+// leian como texto traducido a medias; el resto de la app ya decia "saldo" y
+// "cripto". Los rotulos que son de contabilidad ("Balance del período", "Balance
+// Neto") son espanol correcto y quedan.
+describe('el espanol de la app no deja anglicismos con equivalente corriente', () => {
+  const textos = es as unknown as Record<string, string>;
+
+  it('el saldo de una cuenta es "saldo", no "balance"', () => {
+    expect(textos.total_balance).toBe('Saldo total');
+    expect(textos.available_balance).toBe('Saldo disponible');
+    expect(textos.crypto_your_balance).toBe('Tu saldo');
+  });
+
+  it('"portfolio" se escribe "portafolio"', () => {
+    expect(textos.crypto_my_portfolio).toBe('Mi portafolio');
+    expect(textos.total_portfolio).toBe('Portafolio total');
+    expect(textos.crypto_portfolio).toBe('Portafolio cripto');
+    const conPortfolio = Object.entries(textos)
+      .filter(([, texto]) => /\bportfolio\b/i.test(texto))
+      .map(([clave]) => clave);
+    expect(conPortfolio).toEqual([]);
+  });
+
+  it('"crypto" se escribe "cripto"', () => {
+    const conCrypto = Object.entries(textos)
+      .filter(([, texto]) => /\bcrypto\b/i.test(texto))
+      .map(([clave]) => clave);
+    expect(conCrypto).toEqual([]);
   });
 });

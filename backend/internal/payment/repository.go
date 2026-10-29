@@ -31,6 +31,31 @@ func (r *Repository) GetProviderByCode(ctx context.Context, code string) (string
 	return id, name, nil
 }
 
+// ListActiveProviders devuelve las empresas que PayBill acepta: las activas, por
+// categoria y nombre. Es exactamente el filtro de GetProviderByCode, para que la
+// lista que se ofrece y la que se acepta no puedan separarse.
+func (r *Repository) ListActiveProviders(ctx context.Context) ([]ProviderInfo, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT code, name, category FROM service_providers WHERE is_active = true ORDER BY category, name`)
+	if err != nil {
+		return nil, fmt.Errorf("query providers: %w", err)
+	}
+	defer rows.Close()
+
+	providers := []ProviderInfo{}
+	for rows.Next() {
+		var p ProviderInfo
+		if err := rows.Scan(&p.Code, &p.Name, &p.Category); err != nil {
+			return nil, fmt.Errorf("scan provider: %w", err)
+		}
+		providers = append(providers, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read providers: %w", err)
+	}
+	return providers, nil
+}
+
 // Saved Services
 
 func (r *Repository) GetSavedServices(ctx context.Context, userID string) ([]SavedServiceRecord, error) {

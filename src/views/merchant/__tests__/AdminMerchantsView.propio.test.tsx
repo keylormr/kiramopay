@@ -21,7 +21,6 @@ const mockApi = vi.hoisted(() => ({
 
 vi.mock('@/api', () => ({ getApiLayer: () => mockApi }));
 
-const UUID = '5b0e7c1e-2a3f-4d5b-9c8e-1f2a3b4c5d6e';
 const TEXTO_DEL_SERVIDOR = 'an administrator cannot act on a merchant they own';
 const rechazo = { success: false, error: { code: 'ADMIN_IS_AFFECTED_PARTY', message: TEXTO_DEL_SERVIDOR } };
 
@@ -100,7 +99,7 @@ describe('AdminMerchantsView: el comercio del propio administrador', () => {
     setup();
 
     await user.click(screen.getByRole('tab', { name: 'Plan de un comercio' }));
-    await user.type(screen.getByLabelText('Identificador del comercio'), UUID);
+    await user.click(await screen.findByRole('radio', { name: /Soda Propia/ }));
     await user.click(screen.getByRole('button', { name: 'Revisar y asignar' }));
     await user.click(await screen.findByRole('button', { name: 'Sí, asignar Analítica' }));
 

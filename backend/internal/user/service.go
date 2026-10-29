@@ -11,10 +11,22 @@ import (
 
 type Service struct {
 	repo *Repository
+	// entradaSinContrasena es DEMO_LOGIN_ENABLED: con ella encendida, las cuentas
+	// marcadas con demo_login entran sin contrasena y el perfil lo dice.
+	entradaSinContrasena bool
 }
 
 func NewService(repo *Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// ConEntradaDeDemostracion le dice al servicio si el servidor tiene encendida la
+// entrada sin contrasena (DEMO_LOGIN_ENABLED), para que el perfil diga que
+// cuentas la usan. Apagada por defecto: sin llamarlo, nadie figura como que entra
+// sin contrasena.
+func (s *Service) ConEntradaDeDemostracion(encendida bool) *Service {
+	s.entradaSinContrasena = encendida
+	return s
 }
 
 func (s *Service) GetProfile(ctx context.Context, userID string) (*UserRecord, error) {
@@ -22,6 +34,7 @@ func (s *Service) GetProfile(ctx context.Context, userID string) (*UserRecord, e
 	if err != nil {
 		return nil, fmt.Errorf("user not found")
 	}
+	u.MarcarEntradaSinContrasena(s.entradaSinContrasena)
 	return u, nil
 }
 
@@ -75,5 +88,10 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, req *UpdateP
 	if err := s.repo.UpdateProfile(ctx, userID, req); err != nil {
 		return nil, fmt.Errorf("update profile: %w", err)
 	}
-	return s.repo.FindByID(ctx, userID)
+	actualizado, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	actualizado.MarcarEntradaSinContrasena(s.entradaSinContrasena)
+	return actualizado, nil
 }

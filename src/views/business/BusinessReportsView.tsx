@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Capacitor } from '@capacitor/core';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -15,6 +14,8 @@ import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { useTarifas } from '@/hooks/usePlanes';
 import { diaCorto, rellenar } from '@/utils/planes';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { entregarArchivo, type EstadoExport } from '@/utils/entregarArchivo';
+import { ChipVariacion } from './ChipVariacion';
 
 interface Props {
   merchant: QRMerchant;
@@ -28,39 +29,6 @@ const RANGES_CERRADO = [30, 90, 365] as const;
 /** Local YYYY-MM-DD for a date, matching the server's client-tz bucketing. */
 const localKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-type EstadoExport = 'quieto' | 'exportando' | 'listo' | 'error' | 'plan' | 'solo_web';
-
-/**
- * Entrega el CSV a quien lo pidio. En el navegador lo descarga. En la app del
- * telefono un enlace de descarga no hace nada (el WebView lo ignora en
- * silencio), asi que ahi se ofrece compartir el archivo si el sistema lo deja
- * y, si no, se dice que hoy se exporta desde la web: nunca un "listo" falso.
- */
-async function entregarArchivo(blob: Blob, nombre: string): Promise<EstadoExport> {
-  if (Capacitor.isNativePlatform()) {
-    const nav = navigator as Navigator & { canShare?: (datos: ShareData) => boolean };
-    const archivo = typeof File === 'function' ? new File([blob], nombre, { type: 'text/csv' }) : null;
-    if (archivo && nav.share && nav.canShare?.({ files: [archivo] })) {
-      try {
-        await nav.share({ files: [archivo], title: nombre });
-        return 'listo';
-      } catch {
-        return 'quieto';
-      }
-    }
-    return 'solo_web';
-  }
-  const url = URL.createObjectURL(blob);
-  const enlace = document.createElement('a');
-  enlace.href = url;
-  enlace.download = nombre;
-  document.body.appendChild(enlace);
-  enlace.click();
-  enlace.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return 'listo';
-}
 
 /**
  * The shop's numbers (owner/manager): headline totals, a single-series daily
@@ -496,25 +464,5 @@ const Comparacion: React.FC<ComparacionProps> = ({ comp, actual, money, idioma }
         ))}
       </ul>
     </section>
-  );
-};
-
-// El signo va escrito: el color solo no le dice nada a quien no lo distingue.
-const ChipVariacion: React.FC<{ pct: number | null }> = ({ pct }) => {
-  const { t } = useLanguage();
-  if (pct === null) {
-    return (
-      <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-muted">
-        {t('business_report_compare_no_base')}
-      </span>
-    );
-  }
-  const valor = Number(pct.toFixed(2));
-  const tono = valor > 0 ? 'uv-chip-success' : valor < 0 ? 'uv-chip-danger' : 'bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] uv-text-secondary';
-  return (
-    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${tono}`}>
-      {valor > 0 ? '+' : ''}
-      {valor}%
-    </span>
   );
 };

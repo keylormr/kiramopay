@@ -383,6 +383,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tell the server the person just did something
+         * @description The client calls this when the PERSON acts (a tap, a key press, the wheel), at most once a minute, and once when a session opens or is restored. It is the only thing that keeps a session alive against the idle timeout (`JWT_IDLE_MINUTES`, 30 by default), counted from the last action and not from the last token renewal. Background requests (price polling, order tracking, the notifications socket) and token refreshes are NOT actions, which is why activity is not inferred from the other routes: the same route is fetched by the person and by a timer. Past the window nothing is revived: the answer is 401 `SESSION_IDLE` and the client's refresh, which applies the same rule, ends the session. A session opened by a client that never calls this (an older app) is measured as before, from the token's issue time.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recorded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description UNAUTHORIZED | SESSION_REVOKED (closed, or idle past the window) | SESSION_IDLE (idle past the window) */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                403: components["responses"]["AccountBlocked"];
+                /** @description ACTIVITY_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/change-pin": {
         parameters: {
             query?: never;
@@ -1961,6 +2013,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/services/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Companies and carriers the Services screen offers
+         * @description The companies a bill can be paid to (the `provider_code` that POST /api/v1/services/pay-bill accepts), the carriers a phone can be topped up through (the `operator` that POST /api/v1/services/recharge accepts) and whether the payment can be delivered. The screen builds its list from this response and does not carry one of its own. `agreements_active` is false while there is no agreement with the companies or the carriers (production today): both payment endpoints answer SIN_CONVENIO and nothing is charged, so the client says so before the person fills in the form.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The catalog */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ServiceCatalog"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/services/saved": {
         parameters: {
             query?: never;
@@ -2471,7 +2562,7 @@ export interface paths {
                         "application/json": components["schemas"]["CryptoTransactionRecord"];
                     };
                 };
-                /** @description CRYPTO_INVALID_AMOUNT, QR_INVALIDO, CRYPTO_SEND_SELF, or INVALID_BODY. */
+                /** @description CRYPTO_INVALID_AMOUNT (also when the amount is worth less than one cent at the market price), QR_INVALIDO, CRYPTO_SEND_SELF, or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -2568,7 +2659,7 @@ export interface paths {
                         "application/json": components["schemas"]["CryptoTransactionRecord"];
                     };
                 };
-                /** @description CRYPTO_INVALID_AMOUNT or INVALID_BODY. */
+                /** @description CRYPTO_INVALID_AMOUNT, CRYPTO_INVALID_PAIR (`from_asset` and `to_asset` are the same asset, in any letter case) or INVALID_BODY. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3563,8 +3654,26 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); REGISTER_FAILED (a required field is missing or invalid). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the category is not one of the five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing); MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is over 200 characters, or the cedula is over 50). */
                 400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_DUPLICATE — the database reported a uniqueness conflict. Nothing was saved. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description REGISTER_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged server-side, never returned to the client. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3680,7 +3789,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); UPDATE_FAILED (a required field is missing, the merchant does not exist or the caller is not its owner). */
+                /** @description INVALID_BODY; INVALID_CATEGORY (the new category is not one of the five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing); MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is over 200 characters, or the cedula is over 50). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -3689,8 +3798,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. */
+                /** @description MERCHANT_NOT_FOUND — the merchant does not exist or the caller is not its owner (the two are not told apart), or the id is not a UUID. */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed. MERCHANT_DUPLICATE — the database reported a uniqueness conflict. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description UPDATE_FAILED — anything unexpected, including the database being down. The message is the generic "internal server error"; the cause is only logged server-side, never returned to the client. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3711,12 +3838,14 @@ export interface paths {
         };
         /**
          * Sales report of a merchant (owner or manager)
-         * @description Calendar window of `days` days in the client's timezone, up to now; for a closed merchant, up to the moment it closed, since it no longer sells. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
+         * @description Calendar window of `days` days in the client's timezone, up to now; for a closed merchant, up to the moment it closed, since it no longer sells. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists. With `period` the window is that period (the previous month ends where this one starts) and `days` is ignored.
          */
         get: {
             parameters: {
                 query?: {
                     days?: number;
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period?: "today" | "week" | "month" | "prev_month";
                     /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
                     tz?: number;
                 };
@@ -3735,6 +3864,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["MerchantReport"];
+                    };
+                };
+                /** @description INVALID_PERIOD — period is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description NOT_FOUND (unknown merchant, or the caller is not its owner or manager) */
@@ -3763,12 +3901,14 @@ export interface paths {
         };
         /**
          * Export the sales report as CSV (owner or manager, analitica plan)
-         * @description Same window and access as the report, plus the analitica plan. A closed merchant is the exception: its window ends when it closed, and its owner exports with any plan, since the plan was for operating. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
+         * @description Same window and access as the report, plus the analitica plan. A closed merchant is the exception: its window ends when it closed, and its owner exports with any plan, since the plan was for operating. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has. With `period` the window is that period (the movements screen exports the period it is showing) and `days` is ignored.
          */
         get: {
             parameters: {
                 query?: {
                     days?: number;
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period?: "today" | "week" | "month" | "prev_month";
                     /** @description Client offset in minutes WEST of UTC (Costa Rica = 360) */
                     tz?: number;
                     /** @description App language for the header, the section names, the label of the unassigned bucket and the file name. Missing or unknown: Spanish. */
@@ -3790,6 +3930,15 @@ export interface paths {
                     };
                     content: {
                         "text/csv": string;
+                    };
+                };
+                /** @description INVALID_PERIOD — period is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description PLAN_REQUIRED (the merchant does not have the analitica plan) */
@@ -4088,12 +4237,16 @@ export interface paths {
         };
         /**
          * Sales of a merchant, newest first (whole team)
-         * @description Sales by pages, newest first: `limit` of them (50 by default), and with `before` the ones that follow the payment with that id. A page shorter than `limit` is the last one. The owner of a closed merchant still reads them; its former staff does not.
+         * @description Sales by pages, newest first: `limit` of them (50 by default), and with `before` the ones that follow the payment with that id. A page shorter than `limit` is the last one. The owner of a closed merchant still reads them; its former staff does not. With `period` only the payments of that period come, counted in the client's calendar day (`tz`); the period is asked of the server, not filtered on the screen, so a page never hides a day half loaded. Every payment carries the names of who paid, of the location and of the cashier when they could be resolved.
          */
         get: {
             parameters: {
                 query?: {
-                    /** @description Page size. Out of range (or absent), 50. */
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period?: "today" | "week" | "month" | "prev_month";
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                    /** @description Page size. Absent, 50; above the maximum, the maximum. */
                     limit?: number;
                     /** @description Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page. */
                     before?: string;
@@ -4115,7 +4268,7 @@ export interface paths {
                         "application/json": components["schemas"]["QRPaymentRecord"][];
                     };
                 };
-                /** @description INVALID_CURSOR — before is not an id. */
+                /** @description INVALID_CURSOR — before is not an id. INVALID_PERIOD — period is not one of the four. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -4126,6 +4279,214 @@ export interface paths {
                 };
                 /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/payments/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales of each day of a period, by currency (whole team)
+         * @description One row per day and currency, the most recent day first, for the total of each day in the movements list. Only completed sales count: a refunded payment shows in the list but is not a sale. Currencies are never added together. The day is the client's calendar day (`tz`). The owner of a closed merchant reads it, with the period counted from the day it closed.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period: "today" | "week" | "month" | "prev_month";
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Totals per day and currency (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantDayTotal"][];
+                    };
+                };
+                /** @description INVALID_PERIOD — period is missing or is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FETCH_FAILED — the totals could not be read. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/withdrawals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Withdrawals from the merchant balance in a period (owner or manager)
+         * @description The completed withdrawals from the shop's balance to its owner's account, the most recent first (at most 200). They are movements of the shop, not sales. A cashier does not see the balance, and so does not see what is withdrawn from it: it gets 404, like anyone outside the team.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period: "today" | "week" | "month" | "prev_month";
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Withdrawals (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantWithdrawalRecord"][];
+                    };
+                };
+                /** @description INVALID_PERIOD — period is missing or is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller is not its owner or a manager (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FETCH_FAILED — the withdrawals could not be read. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales of today, the last 7 days, this month and the previous month, by currency
+         * @description Completed sales per period, one entry per currency (currencies are never added together). A period without sales comes with an empty `currencies`: the server counted it. With the analitica plan every currency also carries `previous` and `delta`: the same period moved back, cut at the same hour (today against yesterday up to now; this month against the previous month up to the same day and hour, whole when it was shorter). With the base plan they are absent. A cashier gets only `today`, without comparison: the week and the month are the business's numbers, like the report. The owner of a closed merchant reads it, with the periods counted from the day it closed.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Summary */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantSummary"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FETCH_FAILED — the summary could not be read. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5492,7 +5853,10 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Cancel a split */
+        /**
+         * Cancel a split
+         * @description Only the person who created the split can cancel it, and only while nobody else has paid their share. Once someone has paid, the split can no longer be cancelled: that money is already in the creator's account and cancelling would not return it. The creator's own share is born paid and does not count; a declined share does not count either. Cancelling a split that is already cancelled is not an error. Whether anyone has paid is decided under a lock on the split, so a payment and a cancellation at the same moment cannot leave a cancelled split with a paid share: one of the two wins and the other is rejected.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -5510,6 +5874,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description CANCEL_FAILED — the split does not exist, the caller did not create it, or it already closed (all shares settled or declined). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SPLIT_HAS_PAYMENTS — someone other than the creator has already paid their share, so the split can no longer be cancelled. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };
@@ -5546,7 +5928,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description PAY_FAILED — the share could not be paid. */
+                /** @description PAY_FAILED — the share could not be paid (the split is gone or no longer active, or the share is no longer pending). TRANSFER_BLOCKED — the risk engine stopped the payment. Nothing moved. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -5555,8 +5937,17 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
-                /** @description RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
+                /** @description INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or MONTHLY_LIMIT_EXCEEDED — the payment is over what the account can spend. RECIPIENT_UNAVAILABLE — whoever created the split asked to delete the account. Nothing moved. */
                 422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MFA_REQUIRED — a share of 100,000 colones or more needs a verified second factor. Nothing moved: verify a high_value_tx challenge and retry the same request. */
+                428: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5637,7 +6028,7 @@ export interface paths {
         put?: never;
         /**
          * Create a virtual card
-         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit.
+         * @description The card is decorative: it belongs to no payment network and cannot spend outside the app. The person's plan limits how many cards can be active or frozen at once (by default free 1, plus 3, pro 5; the numbers in force are published in /api/v1/transparency/fees). Cancelled, expired and replaced cards do not count. The limit only stops creating: whoever already has more keeps every card. Two simultaneous creations cannot both slip past the limit. The cardholder name is the person's own name, read from the profile.
          */
         post: {
             parameters: {
@@ -5655,14 +6046,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description INVALID_BODY | CREATE_FAILED */
+                /** @description INVALID_BODY | INVALID_CURRENCY (only CRC or USD) | INVALID_CARD_TYPE (only virtual or physical) */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content?: never;
                 };
-                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) */
+                /** @description CARD_LIMIT (the plan does not allow another active or frozen card) | CARDHOLDER_NAME_MISSING (the profile has no name to print) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -5670,6 +6061,13 @@ export interface paths {
                     content: {
                         "application/json": components["schemas"]["PlanLimitError"];
                     };
+                };
+                /** @description CREATE_FAILED. The body never carries the database error; the cause stays in the server log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
                 };
             };
         };
@@ -7317,12 +7715,14 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description APPROVE_FAILED */
+                /** @description INVALID_ID (the id is not a UUID). */
                 400: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
                 /** @description FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY: the administrator owns this merchant; another administrator reviews or manages it. Nothing changed. */
                 403: {
@@ -7333,8 +7733,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description APPROVE_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7389,7 +7807,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description REJECT_FAILED */
+                /** @description INVALID_ID (the id is not a UUID). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -7407,8 +7825,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant is not reviewed again. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description REJECT_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7464,7 +7900,7 @@ export interface paths {
                         "application/json": components["schemas"]["Merchant"];
                     };
                 };
-                /** @description INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant). */
+                /** @description INVALID_ID (the id is not a UUID); INVALID_BODY; COMMISSION_OUT_OF_RANGE (commission_bps is not between 0 and 10000). */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -7482,8 +7918,26 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description MERCHANT_CLOSED — a closed merchant keeps the commission it had. */
                 409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SET_COMMISSION_FAILED — anything unexpected. The message is the generic "internal server error"; the cause is only logged. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -8888,6 +9342,8 @@ export interface paths {
                 query?: {
                     limit?: number;
                     offset?: number;
+                    /** @description Language the app is showing. The catalogue notices are written again in that language (the stored record does not change); without it, or with a language the app does not have, they come as they were stored. */
+                    lang?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi";
                 };
                 header?: never;
                 path?: never;
@@ -9711,6 +10167,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/capital": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own capital of the company, per currency
+         * @description The balance of each SYSTEM:CAPITAL:<currency> ledger account (migration 087): the company's own cash, kept apart from what is owed to users (the reserve is exactly equal to that). Crypto purchases and sales move money between the reserve and the capital, fees enter it and promotions leave it. The account has no floor on purpose: it can go negative and operations keep working. When it does, `shortfall_minor` is how much would have to be deposited with real money to get back to zero. The figure comes from the ledger (the immutable journal), never from a client-side calculation. Admin only.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One row per currency that has a capital account. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            currencies?: {
+                                /** @example CRC */
+                                currency: string;
+                                /**
+                                 * Format: int64
+                                 * @description Signed balance in minor units; negative when the capital is short.
+                                 * @example -19670
+                                 */
+                                balance_minor: number;
+                                /**
+                                 * Format: int64
+                                 * @description How much is missing to reach zero (0 when the balance is not negative).
+                                 * @example 19670
+                                 */
+                                shortfall_minor: number;
+                                negative: boolean;
+                            }[];
+                            /** Format: date-time */
+                            as_of?: string;
+                        };
+                    };
+                };
+                /** @description CAPITAL_UNAVAILABLE — the ledger could not be read. There are no currencies in the answer: a zero would claim that nothing is missing, and what is known is nothing. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/promociones/fondos": {
         parameters: {
             query?: never;
@@ -9722,7 +10246,7 @@ export interface paths {
         put?: never;
         /**
          * Record a company deposit into the promotions fund
-         * @description Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
+         * @description Posts debit SYSTEM:CAPITAL:CRC / credit SYSTEM:PROMOTIONS:CRC. This does NOT raise the published reserves: the reserve is exactly what is owed to users, and this money belongs to the company until a reward is redeemed (each redemption moves it from capital to the reserve). It must still match a real deposit: a reference (transfer or receipt number) is mandatory and the funding is audited with high risk. The idempotency key makes a double tap fund once.
          */
         post: {
             parameters: {
@@ -10856,7 +11380,7 @@ export interface components {
             closed_by?: string;
             /** @description Why it was closed: owner_request when its owner closed it, or the reason an administrator wrote. Absent while it is open. */
             closure_reason?: string;
-            /** @description Owner's display name (only in the administrator's list) */
+            /** @description Owner's display name. In the administrator's list, and in the list of someone who works at the merchant without owning it (so they know whom to ask for a permission). Absent in the owner's own list and when it could not be resolved. */
             owner_name?: string;
         };
         MerchantProfileRequest: {
@@ -10920,6 +11444,101 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             completed_at?: string;
+            /** @description Who paid. Only in the merchant's sales feed; absent when the account could not be resolved. Never filled in. */
+            payer_name?: string;
+            /** @description Name of the location the charge was for. Absent when the sale has no location (location_id is absent too) or the name could not be resolved. */
+            location_name?: string;
+            /** @description Name of the team member who issued the charge. Absent for a sale from before the team existed (collected_by is absent too). */
+            collector_name?: string;
+        };
+        MerchantDayTotal: {
+            /**
+             * Format: date
+             * @description Calendar day in the client's timezone
+             */
+            date: string;
+            currency: string;
+            /**
+             * Format: int64
+             * @description Minor units charged to payers
+             */
+            gross: number;
+            /**
+             * Format: int64
+             * @description Minor units of commission
+             */
+            fee: number;
+            /**
+             * Format: int64
+             * @description gross - fee
+             */
+            net: number;
+            count: number;
+        };
+        MerchantWithdrawalRecord: {
+            /**
+             * Format: uuid
+             * @description The withdrawal's transaction id
+             */
+            id: string;
+            /**
+             * Format: int64
+             * @description Minor units withdrawn
+             */
+            amount: number;
+            currency: string;
+            status: string;
+            /** @description Who withdrew it; absent when it could not be resolved */
+            withdrawn_by_name?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MerchantSummaryCurrency: {
+            currency: string;
+            /**
+             * Format: int64
+             * @description Minor units charged to payers
+             */
+            gross: number;
+            /** Format: int64 */
+            fee: number;
+            /** Format: int64 */
+            net: number;
+            count: number;
+            previous?: components["schemas"]["ReportBucket"];
+            delta?: components["schemas"]["ReportDelta"];
+        };
+        MerchantSummaryPeriod: {
+            /** @enum {string} */
+            period: "today" | "week" | "month" | "prev_month";
+            /**
+             * Format: date
+             * @description First day of the period, in the client's timezone
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description Last day of the period
+             */
+            to: string;
+            /**
+             * Format: date
+             * @description Only with the analitica plan
+             */
+            previous_from?: string;
+            /**
+             * Format: date
+             * @description Only with the analitica plan
+             */
+            previous_to?: string;
+            /** @description One entry per currency with sales; empty when the period had none. */
+            currencies: components["schemas"]["MerchantSummaryCurrency"][];
+        };
+        MerchantSummary: {
+            /** @enum {string} */
+            plan: "base" | "analitica";
+            /** @description Today, week, month and prev_month; a cashier gets only today. */
+            periods: components["schemas"]["MerchantSummaryPeriod"][];
         };
         StaffMember: {
             /** Format: uuid */
@@ -11345,6 +11964,33 @@ export interface components {
              * @enum {string}
              */
             closed_by_expiry?: "entrega" | "revision";
+            /**
+             * Format: date-time
+             * @description When the buyer funded it.
+             */
+            funded_at?: string;
+            /**
+             * Format: date-time
+             * @description When the money went to the seller.
+             */
+            released_at?: string;
+            /**
+             * Format: date-time
+             * @description When the money went back to the buyer.
+             */
+            refunded_at?: string;
+            /**
+             * Format: date-time
+             * @description When a dispute was opened.
+             */
+            disputed_at?: string;
+            /**
+             * Format: date-time
+             * @description When it was cancelled before funding.
+             */
+            cancelled_at?: string;
+            /** @description Name of the OTHER party, the one who is not asking: the seller for the buyer and the buyer for the seller. Only in the response to a party of the agreement (create, list, get and each action); it is not stored and does not travel in webhook events. Absent when the account cannot be read. */
+            counterparty_name?: string;
         };
         /** @description Rail-typed beneficiary; each rail reads the fields it needs. */
         PayoutDestination: {
@@ -11471,9 +12117,9 @@ export interface components {
              * @example 0
              */
             auditoria_descartada: number;
-            /** @description Official USD/CRC reference rate (BCCR, as republished by Hacienda), refreshed hourly. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why. */
+            /** @description Official USD/CRC reference rate, refreshed hourly. With `BCCR_TOKEN` loaded it comes from the Banco Central de Costa Rica (SDDE) and, if that fails, from Hacienda, which republishes the same reference rate; without the token it comes from Hacienda and `falta` names the missing variable. `fuente` is where the last confirmed rate really came from (`bccr` or `hacienda`), empty until one is confirmed. `usd_crc` is the rate the app charges with, in both directions. If the source cannot confirm it for 96 hours, crypto quoted in colones stops trading rather than using a stale number; `ultimo_error` says why, including why the BCCR was skipped when Hacienda covered it. */
             tipo_de_cambio: {
-                /** @example hacienda */
+                /** @example bccr */
                 fuente: string;
                 /** @example 450.06 */
                 usd_crc: number;
@@ -11484,6 +12130,13 @@ export interface components {
                 /** Format: date-time */
                 ultima_confirmacion?: string;
                 ultimo_error?: string;
+                /**
+                 * @description Names (never values) of the environment variables that are not loaded and keep the rate from coming from the BCCR.
+                 * @example [
+                 *       "BCCR_TOKEN"
+                 *     ]
+                 */
+                falta?: string[];
             };
             /** @description CoinGecko price feed state. `plan` is what the provider accepted for the configured key (demo, pro, none, or invalid when both hosts reject it); `key` is only the last 4 characters of the key. */
             crypto_prices: {
@@ -11563,6 +12216,8 @@ export interface components {
                      * @enum {string|null}
                      */
                     language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
+                    /** @description Same as UserProfile.passwordless_login */
+                    passwordless_login?: boolean;
                 };
             };
         };
@@ -11600,6 +12255,8 @@ export interface components {
              * @enum {string|null}
              */
             language?: "es" | "en" | "fr" | "pt" | "zh-cn" | "ja" | "hi" | null;
+            /** @description true when the account enters without a password: it is marked as a demonstration account and the server has DEMO_LOGIN_ENABLED on. Such an account has no current password to present, so changing the password and deleting the account are rejected with DEMO_ACCOUNT (the app does not offer them). Always present; false for any other account. */
+            passwordless_login?: boolean;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -11705,6 +12362,34 @@ export interface components {
             status: string;
             /** @description Present and true when this response repeats a payment already made under the same `idempotency_key`: nothing was charged now. */
             replayed?: boolean;
+        };
+        ServiceCatalog: {
+            /** @description False while the payment cannot be delivered (no agreement with the companies or the carriers). Never assume true when it is absent. */
+            agreements_active: boolean;
+            /** @description Active providers, ordered by category and name. */
+            providers: {
+                /**
+                 * @description The `provider_code` to send to pay-bill.
+                 * @example ice
+                 */
+                code: string;
+                /** @example ICE — Electricidad */
+                name: string;
+                /**
+                 * @description electricity, water, telecom or internet.
+                 * @example electricity
+                 */
+                category: string;
+            }[];
+            operators: {
+                /**
+                 * @description The `operator` to send to recharge.
+                 * @example kolbi
+                 */
+                code: string;
+                /** @example Kölbi (ICE) */
+                name: string;
+            }[];
         };
         RechargeResponse: {
             transaction_id: string;
@@ -12192,6 +12877,10 @@ export interface components {
                 currency?: string;
                 user_liabilities_minor?: number;
                 reserve_balance_minor?: number;
+                /** @description Reserve minus user liabilities, in minor units and signed (negative when the reserve falls short). Zero when the reserve is exactly what is owed to users. Read this, not ratio_pct: a percentage rounded to one decimal hides small shortfalls. */
+                difference_minor?: number;
+                /** @description The reserve covers everything owed to users. */
+                fully_backed?: boolean;
                 ratio_pct?: number;
             }[];
         };

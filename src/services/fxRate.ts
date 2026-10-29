@@ -5,19 +5,24 @@
 // mock = 526.5), so the "USD Total", the crypto conversions and the balance
 // summary all disagreed. Everything now derives from the backend's public
 // /api/v1/exchange-rates endpoint (via the country repository), with a cached
-// value and a safe fallback for when the endpoint hasn't served a rate yet.
+// value.
+//
+// THERE IS NO FALLBACK NUMBER. The rate comes from the Banco Central de Costa
+// Rica through the server and from nowhere else. When the server has not served
+// one (empty table / offline / error) there is no rate, and every caller gets
+// `null` and must say the figure is unavailable instead of painting one. A
+// constant 515 used to stand in here: it was the seed of migration 043, nobody
+// had confirmed it, and it put a total on Home, Profile and crypto built on a
+// rate nobody gave.
 
 import { getApiLayer } from '@/api';
 
-// Fallback used until the backend serves a rate (empty table / offline / mock
-// without the pair). Matches the seed in migration 043_seed_exchange_rates.sql.
-export const DEFAULT_USD_TO_CRC = 515;
-
 const TTL_MS = 10 * 60 * 1000; // re-fetch at most every 10 minutes
 
-let cachedRate = DEFAULT_USD_TO_CRC;
+// The last rate the SERVER served, or null if it never has.
+let cachedRate: number | null = null;
 let cachedAt = 0;
-let inFlight: Promise<number> | null = null;
+let inFlight: Promise<number | null> | null = null;
 
 interface RateLike {
   fromCurrency: string;
@@ -35,11 +40,14 @@ function extractUsdToCrc(rates: RateLike[]): number | null {
 
 /**
  * Resolve the current USD->CRC rate. Fetches from the backend (deduped +
- * cached with a TTL) and always resolves to a finite number — the last known
- * value or the fallback if the fetch fails or returns no CRC pair.
+ * cached with a TTL) and resolves to the rate the server gave, or `null` when
+ * there is none: the fetch failed, or it returned no CRC pair and no earlier
+ * call got one. Never a made-up number. A missing rate is not cached, so the
+ * next call asks again; a rate the server did give is kept if a later fetch
+ * fails.
  */
-export async function getUsdToCrcRate(force = false): Promise<number> {
-  const fresh = Date.now() - cachedAt < TTL_MS;
+export async function getUsdToCrcRate(force = false): Promise<number | null> {
+  const fresh = cachedRate !== null && Date.now() - cachedAt < TTL_MS;
   if (!force && fresh) return cachedRate;
   if (inFlight) return inFlight;
 
@@ -54,7 +62,7 @@ export async function getUsdToCrcRate(force = false): Promise<number> {
         }
       }
     } catch {
-      // keep last-known / fallback rate
+      // keep the last rate the server gave, if any
     } finally {
       inFlight = null;
     }
@@ -64,17 +72,17 @@ export async function getUsdToCrcRate(force = false): Promise<number> {
   return inFlight;
 }
 
-/** Last resolved USD->CRC rate (or fallback). Safe to call during render. */
-export function getCachedUsdToCrcRate(): number {
+/** Last USD->CRC rate the server gave, or null. Safe to call during render. */
+export function getCachedUsdToCrcRate(): number | null {
   return cachedRate;
 }
 
-/** Convert a USD amount to CRC using the cached rate. */
-export function usdToCrc(usd: number): number {
-  return usd * cachedRate;
+/** Convert a USD amount to CRC using the cached rate; null without a rate. */
+export function usdToCrc(usd: number): number | null {
+  return cachedRate !== null ? usd * cachedRate : null;
 }
 
-/** Convert a CRC amount to USD using the cached rate. */
-export function crcToUsd(crc: number): number {
-  return cachedRate > 0 ? crc / cachedRate : 0;
+/** Convert a CRC amount to USD using the cached rate; null without a rate. */
+export function crcToUsd(crc: number): number | null {
+  return cachedRate !== null && cachedRate > 0 ? crc / cachedRate : null;
 }

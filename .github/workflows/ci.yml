@@ -204,6 +204,24 @@ jobs:
         with:
           go-version: '1.26.10'
           cache-dependency-path: backend/go.sum
+      # La base de este job es desechable: nace y muere con la corrida, y cada
+      # prueba arranca de tablas vacias. Esperar el fsync de cada commit y de cada
+      # TRUNCATE no compra nada aqui (si el servicio se cae, se repite la corrida),
+      # y las pruebas limpian las tablas dos veces por cada TestDB. Solo afecta
+      # al servicio de CI; produccion no pasa por este archivo.
+      - name: Relajar la durabilidad de la base de pruebas
+        env:
+          PGPASSWORD: kiramopay_dev
+        run: |
+          psql -h localhost -U kiramopay -d postgres -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET fsync = off" \
+            -c "ALTER SYSTEM SET synchronous_commit = off" \
+            -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "SELECT pg_reload_conf()"
+          sleep 2
+          psql -h localhost -U kiramopay -d postgres -At \
+            -c "SHOW fsync" -c "SHOW synchronous_commit" -c "SHOW full_page_writes"
+
       - name: Run integration tests
         working-directory: backend
         env:

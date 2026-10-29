@@ -254,17 +254,32 @@ func validatePushEndpoint(raw string) error {
 	return nil
 }
 
-// ListHistory returns paginated notifications for a user.
-func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset int) ([]*NotificationRecord, error) {
-	return s.repo.ListNotifications(ctx, userID, limiteDeHistorial(limit), offset)
+// ListHistory returns paginated notifications for a user. Con idioma (uno de la
+// app), los avisos del catalogo salen escritos en ese idioma aunque se hayan
+// guardado en otro; sin idioma, o con uno que la app no tiene, salen como se
+// guardaron. Es una vista: lo guardado no cambia.
+func (s *Service) ListHistory(ctx context.Context, userID string, limit, offset int, idioma string) ([]*NotificationRecord, error) {
+	lista, err := s.repo.ListNotifications(ctx, userID, limiteDeHistorial(limit), offset)
+	if err != nil || !IdiomaValido(idioma) {
+		return lista, err
+	}
+	for _, n := range lista {
+		if titulo, cuerpo, ok := Localizar(n.Title, n.Body, idioma); ok {
+			n.Title, n.Body = titulo, cuerpo
+		}
+	}
+	return lista, nil
 }
 
-// limiteDeHistorial acota una pagina del historial: sin pedido o fuera de
-// rango son 20, y nunca mas de 50. Aparte de ListHistory para que la prueba
-// llame a esta regla y no a una copia de ella.
+// limiteDeHistorial acota una pagina del historial: sin pedido son 20, y pedir
+// mas que el tope devuelve el tope, 50. Aparte de ListHistory para que la
+// prueba llame a esta regla y no a una copia de ella.
 func limiteDeHistorial(limit int) int {
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 {
 		return 20
+	}
+	if limit > 50 {
+		return 50
 	}
 	return limit
 }

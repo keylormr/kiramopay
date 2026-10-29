@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Sesiones abiertas, una por dispositivo.
@@ -20,6 +21,69 @@ import (
 // de acceso en la siguiente peticion) y revocar su FAMILIA de refresh. Sin lo
 // segundo el dispositivo renueva y vuelve a entrar en menos de quince minutos,
 // que es lo que dura el token de acceso: se veria cerrado y no lo estaria.
+
+// Por que cerro el servidor una sesion por su cuenta (user_sessions.revoked_reason
+// y refresh_tokens.revoked_reason). Cuando la cierra la persona o un
+// administrador el motivo queda vacio: ya lo dicen audit_logs y quien la pidio.
+const (
+	// MotivoInactividad: pasaron mas de JWT_IDLE_MINUTES sin una accion.
+	MotivoInactividad = "idle_timeout"
+	// MotivoAntiguedad: la sesion llego al tope absoluto desde el login.
+	MotivoAntiguedad = "absolute_timeout"
+	// MotivoReusoDeRefresh: se presento un refresh token ya rotado.
+	MotivoReusoDeRefresh = "refresh_reuse"
+)
+
+type ejecutor interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// cerrarFamilia revoca la familia de refresh Y marca como cerrada la fila de
+// sesion que apunta a ella, con el motivo.
+//
+// Cerrar una familia sin cerrar su sesion dejaba la fila abierta: "Dispositivos
+// conectados" mostraba como abierta, con su vencimiento, una sesion que ya no
+// podia renovarse ni servir. Revocar marca la fila, no la borra.
+//
+// La sesion se busca por la familia (cualquiera de sus tokens), no por el token
+// que se presento: la fila apunta al ULTIMO de la cadena, que no es el que llega
+// cuando se reusa uno viejo.
+func cerrarFamilia(ctx context.Context, q ejecutor, familyID, motivo string) error {
+	if _, err := q.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW(), revoked_reason = $2
+		  WHERE family_id = $1::uuid AND revoked_at IS NULL`,
+		familyID, motivo,
+	); err != nil {
+		return fmt.Errorf("revoke refresh family: %w", err)
+	}
+	if _, err := q.Exec(ctx,
+		`UPDATE user_sessions SET revoked_at = NOW(), revoked_reason = $2
+		  WHERE revoked_at IS NULL
+		    AND refresh_jti IN (SELECT jti FROM refresh_tokens WHERE family_id = $1::uuid)`,
+		familyID, motivo,
+	); err != nil {
+		return fmt.Errorf("close session: %w", err)
+	}
+	return nil
+}
+
+// CerrarFamilia cierra la sesion de un dispositivo y mata su familia de refresh
+// por una decision del servidor (ver los Motivo...), en una transaccion.
+func (r *Repository) CerrarFamilia(ctx context.Context, familyID, motivo string) error {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op once committed
+
+	if err := cerrarFamilia(ctx, tx, familyID, motivo); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
 
 // SessionView es una sesion abierta tal como se muestra a quien la consulta.
 // No lleva tokens ni hashes: solo lo que sirve para reconocer el dispositivo.

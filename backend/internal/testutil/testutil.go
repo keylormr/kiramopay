@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -90,7 +92,7 @@ func TestDB(t *testing.T) *pgxpool.Pool {
 		t.Skipf("Skipping integration test: cannot ping test DB: %v", err)
 	}
 
-	if err := createSchema(ctx, pool); err != nil {
+	if err := asegurarEsquema(ctx, pool); err != nil {
 		pool.Close()
 		t.Fatalf("Failed to create schema: %v", err)
 	}
@@ -140,6 +142,43 @@ func TestRedis(t *testing.T) *redis.Client {
 	})
 
 	return client
+}
+
+var (
+	esquemaMu    sync.Mutex
+	esquemaListo bool
+)
+
+// asegurarEsquema crea el esquema de pruebas UNA vez por proceso de prueba, no
+// una por cada TestDB.
+//
+// createSchema son varios cientos de sentencias (79 tablas, 87 ALTER, indices,
+// funciones y disparadores) que se volvian a correr enteras al arrancar cada
+// prueba aunque el esquema ya estuviera: son idempotentes, asi que no cambiaban
+// nada, pero cada una toma sus candados y escribe en el catalogo. Entre pruebas
+// lo que hay que dejar limpio son los DATOS (truncateAll), no el esquema.
+//
+// Es un sync.Once que reintenta: si la primera creacion falla, la siguiente
+// prueba lo vuelve a intentar en vez de quedarse sin esquema por el resto del
+// proceso.
+//
+// Cada paquete de prueba es su propio proceso (go test ./internal/... -p 1), asi
+// que el esquema se aplica una vez por paquete y un cambio en este archivo
+// llega siempre. Lo que una prueba cambie del esquema a proposito (renombrar una
+// tabla, crear un disparador) lo tiene que deshacer ella en su t.Cleanup, como ya
+// hacen las que lo necesitan: ya no hay un TestDB que lo repare al arrancar la
+// siguiente.
+func asegurarEsquema(ctx context.Context, pool *pgxpool.Pool) error {
+	esquemaMu.Lock()
+	defer esquemaMu.Unlock()
+	if esquemaListo {
+		return nil
+	}
+	if err := createSchema(ctx, pool); err != nil {
+		return err
+	}
+	esquemaListo = true
+	return nil
 }
 
 func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
@@ -531,7 +570,9 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
 		('SYSTEM:SAVINGS:CRC', 'savings', 'CRC', 'credit'),
 		('SYSTEM:SAVINGS:USD', 'savings', 'USD', 'credit'),
-		('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
+		('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit'),
+		('SYSTEM:CAPITAL:CRC', 'capital', 'CRC', 'debit'),
+		('SYSTEM:CAPITAL:USD', 'capital', 'USD', 'debit')
 	ON CONFLICT (code) DO NOTHING;
 
 	CREATE TABLE IF NOT EXISTS api_keys (
@@ -1518,6 +1559,11 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	-- Migracion 001: la sesion apunta al dispositivo desde el que se abrio (sin
 	-- ON DELETE, como alla). El CREATE de user_sessions de arriba no la traia.
 	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS device_id UUID REFERENCES user_devices(id);
+	-- Migracion 085: la hora de la ultima accion de la persona en la sesion, y
+	-- por que la cerro el servidor (en la sesion y en su refresh token).
+	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;
+	ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS revoked_reason TEXT;
+	ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS revoked_reason TEXT;
 	CREATE TABLE IF NOT EXISTS linked_bank_accounts (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1829,13 +1875,48 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"exchange_rates",
 		"users",
 	}
+	// Una prueba toca una docena de estas ~80 tablas, no todas. Antes se hacia un
+	// TRUNCATE por tabla, cada uno su propia transaccion con su propio commit y
+	// su fsync, y TRUNCATE no es barato ni sobre una tabla vacia (crea archivos
+	// nuevos para la tabla, sus indices y su TOAST): ~80 commits por limpieza y
+	// dos limpiezas por prueba (al arrancar y al cerrar), unos 340 ms cada una
+	// medidos en CI. Ahora una sola consulta dice cuales tienen filas y un solo
+	// TRUNCATE las limpia junto con el sembrado, en una transaccion. El resultado
+	// es el mismo: todas quedan vacias.
+	vistas := make(map[string]bool, len(tables))
+	sondas := make([]string, 0, len(tables))
 	for _, tbl := range tables {
-		if _, err := pool.Exec(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tbl)); err != nil { //nolint:gosec // test-only, fixed table list
-			return fmt.Errorf("truncate %s: %w", tbl, err)
+		if vistas[tbl] {
+			continue
 		}
+		vistas[tbl] = true
+		sondas = append(sondas, fmt.Sprintf("SELECT '%[1]s' AS tabla WHERE EXISTS (SELECT 1 FROM %[1]s)", tbl)) //nolint:gosec // test-only, fixed table list
 	}
-	// Re-seed system ledger accounts after truncate.
-	if _, err := pool.Exec(ctx, `
+	filas, err := pool.Query(ctx, strings.Join(sondas, " UNION ALL "))
+	if err != nil {
+		return fmt.Errorf("probe tables with rows: %w", err)
+	}
+	var conFilas []string
+	for filas.Next() {
+		var tbl string
+		if err := filas.Scan(&tbl); err != nil {
+			filas.Close()
+			return fmt.Errorf("scan table with rows: %w", err)
+		}
+		conFilas = append(conFilas, tbl)
+	}
+	filas.Close()
+	if err := filas.Err(); err != nil {
+		return fmt.Errorf("probe tables with rows: %w", err)
+	}
+
+	limpieza := ""
+	if len(conFilas) > 0 {
+		limpieza = "TRUNCATE TABLE " + strings.Join(conFilas, ", ") + " CASCADE;"
+	}
+	// Re-seed system ledger accounts after truncate (same transaction: the
+	// statements run as one implicit transaction in the simple protocol).
+	if _, err := pool.Exec(ctx, limpieza+`
 		INSERT INTO ledger_accounts (code, type, currency, normal_balance) VALUES
 			('SYSTEM:FEES:CRC',      'system_fee', 'CRC', 'credit'),
 			('SYSTEM:FEES:USD',      'system_fee', 'USD', 'credit'),
@@ -1851,10 +1932,12 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 			('SYSTEM:SAVINGS:USD',   'savings',    'USD', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:CRC', 'external', 'CRC', 'credit'),
 			('SYSTEM:EXTERNAL:MOCK:USD', 'external', 'USD', 'credit'),
-			('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit')
+			('SYSTEM:PROMOTIONS:CRC', 'promotions', 'CRC', 'credit'),
+			('SYSTEM:CAPITAL:CRC',   'capital',    'CRC', 'debit'),
+			('SYSTEM:CAPITAL:USD',   'capital',    'USD', 'debit')
 		ON CONFLICT (code) DO NOTHING
 	`); err != nil {
-		return fmt.Errorf("re-seed system ledger accounts: %w", err)
+		return fmt.Errorf("truncate and re-seed system ledger accounts: %w", err)
 	}
 	return nil
 }

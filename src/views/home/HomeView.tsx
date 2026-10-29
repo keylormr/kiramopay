@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
+import { Bandera } from '../../components/Bandera';
 import { BottomSheet } from '../../components/BottomSheet';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
@@ -29,6 +30,7 @@ import {
   mensajeDeCobro,
   mensajeDelRechazoDelCobro,
   minutosParaVencer,
+  textoDeDuracion,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
 import { saldoTotal, formatearSaldoTotal } from '@/utils/saldoTotal';
@@ -42,6 +44,27 @@ import { ErrorALaVista } from '@/components/ErrorALaVista';
 import { useGastoDelMes } from './useGastoDelMes';
 
 type QRCurrency = 'BTC' | 'ETH' | 'CRC' | 'USD';
+
+/**
+ * Lo que el carrusel de Cuentas deja a cada lado de las tarjetas para que no
+ * recorte la sombra de la cuenta elegida.
+ *
+ * El carrusel se desplaza de lado (overflow-x: auto) y un contenedor que se
+ * desplaza recorta todo lo que sale de su caja, tambien hacia arriba y hacia
+ * abajo. La cuenta elegida lleva --shadow-primary (0 8px 20px): la sombra se
+ * extiende 20 px a cada lado, 12 hacia arriba y 28 hacia abajo, y quedaba
+ * cortada en el borde de la tarjeta como un rectangulo azul palido. Es el mismo
+ * defecto de BottomSheet y se resuelve igual: relleno del tamano de la sombra y
+ * un margen negativo igual de grande, para que el Inicio no se mueva.
+ *
+ * Arriba cabe en el hueco de 12 px que deja el titulo (mb-3); abajo, en el
+ * relleno de 8 px que el carrusel ya tenia (pb-2) mas el hueco entre secciones
+ * (24 px). Los lados sobresalen hacia el relleno de la pantalla (px-4); la
+ * pantalla principal recorta lo que pasa del borde (overflow-x-hidden).
+ */
+const HOLGURA_SOMBRA_CARRUSEL = { lado: 20, arriba: 12, abajo: 28 } as const;
+/** Lo que el carrusel ya dejaba bajo las tarjetas (pb-2): se conserva. */
+const RELLENO_BAJO_EL_CARRUSEL = 8;
 
 interface HomeViewProps {
   onViewAllTransactions?: () => void;
@@ -516,8 +539,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     const info: Record<QRCurrency, { symbol: string; flag: string; name: string }> = {
       BTC: { symbol: '₿', flag: '🟠', name: 'Bitcoin' },
       ETH: { symbol: 'Ξ', flag: '🔷', name: 'Ethereum' },
-      CRC: { symbol: '₡', flag: '🇨🇷', name: 'Colones' },
-      USD: { symbol: '$', flag: '🇺🇸', name: 'Dolares' },
+      CRC: { symbol: '₡', flag: 'CR', name: 'Colones' },
+      USD: { symbol: '$', flag: 'US', name: 'Dolares' },
     };
     return info[ccy];
   };
@@ -543,10 +566,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         <div className="relative text-[2.5rem] leading-tight font-black tracking-tight mb-1 tabular-nums">
           {formatearSaldoTotal(totales.enBase, monedaDelSaldo)}
         </div>
-        {/* Sin tasa para alguna cuenta no hay total en dolares: la linea se
-            va en vez de mostrar una cifra inventada. */}
+        {/* Sin tasa para alguna cuenta no hay total en dolares: la linea de
+            la cifra se va en vez de mostrar una inventada, y en su lugar dice
+            por que el total es un guion. */}
         <div className="relative text-sm text-white/70 mb-6 tabular-nums">
-          {totales.enUsd !== null && rellenar(t('balance_usd_estimate'), { amount: formatearSaldoTotal(totales.enUsd, 'USD') })}
+          {totales.enBase === null
+            ? t('fx_total_unavailable')
+            : totales.enUsd !== null && rellenar(t('balance_usd_estimate'), { amount: formatearSaldoTotal(totales.enUsd, 'USD') })}
         </div>
 
         <div className="relative flex gap-2.5">
@@ -761,7 +787,21 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       {/* Accounts List (Horizontal Scroll) */}
       <div>
         <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('accounts')}</h3>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('accounts')}>
+        <div
+          className="flex gap-3 overflow-x-auto no-scrollbar"
+          style={{
+            paddingTop: HOLGURA_SOMBRA_CARRUSEL.arriba,
+            paddingRight: HOLGURA_SOMBRA_CARRUSEL.lado,
+            paddingBottom: HOLGURA_SOMBRA_CARRUSEL.abajo,
+            paddingLeft: HOLGURA_SOMBRA_CARRUSEL.lado,
+            marginTop: -HOLGURA_SOMBRA_CARRUSEL.arriba,
+            marginRight: -HOLGURA_SOMBRA_CARRUSEL.lado,
+            marginBottom: RELLENO_BAJO_EL_CARRUSEL - HOLGURA_SOMBRA_CARRUSEL.abajo,
+            marginLeft: -HOLGURA_SOMBRA_CARRUSEL.lado,
+          }}
+          role="tablist"
+          aria-label={t('accounts')}
+        >
           {state.accounts.map((acc) => {
             const selected = state.baseCurrency === acc.ccy;
             return (
@@ -777,7 +817,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <span className="text-2xl">{acc.flag}</span>
+                  <Bandera pais={acc.flag} className="text-2xl" />
                   <span className={`text-[11px] font-bold uppercase tracking-wider ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.ccy}</span>
                 </div>
                 <div>
@@ -891,11 +931,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     {formatCurrency(cobrarCharge.amount, cobrarCharge.currency as QRCurrency)}
                   </p>
                   <p className="text-xs uv-text-muted mt-1">
-                    {t('qr_vence_en_min').replace('{min}', String(minutosParaVencer(cobrarCharge.expiresAt)))}
+                    {t('qr_vence_en').replace('{tiempo}', textoDeDuracion(minutosParaVencer(cobrarCharge.expiresAt), t))}
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
+                <p className="text-sm text-gray-500 text-center max-w-[280px]">{t('qr_personal_ayuda')}</p>
               )}
 
               {/* El campo de monto es una accion OPCIONAL sobre el codigo que ya
@@ -918,14 +958,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               <div className="flex gap-3 w-full">
                 <button
                   onClick={() => { navigator.clipboard?.writeText((cobrarCharge ?? cobrarCode).qrData); }}
-                  className="flex-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+                  className="shrink-0 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary py-3 px-5 rounded-xl font-bold flex items-center justify-center gap-2"
                 >
                   <Icons.Copy size={18} /> {t('copy')}
                 </button>
                 <button
                   onClick={handleCobrarMonto}
                   disabled={cobrarLoading || !(parseFloat(cobrarAmount) > 0)}
-                  className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold disabled:opacity-50"
+                  className="flex-1 min-w-0 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 px-3 rounded-xl font-bold leading-tight disabled:opacity-50"
                 >
                   {cobrarLoading ? t('loading') : cobrarCharge ? t('qr_cambiar_monto') : t('qr_cobrar_monto')}
                 </button>
@@ -945,14 +985,51 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </div>
       </BottomSheet>
 
-      {/* Add Money (Crypto) Sheet */}
-      <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('deposit_crypto')}>
-        <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
-            <Icons.Clock size={30} className="text-[var(--color-primary)]" />
+      {/* Agregar dinero. Sobre el saldo en colones abria "Depositar Crypto /
+          proximamente": otra cosa que lo que se pidio. Dice como entra dinero
+          hoy —recibir de otra cuenta KiramoPay, por numero o por QR—, lleva a
+          las dos pantallas donde se hace, y avisa que cargar desde el banco
+          llega con la conexion a SINPE. */}
+      <BottomSheet isOpen={activeSheet === 'addMoney'} onClose={() => setActiveSheet('none')} title={t('add_money')}>
+        <div className="space-y-5 px-1 pb-2">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-success-soft)] text-[var(--color-success)]">
+              <Icons.Receive size={22} aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-bold uv-text-primary">{t('add_money_today_title')}</h3>
+              <p className="mt-1 text-sm uv-text-secondary leading-relaxed">{t('add_money_today_desc')}</p>
+            </div>
           </div>
-          <h3 className="text-lg font-bold uv-text-primary">{t('crypto_deposit_unavailable_title')}</h3>
-          <p className="text-sm text-gray-500 max-w-[300px]">{t('crypto_deposit_unavailable_desc')}</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              leftIcon={<Icons.Receive size={18} aria-hidden="true" />}
+              onClick={() => { setActiveSheet('none'); onNavigateToSinpe?.('receive'); }}
+            >
+              {t('receive')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
+              leftIcon={<Icons.QrCode size={18} aria-hidden="true" />}
+              onClick={() => setActiveSheet('cobrar')}
+            >
+              {t('my_qr_short')}
+            </Button>
+          </div>
+
+          <p
+            role="note"
+            className="flex items-start gap-2 rounded-xl uv-surface-2 p-3 text-sm uv-text-secondary leading-relaxed"
+          >
+            <Icons.Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {t('add_money_bank_soon')}
+          </p>
         </div>
       </BottomSheet>
 
@@ -1003,7 +1080,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               return (
                 <div key={ccy} className="flex flex-col items-center">
                   <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-lg mb-1">
-                    {info.flag}
+                    <Bandera pais={info.flag} />
                   </div>
                   <span className="text-xs text-gray-500">{ccy}</span>
                 </div>
@@ -1025,10 +1102,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               <div className="w-16 h-16 rounded-full bg-[var(--color-success-soft)] flex items-center justify-center">
                 <Icons.Check size={32} className="text-[var(--color-success)]" />
               </div>
+              {/* El monto con el formato de la app, como el resto de las
+                  pantallas. El titulo de la hoja ya dice "Pago realizado": bajo
+                  el monto va a quien se le pago, no la misma frase otra vez. */}
               <p className="text-3xl font-black uv-text-primary tabular-nums">
-                {payResult.currency} {payResult.amount}
+                {formatCurrency(payResult.amount, payResult.currency)}
               </p>
-              <p className="uv-text-muted text-sm">{t('payment_done')}</p>
+              {(resuelto?.merchantName || resuelto?.payeeName) && (
+                <p className="uv-text-muted text-sm">{resuelto?.merchantName || resuelto?.payeeName}</p>
+              )}
               <button
                 onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayResult(null); }}
                 className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"

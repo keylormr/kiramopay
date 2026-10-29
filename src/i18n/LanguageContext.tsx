@@ -1,13 +1,20 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   Language,
   LANGUAGES,
   LanguageOption,
   TranslationKeys,
   defaultTranslations,
+  diccionarioCargado,
   loadLanguage,
 } from './translations';
 import { fijarDiccionarioActivo } from './mensajesDeError';
+import {
+  eleccionGuardada,
+  guardarEleccion,
+  idiomaInicial,
+  recordarIdiomaDeLaCuenta,
+} from './idiomaDeLaPersona';
 
 interface LanguageContextType {
   language: Language;
@@ -18,6 +25,14 @@ interface LanguageContextType {
    */
   elegido: boolean;
   setLanguage: (lang: Language) => void;
+  /**
+   * La cuenta dice en que idioma usa la app la persona. Si no eligio ninguno en
+   * este dispositivo, la pantalla pasa a ese (era el que adivino el navegador);
+   * en cualquier caso el dispositivo lo recuerda para la pantalla de arranque
+   * del proximo inicio, que corre antes de saber quien entra. Una eleccion de la
+   * persona nunca se pisa.
+   */
+  adoptarIdiomaDeLaCuenta: (lang: Language) => void;
   t: (key: string) => string;
   languages: LanguageOption[];
   currentLanguage: LanguageOption;
@@ -25,40 +40,16 @@ interface LanguageContextType {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'kiramopay_language';
-
-// La eleccion que la persona guardo en este dispositivo, si hay una.
-function eleccionGuardada(): Language | null {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  // Migrate users who picked the now-removed Traditional Chinese to Simplified.
-  if (saved === 'zh-tw') return 'zh-cn';
-  if (saved && LANGUAGES.some((l) => l.code === saved)) {
-    return saved as Language;
-  }
-  return null;
-}
-
-function detectInitialLanguage(): Language {
-  const saved = eleccionGuardada();
-  if (saved) return saved;
-  const browserLang = navigator.language.toLowerCase();
-  if (browserLang.startsWith('es')) return 'es';
-  if (browserLang.startsWith('en')) return 'en';
-  if (browserLang.startsWith('fr')) return 'fr';
-  if (browserLang.startsWith('pt')) return 'pt';
-  if (browserLang.startsWith('zh')) return 'zh-cn';
-  if (browserLang.startsWith('ja')) return 'ja';
-  if (browserLang.startsWith('hi')) return 'hi';
-  return 'es'; // Default to Spanish
-}
-
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(detectInitialLanguage);
+  const [language, setLanguageState] = useState<Language>(idiomaInicial);
   const [elegido, setElegido] = useState<boolean>(() => eleccionGuardada() !== null);
   // Spanish is bundled (defaultTranslations); the other languages ship as their
-  // own chunks and load on demand. Until a non-default chunk arrives, t() falls
-  // back to Spanish, then to the raw key.
-  const [messages, setMessages] = useState<TranslationKeys>(defaultTranslations);
+  // own chunks and load on demand (index.tsx pide el del idioma de la persona
+  // antes de pintar, asi que normalmente ya esta en el primer render). Until a
+  // non-default chunk arrives, t() falls back to Spanish, then to the raw key.
+  const [messages, setMessages] = useState<TranslationKeys>(
+    () => diccionarioCargado(language) ?? defaultTranslations,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -86,11 +77,27 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     document.documentElement.lang = language === 'zh-cn' ? 'zh-CN' : language;
   }, [language]);
 
-  const setLanguage = (lang: Language) => {
+  // Si el diccionario del idioma nuevo ya llego, entra en el mismo render que el
+  // idioma: sin eso, la pantalla pasaba un instante por el idioma anterior.
+  const cambiarA = useCallback((lang: Language) => {
     setLanguageState(lang);
+    const ya = diccionarioCargado(lang);
+    if (ya) setMessages(ya);
+  }, []);
+
+  const setLanguage = (lang: Language) => {
+    cambiarA(lang);
     setElegido(true);
-    localStorage.setItem(STORAGE_KEY, lang);
+    guardarEleccion(lang);
   };
+
+  const adoptarIdiomaDeLaCuenta = useCallback(
+    (lang: Language) => {
+      recordarIdiomaDeLaCuenta(lang);
+      if (eleccionGuardada() === null) cambiarA(lang);
+    },
+    [cambiarA],
+  );
 
   const t = (key: string): string => {
     const active = messages as Record<string, string>;
@@ -105,6 +112,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       language,
       elegido,
       setLanguage,
+      adoptarIdiomaDeLaCuenta,
       t,
       languages: LANGUAGES,
       currentLanguage,

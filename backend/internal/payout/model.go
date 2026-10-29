@@ -4,11 +4,12 @@
 // of implementing Rail and registering it — the orchestration, accounting,
 // idempotency and compliance gates live here, once.
 //
-// Money flow is pure double-entry against a per-rail system liability account,
-// so payout balances are provable from the journal:
+// Money flow is pure double-entry against the reserve: money that leaves
+// through a rail leaves the system, so the user liability and the reserve drop
+// by the same amount and the published proof of reserves stays exact:
 //
-//	submit:  debit user wallet            / credit SYSTEM:EXTERNAL:<RAIL>:<CUR>
-//	refund:  debit SYSTEM:EXTERNAL:<RAIL> / credit user wallet   (rail rejected)
+//	submit:  debit user wallet            / credit SYSTEM:RESERVE:<CUR>
+//	refund:  debit SYSTEM:RESERVE:<CUR>   / credit user wallet   (rail rejected)
 //
 // The payouts row is workflow state; the journal is the truth. The state
 // machine is strict and every money-moving transition is claimed (a guarded
@@ -29,7 +30,7 @@ type Status string
 
 const (
 	StatusPending    Status = "pending"    // created, validated — no money moved yet
-	StatusProcessing Status = "processing" // user debited, funds held in SYSTEM:EXTERNAL, awaiting settlement
+	StatusProcessing Status = "processing" // user debited, reserve released to the rail, awaiting settlement
 	StatusCompleted  Status = "completed"  // rail confirmed settlement at the destination
 	StatusFailed     Status = "failed"     // rail rejected; funds refunded to the user
 )

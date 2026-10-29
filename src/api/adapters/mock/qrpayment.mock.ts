@@ -15,6 +15,11 @@ import type {
   QRChargeStatus,
   CreateChargeRequest,
   ResolvedQR,
+  PeriodoDeVentas,
+  ResumenDelComercio,
+  RetiroDelComercio,
+  TotalDelDia,
+  VentasPorMoneda,
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
 import { VENTAS_POR_PAGINA } from '../../repositories/qrpayment.repository';
@@ -36,6 +41,43 @@ const ROTULOS_CSV: Record<string, { encabezado: string; dia: string; total: stri
   hi: { encabezado: 'खंड,से,तक,कुंजी,नाम,सकल,शुल्क,शुद्ध,भुगतान', dia: 'दिन', total: 'कुल', archivo: 'report' },
 };
 const DEFAULT_COMMISSION_BPS = 50; // 0.50%
+
+// ── Periodos del comercio (hoy, 7 dias, este mes, mes anterior) ──────────────
+// Lo mismo que calcula el servidor (backend/internal/qrpayment/periodo.go), pero
+// en la zona del dispositivo: la demo no tiene servidor que la cuente.
+interface VentanaMock { desde: Date; hasta: Date; antDesde: Date; antHasta: Date }
+
+function ventanaDelPeriodo(periodo: PeriodoDeVentas, ahora: Date = new Date()): VentanaMock {
+  const medianoche = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  const atras = (d: Date, dias: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() - dias, d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+  const inicioDeMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+  if (periodo === 'week') {
+    const desde = atras(medianoche, 6);
+    return { desde, hasta: ahora, antDesde: atras(desde, 7), antHasta: atras(ahora, 7) };
+  }
+  if (periodo === 'month') {
+    const mismoPunto = new Date(ahora.getFullYear(), ahora.getMonth() - 1, ahora.getDate(), ahora.getHours(), ahora.getMinutes(), ahora.getSeconds());
+    return {
+      desde: inicioDeMes,
+      hasta: ahora,
+      antDesde: new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1),
+      antHasta: mismoPunto > inicioDeMes ? inicioDeMes : mismoPunto,
+    };
+  }
+  if (periodo === 'prev_month') {
+    const desde = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1);
+    return { desde, hasta: inicioDeMes, antDesde: new Date(ahora.getFullYear(), ahora.getMonth() - 2, 1), antHasta: desde };
+  }
+  return { desde: medianoche, hasta: ahora, antDesde: atras(medianoche, 1), antHasta: atras(ahora, 1) };
+}
+
+const claveDeDiaLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const enVentana = (iso: string, desde: Date, hasta: Date) => {
+  const t = new Date(iso).getTime();
+  return t >= desde.getTime() && t < hasta.getTime();
+};
 
 function getState() {
   try {
@@ -174,11 +216,18 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(collected - withdrawn);
   }
 
-  async withdrawMerchant(merchantId: string, amount: number): Promise<ApiResponse<{ repetida: boolean }>> {
+  async withdrawMerchant(merchantId: string, amount: number, currency = 'CRC'): Promise<ApiResponse<{ repetida: boolean }>> {
     const state = getState();
     const withdrawn: Record<string, number> = state?.merchantWithdrawn ?? {};
     withdrawn[merchantId] = (withdrawn[merchantId] ?? 0) + amount;
     saveField('merchantWithdrawn', withdrawn);
+    // El retiro tambien es un movimiento del comercio.
+    const retiros = readList<RetiroDelComercio & { merchantId: string }>('qrWithdrawals');
+    retiros.push({
+      id: `wd-${Date.now()}`, merchantId, amount, currency, status: 'completed',
+      withdrawnByName: 'Demo', createdAt: new Date().toISOString(),
+    });
+    saveField('qrWithdrawals', retiros);
     return apiSuccess({ repetida: false });
   }
 
@@ -392,13 +441,91 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     return apiSuccess(state?.qrPayments ?? []);
   }
 
-  async getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>> {
+  async getMerchantPayments(
+    merchantId: string,
+    opciones?: { antesDe?: string; periodo?: PeriodoDeVentas },
+  ): Promise<ApiResponse<QRPayment[]>> {
+    const ventana = opciones?.periodo ? ventanaDelPeriodo(opciones.periodo) : null;
     const ventas = readList<QRPayment>('qrPayments')
-      .filter((p) => p.merchantId === merchantId)
+      .filter((p) => p.merchantId === merchantId && (!ventana || enVentana(p.createdAt, ventana.desde, ventana.hasta)))
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     const desde = opciones?.antesDe ? ventas.findIndex((p) => p.id === opciones.antesDe) + 1 : 0;
     if (opciones?.antesDe && desde === 0) return apiSuccess([]);
     return apiSuccess(ventas.slice(desde, desde + VENTAS_POR_PAGINA));
+  }
+
+  private ventasCompletadas(merchantId: string, desde: Date, hasta: Date): QRPayment[] {
+    return readList<QRPayment>('qrPayments').filter(
+      (p) => p.merchantId === merchantId && p.status === 'completed' && enVentana(p.createdAt, desde, hasta),
+    );
+  }
+
+  private porMoneda(ventas: QRPayment[]): Map<string, { gross: number; fee: number; count: number }> {
+    const m = new Map<string, { gross: number; fee: number; count: number }>();
+    for (const p of ventas) {
+      const b = m.get(p.currency) ?? { gross: 0, fee: 0, count: 0 };
+      b.gross += p.amount;
+      b.fee += p.fee;
+      b.count += 1;
+      m.set(p.currency, b);
+    }
+    return m;
+  }
+
+  async getMerchantSummary(merchantId: string): Promise<ApiResponse<ResumenDelComercio>> {
+    const comercio = readMerchants().find((m) => m.id === merchantId);
+    if (!comercio) return apiError('NOT_FOUND', 'merchant not found');
+    const analitica = comercio.plan === 'analitica' && comercio.role !== 'cashier';
+    const periodos: PeriodoDeVentas[] = comercio.role === 'cashier' ? ['today'] : ['today', 'week', 'month', 'prev_month'];
+    return apiSuccess({
+      plan: comercio.plan === 'analitica' ? 'analitica' : 'base',
+      periods: periodos.map((period) => {
+        const v = ventanaDelPeriodo(period);
+        const ahora = this.porMoneda(this.ventasCompletadas(merchantId, v.desde, v.hasta));
+        const antes = this.porMoneda(this.ventasCompletadas(merchantId, v.antDesde, v.antHasta));
+        const monedas = [...new Set([...ahora.keys(), ...(analitica ? antes.keys() : [])])].sort();
+        const currencies: VentasPorMoneda[] = monedas.map((currency) => {
+          const a = ahora.get(currency) ?? { gross: 0, fee: 0, count: 0 };
+          const fila: VentasPorMoneda = { currency, gross: a.gross, fee: a.fee, net: a.gross - a.fee, count: a.count };
+          if (analitica) {
+            const b = antes.get(currency) ?? { gross: 0, fee: 0, count: 0 };
+            const pct = (x: number, y: number) => (y === 0 ? null : Math.round(((x - y) * 10000) / y) / 100);
+            fila.previous = { gross: b.gross, fee: b.fee, net: b.gross - b.fee, count: b.count };
+            fila.delta = {
+              gross: a.gross - b.gross, fee: a.fee - b.fee, net: fila.net - fila.previous.net, count: a.count - b.count,
+              grossPct: pct(a.gross, b.gross), netPct: pct(fila.net, fila.previous.net), countPct: pct(a.count, b.count),
+            };
+          }
+          return fila;
+        });
+        return { period, from: claveDeDiaLocal(v.desde), to: claveDeDiaLocal(new Date(v.hasta.getTime() - 1)), currencies };
+      }),
+    });
+  }
+
+  async getMerchantDailyTotals(merchantId: string, periodo: PeriodoDeVentas): Promise<ApiResponse<TotalDelDia[]>> {
+    const v = ventanaDelPeriodo(periodo);
+    const filas = new Map<string, TotalDelDia>();
+    for (const p of this.ventasCompletadas(merchantId, v.desde, v.hasta)) {
+      const date = claveDeDiaLocal(new Date(p.createdAt));
+      const clave = `${date}|${p.currency}`;
+      const f = filas.get(clave) ?? { date, currency: p.currency, gross: 0, fee: 0, net: 0, count: 0 };
+      f.gross += p.amount;
+      f.fee += p.fee;
+      f.net = f.gross - f.fee;
+      f.count += 1;
+      filas.set(clave, f);
+    }
+    return apiSuccess([...filas.values()].sort((a, b) => (a.date === b.date ? a.currency.localeCompare(b.currency) : a.date < b.date ? 1 : -1)));
+  }
+
+  async getMerchantWithdrawals(merchantId: string, periodo: PeriodoDeVentas): Promise<ApiResponse<RetiroDelComercio[]>> {
+    const v = ventanaDelPeriodo(periodo);
+    return apiSuccess(
+      readList<RetiroDelComercio & { merchantId?: string }>('qrWithdrawals')
+        .filter((r) => r.merchantId === merchantId && enVentana(r.createdAt, v.desde, v.hasta))
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
+    );
   }
 
   async getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>> {
@@ -681,11 +808,33 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
   // El mock arma el mismo CSV que el servidor (columnas, BOM, montos en
   // unidades) y responde PLAN_REQUIRED sin el plan, para que la pantalla se
   // pueda probar sin backend.
-  async exportMerchantReportCsv(merchantId: string, days: number, idioma?: string): Promise<ApiResponse<ArchivoDescargado>> {
+  async exportMerchantReportCsv(
+    merchantId: string,
+    days: number,
+    idioma?: string,
+    periodo?: PeriodoDeVentas,
+  ): Promise<ApiResponse<ArchivoDescargado>> {
     const merchant = readMerchants().find((m) => m.id === merchantId);
     if (!merchant) return apiError('NOT_FOUND', 'merchant not found');
     if (merchant.plan !== 'analitica') {
       return apiErrorConDetalle('PLAN_REQUIRED', 'plan analitica required', { plan_requerido: 'analitica' });
+    }
+    if (periodo) {
+      // El periodo se arma con los totales de cada dia, que la demo ya sabe dar.
+      const dias = await this.getMerchantDailyTotals(merchantId, periodo);
+      if (!dias.success || !dias.data) return apiError('EXPORT_FAILED', 'export failed');
+      const rotulos = ROTULOS_CSV[idioma ?? ''] ?? ROTULOS_CSV.es;
+      const dinero = (v: number) => v.toFixed(2);
+      const total = dias.data.reduce((t, d) => ({ gross: t.gross + d.gross, fee: t.fee + d.fee, count: t.count + d.count }), { gross: 0, fee: 0, count: 0 });
+      const lineas = [
+        rotulos.encabezado,
+        ...dias.data.map((d) => `${rotulos.dia},${d.date},${d.date},,,${dinero(d.gross)},${dinero(d.fee)},${dinero(d.net)},${d.count}`),
+        `${rotulos.total},,,,,${dinero(total.gross)},${dinero(total.fee)},${dinero(total.gross - total.fee)},${total.count}`,
+      ];
+      return apiSuccess({
+        blob: new Blob([`${String.fromCharCode(0xfeff)}${lineas.join('\r\n')}`], { type: 'text/csv;charset=utf-8' }),
+        nombre: `${rotulos.archivo}-${periodo}.csv`,
+      });
     }
     const rep = await this.getMerchantReport(merchantId, days);
     if (!rep.success || !rep.data) return apiError('EXPORT_FAILED', 'export failed');

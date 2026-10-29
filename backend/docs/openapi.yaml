@@ -267,6 +267,37 @@ paths:
         '204':
           description: Logged out
 
+  /api/v1/auth/activity:
+    post:
+      tags: [Auth]
+      summary: Tell the server the person just did something
+      description: >-
+        The client calls this when the PERSON acts (a tap, a key press, the
+        wheel), at most once a minute, and once when a session opens or is
+        restored. It is the only thing that keeps a session alive against the
+        idle timeout (`JWT_IDLE_MINUTES`, 30 by default), counted from the last
+        action and not from the last token renewal. Background requests (price
+        polling, order tracking, the notifications socket) and token refreshes
+        are NOT actions, which is why activity is not inferred from the other
+        routes: the same route is fetched by the person and by a timer. Past
+        the window nothing is revived: the answer is 401 `SESSION_IDLE` and the
+        client's refresh, which applies the same rule, ends the session. A
+        session opened by a client that never calls this (an older app) is
+        measured as before, from the token's issue time.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Recorded
+        '401':
+          description: >-
+            UNAUTHORIZED | SESSION_REVOKED (closed, or idle past the window) |
+            SESSION_IDLE (idle past the window)
+        '403':
+          $ref: '#/components/responses/AccountBlocked'
+        '500':
+          description: ACTIVITY_FAILED
+
   /api/v1/auth/change-pin:
     post:
       tags: [Auth]
@@ -1368,6 +1399,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/services/providers:
+    get:
+      tags: [Services]
+      summary: Companies and carriers the Services screen offers
+      description: >-
+        The companies a bill can be paid to (the `provider_code` that
+        POST /api/v1/services/pay-bill accepts), the carriers a phone can be
+        topped up through (the `operator` that POST /api/v1/services/recharge
+        accepts) and whether the payment can be delivered. The screen builds its
+        list from this response and does not carry one of its own.
+        `agreements_active` is false while there is no agreement with the
+        companies or the carriers (production today): both payment endpoints
+        answer SIN_CONVENIO and nothing is charged, so the client says so before
+        the person fills in the form.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceCatalog'
+
   /api/v1/services/saved:
     get:
       tags: [Services]
@@ -1715,7 +1770,8 @@ paths:
                 $ref: '#/components/schemas/CryptoTransactionRecord'
         '400':
           description: >-
-            CRYPTO_INVALID_AMOUNT, QR_INVALIDO, CRYPTO_SEND_SELF, or
+            CRYPTO_INVALID_AMOUNT (also when the amount is worth less than one
+            cent at the market price), QR_INVALIDO, CRYPTO_SEND_SELF, or
             INVALID_BODY.
           content:
             application/json:
@@ -1801,7 +1857,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CryptoTransactionRecord'
         '400':
-          description: CRYPTO_INVALID_AMOUNT or INVALID_BODY.
+          description: >-
+            CRYPTO_INVALID_AMOUNT, CRYPTO_INVALID_PAIR (`from_asset` and
+            `to_asset` are the same asset, in any letter case) or INVALID_BODY.
           content:
             application/json:
               schema:
@@ -2307,8 +2365,26 @@ paths:
         '400':
           description: >-
             INVALID_BODY; INVALID_CATEGORY (the category is not one of the five
-            the app offers); REGISTER_FAILED (a required field is missing or
-            invalid).
+            the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED or
+            MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing);
+            MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or
+            juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is
+            over 200 characters, or the cedula is over 50).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_DUPLICATE — the database reported a uniqueness conflict. Nothing was saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            REGISTER_FAILED — anything unexpected. The message is the generic
+            "internal server error"; the cause is only logged server-side, never
+            returned to the client.
           content:
             application/json:
               schema:
@@ -2404,14 +2480,37 @@ paths:
         '400':
           description: >-
             INVALID_BODY; INVALID_CATEGORY (the new category is not one of the
-            five the app offers); UPDATE_FAILED (a required field is missing,
-            the merchant does not exist or the caller is not its owner).
+            five the app offers); MERCHANT_NAME_REQUIRED, MERCHANT_CEDULA_REQUIRED
+            or MERCHANT_LEGAL_NAME_REQUIRED (a required field is missing);
+            MERCHANT_CEDULA_TYPE_INVALID (cedula_type is not fisica or
+            juridica); MERCHANT_FIELD_TOO_LONG (the name or the legal name is
+            over 200 characters, or the cedula is over 50).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: >-
+            MERCHANT_NOT_FOUND — the merchant does not exist or the caller is
+            not its owner (the two are not told apart), or the id is not a UUID.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: MERCHANT_CLOSED — the merchant was closed; it is no longer administered. Nothing changed.
+          description: >-
+            MERCHANT_CLOSED — the merchant was closed; it is no longer
+            administered. Nothing changed. MERCHANT_DUPLICATE — the database
+            reported a uniqueness conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            UPDATE_FAILED — anything unexpected, including the database being
+            down. The message is the generic "internal server error"; the cause
+            is only logged server-side, never returned to the client.
           content:
             application/json:
               schema:
@@ -2428,7 +2527,9 @@ paths:
         window moved `days` days back and cut at the same hour, so today's
         half day is not compared with a whole day. With the base plan
         `comparison` is absent. Anyone who is not the owner or a manager gets
-        404, without learning whether the merchant exists.
+        404, without learning whether the merchant exists. With `period` the
+        window is that period (the previous month ends where this one starts)
+        and `days` is ignored.
       security:
         - bearerAuth: []
       parameters:
@@ -2436,6 +2537,15 @@ paths:
         - name: days
           in: query
           schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: period
+          in: query
+          required: false
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
         - name: tz
           in: query
           description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
@@ -2447,6 +2557,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MerchantReport'
+        '400':
+          description: INVALID_PERIOD — period is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND (unknown merchant, or the caller is not its owner or manager)
 
@@ -2459,7 +2575,9 @@ paths:
         closed merchant is the exception: its window ends when it closed, and
         its owner exports with any plan, since the plan was for operating. The
         role is checked first: someone outside the team gets 404 and never
-        learns which plan the merchant has.
+        learns which plan the merchant has. With `period` the window is that
+        period (the movements screen exports the period it is showing) and
+        `days` is ignored.
       security:
         - bearerAuth: []
       parameters:
@@ -2467,6 +2585,15 @@ paths:
         - name: days
           in: query
           schema: { type: integer, minimum: 1, maximum: 365, default: 30 }
+        - name: period
+          in: query
+          required: false
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
         - name: tz
           in: query
           description: Client offset in minutes WEST of UTC (Costa Rica = 360)
@@ -2505,6 +2632,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanRequiredError'
+        '400':
+          description: INVALID_PERIOD — period is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND (unknown merchant, or the caller is not its owner or manager)
         '500':
@@ -2731,15 +2864,32 @@ paths:
         Sales by pages, newest first: `limit` of them (50 by default), and with
         `before` the ones that follow the payment with that id. A page shorter
         than `limit` is the last one. The owner of a closed merchant still
-        reads them; its former staff does not.
+        reads them; its former staff does not. With `period` only the payments
+        of that period come, counted in the client's calendar day (`tz`); the
+        period is asked of the server, not filtered on the screen, so a page
+        never hides a day half loaded. Every payment carries the names of who
+        paid, of the location and of the cashier when they could be resolved.
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ResourceId'
+        - name: period
+          in: query
+          required: false
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
         - name: limit
           in: query
           required: false
-          description: Page size. Out of range (or absent), 50.
+          description: Page size. Absent, 50; above the maximum, the maximum.
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
         - name: before
           in: query
@@ -2756,13 +2906,166 @@ paths:
                 items:
                   $ref: '#/components/schemas/QRPaymentRecord'
         '400':
-          description: INVALID_CURSOR — before is not an id.
+          description: INVALID_CURSOR — before is not an id. INVALID_PERIOD — period is not one of the four.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/payments/daily:
+    get:
+      tags: [QR Payments]
+      summary: Sales of each day of a period, by currency (whole team)
+      description: >-
+        One row per day and currency, the most recent day first, for the total
+        of each day in the movements list. Only completed sales count: a
+        refunded payment shows in the list but is not a sale. Currencies are
+        never added together. The day is the client's calendar day (`tz`). The
+        owner of a closed merchant reads it, with the period counted from the
+        day it closed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: period
+          in: query
+          required: true
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Totals per day and currency (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MerchantDayTotal'
+        '400':
+          description: INVALID_PERIOD — period is missing or is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: FETCH_FAILED — the totals could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/withdrawals:
+    get:
+      tags: [QR Payments]
+      summary: Withdrawals from the merchant balance in a period (owner or manager)
+      description: >-
+        The completed withdrawals from the shop's balance to its owner's
+        account, the most recent first (at most 200). They are movements of the
+        shop, not sales. A cashier does not see the balance, and so does not see
+        what is withdrawn from it: it gets 404, like anyone outside the team.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: period
+          in: query
+          required: true
+          description: >-
+            Calendar period in the client's timezone (see tz): `today`, `week`
+            (the last 7 days, today included), `month` (day 1 up to now) or
+            `prev_month` (the previous month, whole). Any other value is a 400
+            INVALID_PERIOD.
+          schema: { type: string, enum: [today, week, month, prev_month] }
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Withdrawals (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MerchantWithdrawalRecord'
+        '400':
+          description: INVALID_PERIOD — period is missing or is not one of the four.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller is not its owner or a manager (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: FETCH_FAILED — the withdrawals could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/summary:
+    get:
+      tags: [QR Payments]
+      summary: Sales of today, the last 7 days, this month and the previous month, by currency
+      description: >-
+        Completed sales per period, one entry per currency (currencies are never
+        added together). A period without sales comes with an empty
+        `currencies`: the server counted it. With the analitica plan every
+        currency also carries `previous` and `delta`: the same period moved
+        back, cut at the same hour (today against yesterday up to now; this
+        month against the previous month up to the same day and hour, whole when
+        it was shorter). With the base plan they are absent. A cashier gets only
+        `today`, without comparison: the week and the month are the business's
+        numbers, like the report. The owner of a closed merchant reads it, with
+        the periods counted from the day it closed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: tz
+          in: query
+          description: Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360)
+          schema: { type: integer, minimum: -840, maximum: 840, default: 0 }
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantSummary'
+        '404':
+          description: NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: FETCH_FAILED — the summary could not be read.
           content:
             application/json:
               schema:
@@ -3672,6 +3975,16 @@ paths:
     delete:
       tags: [Split Payments]
       summary: Cancel a split
+      description: >-
+        Only the person who created the split can cancel it, and only while
+        nobody else has paid their share. Once someone has paid, the split can
+        no longer be cancelled: that money is already in the creator's account
+        and cancelling would not return it. The creator's own share is born
+        paid and does not count; a declined share does not count either.
+        Cancelling a split that is already cancelled is not an error. Whether
+        anyone has paid is decided under a lock on the split, so a payment and a
+        cancellation at the same moment cannot leave a cancelled split with a
+        paid share: one of the two wins and the other is rejected.
       security:
         - bearerAuth: []
       parameters:
@@ -3679,6 +3992,23 @@ paths:
       responses:
         '204':
           description: Split cancelled
+        '400':
+          description: >-
+            CANCEL_FAILED — the split does not exist, the caller did not
+            create it, or it already closed (all shares settled or declined).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            SPLIT_HAS_PAYMENTS — someone other than the creator has already
+            paid their share, so the split can no longer be cancelled. Nothing
+            changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/splits/{id}/pay:
     post:
@@ -3692,15 +4022,30 @@ paths:
         '200':
           description: Share paid
         '400':
-          description: PAY_FAILED — the share could not be paid.
+          description: >-
+            PAY_FAILED — the share could not be paid (the split is gone or no
+            longer active, or the share is no longer pending).
+            TRANSFER_BLOCKED — the risk engine stopped the payment. Nothing
+            moved.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
           description: >-
-            RECIPIENT_UNAVAILABLE — whoever created the split asked to delete
-            the account. Nothing moved.
+            INSUFFICIENT_BALANCE, DAILY_LIMIT_EXCEEDED or
+            MONTHLY_LIMIT_EXCEEDED — the payment is over what the account can
+            spend. RECIPIENT_UNAVAILABLE — whoever created the split asked to
+            delete the account. Nothing moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '428':
+          description: >-
+            MFA_REQUIRED — a share of 100,000 colones or more needs a verified
+            second factor. Nothing moved: verify a high_value_tx challenge and
+            retry the same request.
           content:
             application/json:
               schema:
@@ -3730,20 +4075,25 @@ paths:
         numbers in force are published in /api/v1/transparency/fees).
         Cancelled, expired and replaced cards do not count. The limit only
         stops creating: whoever already has more keeps every card. Two
-        simultaneous creations cannot both slip past the limit.
+        simultaneous creations cannot both slip past the limit. The
+        cardholder name is the person's own name, read from the profile.
       security:
         - bearerAuth: []
       responses:
         '201':
           description: Card created
         '400':
-          description: INVALID_BODY | CREATE_FAILED
+          description: INVALID_BODY | INVALID_CURRENCY (only CRC or USD) | INVALID_CARD_TYPE (only virtual or physical)
         '409':
-          description: CARD_LIMIT (the plan does not allow another active or frozen card)
+          description: >-
+            CARD_LIMIT (the plan does not allow another active or frozen card)
+            | CARDHOLDER_NAME_MISSING (the profile has no name to print)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlanLimitError'
+        '500':
+          description: CREATE_FAILED. The body never carries the database error; the cause stays in the server log.
     get:
       tags: [Virtual Cards]
       summary: List user's virtual cards
@@ -4638,7 +4988,25 @@ paths:
               schema:
                 $ref: '#/components/schemas/Merchant'
         '400':
-          description: APPROVE_FAILED
+          description: INVALID_ID (the id is not a UUID).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            APPROVE_FAILED — anything unexpected. The message is the generic
+            "internal server error"; the cause is only logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '403':
           description: >-
             FORBIDDEN (not an administrator) or ADMIN_IS_AFFECTED_PARTY:
@@ -4681,7 +5049,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/Merchant'
         '400':
-          description: REJECT_FAILED
+          description: INVALID_ID (the id is not a UUID).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            REJECT_FAILED — anything unexpected. The message is the generic
+            "internal server error"; the cause is only logged.
           content:
             application/json:
               schema:
@@ -4726,7 +5108,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/Merchant'
         '400':
-          description: INVALID_BODY; SET_COMMISSION_FAILED (out of range, or unknown merchant).
+          description: >-
+            INVALID_ID (the id is not a UUID); INVALID_BODY;
+            COMMISSION_OUT_OF_RANGE (commission_bps is not between 0 and 10000).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            SET_COMMISSION_FAILED — anything unexpected. The message is the
+            generic "internal server error"; the cause is only logged.
           content:
             application/json:
               schema:
@@ -5504,6 +5902,15 @@ paths:
           schema:
             type: integer
             default: 0
+        - name: lang
+          in: query
+          description: >-
+            Language the app is showing. The catalogue notices are written again
+            in that language (the stored record does not change); without it, or
+            with a language the app does not have, they come as they were stored.
+          schema:
+            type: string
+            enum: [es, en, fr, pt, zh-cn, ja, hi]
       responses:
         '200':
           description: List of notifications
@@ -5883,16 +6290,74 @@ paths:
                   saldo_minor: { type: integer, format: int64 }
                   moneda: { type: string, example: CRC }
 
+  /api/v1/admin/capital:
+    get:
+      tags: [Admin]
+      summary: Own capital of the company, per currency
+      description: >-
+        The balance of each SYSTEM:CAPITAL:<currency> ledger account
+        (migration 087): the company's own cash, kept apart from what is owed
+        to users (the reserve is exactly equal to that). Crypto purchases and
+        sales move money between the reserve and the capital, fees enter it and
+        promotions leave it. The account has no floor on purpose: it can go
+        negative and operations keep working. When it does, `shortfall_minor`
+        is how much would have to be deposited with real money to get back to
+        zero. The figure comes from the ledger (the immutable journal), never
+        from a client-side calculation. Admin only.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: One row per currency that has a capital account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currencies:
+                    type: array
+                    items:
+                      type: object
+                      required: [currency, balance_minor, shortfall_minor, negative]
+                      properties:
+                        currency: { type: string, example: CRC }
+                        balance_minor:
+                          type: integer
+                          format: int64
+                          description: Signed balance in minor units; negative when the capital is short.
+                          example: -19670
+                        shortfall_minor:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          description: How much is missing to reach zero (0 when the balance is not negative).
+                          example: 19670
+                        negative: { type: boolean }
+                  as_of:
+                    type: string
+                    format: date-time
+        '503':
+          description: >-
+            CAPITAL_UNAVAILABLE — the ledger could not be read. There are no
+            currencies in the answer: a zero would claim that nothing is
+            missing, and what is known is nothing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/admin/promociones/fondos:
     post:
       tags: [Admin]
       summary: Record a company deposit into the promotions fund
       description: >-
-        Posts debit SYSTEM:RESERVE:CRC / credit SYSTEM:PROMOTIONS:CRC. This
-        RAISES THE PUBLISHED RESERVES in the proof-of-reserves, so it must match
-        a real deposit: a reference (transfer or receipt number) is mandatory
-        and the funding is audited with high risk. The idempotency key makes a
-        double tap fund once.
+        Posts debit SYSTEM:CAPITAL:CRC / credit SYSTEM:PROMOTIONS:CRC. This
+        does NOT raise the published reserves: the reserve is exactly what is
+        owed to users, and this money belongs to the company until a reward is
+        redeemed (each redemption moves it from capital to the reserve). It must
+        still match a real deposit: a reference (transfer or receipt number) is
+        mandatory and the funding is audited with high risk. The idempotency key
+        makes a double tap fund once.
       security:
         - bearerAuth: []
       requestBody:
@@ -6691,7 +7156,11 @@ components:
             reason an administrator wrote. Absent while it is open.
         owner_name:
           type: string
-          description: Owner's display name (only in the administrator's list)
+          description: >-
+            Owner's display name. In the administrator's list, and in the list
+            of someone who works at the merchant without owning it (so they know
+            whom to ask for a permission). Absent in the owner's own list and
+            when it could not be resolved.
 
     MerchantProfileRequest:
       type: object
@@ -6735,6 +7204,80 @@ components:
         tx_id: { type: string }
         created_at: { type: string, format: date-time }
         completed_at: { type: string, format: date-time }
+        payer_name:
+          type: string
+          description: >-
+            Who paid. Only in the merchant's sales feed; absent when the account
+            could not be resolved. Never filled in.
+        location_name:
+          type: string
+          description: Name of the location the charge was for. Absent when the sale has no location (location_id is absent too) or the name could not be resolved.
+        collector_name:
+          type: string
+          description: Name of the team member who issued the charge. Absent for a sale from before the team existed (collected_by is absent too).
+
+    MerchantDayTotal:
+      type: object
+      additionalProperties: false
+      required: [date, currency, gross, fee, net, count]
+      properties:
+        date: { type: string, format: date, description: "Calendar day in the client's timezone" }
+        currency: { type: string }
+        gross: { type: integer, format: int64, description: Minor units charged to payers }
+        fee: { type: integer, format: int64, description: Minor units of commission }
+        net: { type: integer, format: int64, description: gross - fee }
+        count: { type: integer }
+
+    MerchantWithdrawalRecord:
+      type: object
+      additionalProperties: false
+      required: [id, amount, currency, status, created_at]
+      properties:
+        id: { type: string, format: uuid, description: The withdrawal's transaction id }
+        amount: { type: integer, format: int64, description: Minor units withdrawn }
+        currency: { type: string }
+        status: { type: string }
+        withdrawn_by_name: { type: string, description: Who withdrew it; absent when it could not be resolved }
+        created_at: { type: string, format: date-time }
+
+    MerchantSummaryCurrency:
+      type: object
+      additionalProperties: false
+      required: [currency, gross, fee, net, count]
+      properties:
+        currency: { type: string }
+        gross: { type: integer, format: int64, description: Minor units charged to payers }
+        fee: { type: integer, format: int64 }
+        net: { type: integer, format: int64 }
+        count: { type: integer }
+        previous: { $ref: '#/components/schemas/ReportBucket' }
+        delta: { $ref: '#/components/schemas/ReportDelta' }
+
+    MerchantSummaryPeriod:
+      type: object
+      additionalProperties: false
+      required: [period, from, to, currencies]
+      properties:
+        period: { type: string, enum: [today, week, month, prev_month] }
+        from: { type: string, format: date, description: "First day of the period, in the client's timezone" }
+        to: { type: string, format: date, description: Last day of the period }
+        previous_from: { type: string, format: date, description: Only with the analitica plan }
+        previous_to: { type: string, format: date, description: Only with the analitica plan }
+        currencies:
+          type: array
+          description: One entry per currency with sales; empty when the period had none.
+          items: { $ref: '#/components/schemas/MerchantSummaryCurrency' }
+
+    MerchantSummary:
+      type: object
+      additionalProperties: false
+      required: [plan, periods]
+      properties:
+        plan: { type: string, enum: [base, analitica] }
+        periods:
+          type: array
+          description: Today, week, month and prev_month; a cashier gets only today.
+          items: { $ref: '#/components/schemas/MerchantSummaryPeriod' }
 
     StaffMember:
       type: object
@@ -7117,6 +7660,19 @@ components:
             Set when a deadline closed the agreement: `entrega` (the seller
             never marked delivery) or `revision` (the buyer neither released
             nor disputed).
+        funded_at: { type: string, format: date-time, description: When the buyer funded it. }
+        released_at: { type: string, format: date-time, description: When the money went to the seller. }
+        refunded_at: { type: string, format: date-time, description: When the money went back to the buyer. }
+        disputed_at: { type: string, format: date-time, description: When a dispute was opened. }
+        cancelled_at: { type: string, format: date-time, description: When it was cancelled before funding. }
+        counterparty_name:
+          type: string
+          description: >-
+            Name of the OTHER party, the one who is not asking: the seller for
+            the buyer and the buyer for the seller. Only in the response to a
+            party of the agreement (create, list, get and each action); it is
+            not stored and does not travel in webhook events. Absent when the
+            account cannot be read.
 
     PayoutDestination:
       type: object
@@ -7281,18 +7837,30 @@ components:
           additionalProperties: false
           required: [fuente, usd_crc, compra]
           description: >-
-            Official USD/CRC reference rate (BCCR, as republished by Hacienda),
-            refreshed hourly. `usd_crc` is the rate the app charges with, in
-            both directions. If the source cannot confirm it for 96 hours,
-            crypto quoted in colones stops trading rather than using a stale
-            number; `ultimo_error` says why.
+            Official USD/CRC reference rate, refreshed hourly. With `BCCR_TOKEN`
+            loaded it comes from the Banco Central de Costa Rica (SDDE) and, if
+            that fails, from Hacienda, which republishes the same reference rate;
+            without the token it comes from Hacienda and `falta` names the
+            missing variable. `fuente` is where the last confirmed rate really
+            came from (`bccr` or `hacienda`), empty until one is confirmed.
+            `usd_crc` is the rate the app charges with, in both directions. If
+            the source cannot confirm it for 96 hours, crypto quoted in colones
+            stops trading rather than using a stale number; `ultimo_error` says
+            why, including why the BCCR was skipped when Hacienda covered it.
           properties:
-            fuente: { type: string, example: hacienda }
+            fuente: { type: string, example: bccr }
             usd_crc: { type: number, example: 450.06 }
             compra: { type: number, example: 444.22 }
             fecha_fuente: { type: string, example: '2026-09-11' }
             ultima_confirmacion: { type: string, format: date-time }
             ultimo_error: { type: string }
+            falta:
+              type: array
+              description: >-
+                Names (never values) of the environment variables that are not
+                loaded and keep the rate from coming from the BCCR.
+              items: { type: string }
+              example: [BCCR_TOKEN]
         crypto_prices:
           type: object
           description: >-
@@ -7415,6 +7983,9 @@ components:
                   nullable: true
                   enum: [es, en, fr, pt, zh-cn, ja, hi]
                   description: Same as UserProfile.language; a new account has none (null)
+                passwordless_login:
+                  type: boolean
+                  description: Same as UserProfile.passwordless_login
 
     UserProfile:
       type: object
@@ -7455,6 +8026,15 @@ components:
             written in it. null means the person has not chosen one yet: their
             notifications go out in es, and the app may save the language its
             screen shows without overwriting a choice made on another device.
+        passwordless_login:
+          type: boolean
+          description: >-
+            true when the account enters without a password: it is marked as a
+            demonstration account and the server has DEMO_LOGIN_ENABLED on. Such
+            an account has no current password to present, so changing the
+            password and deleting the account are rejected with DEMO_ACCOUNT
+            (the app does not offer them). Always present; false for any
+            other account.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
         last_login_at: { type: string, format: date-time }
@@ -7638,6 +8218,47 @@ components:
           description: >-
             Present and true when this response repeats a payment already made
             under the same `idempotency_key`: nothing was charged now.
+
+    ServiceCatalog:
+      type: object
+      required: [agreements_active, providers, operators]
+      properties:
+        agreements_active:
+          type: boolean
+          description: >-
+            False while the payment cannot be delivered (no agreement with the
+            companies or the carriers). Never assume true when it is absent.
+        providers:
+          type: array
+          description: Active providers, ordered by category and name.
+          items:
+            type: object
+            required: [code, name, category]
+            properties:
+              code:
+                type: string
+                description: The `provider_code` to send to pay-bill.
+                example: ice
+              name:
+                type: string
+                example: ICE — Electricidad
+              category:
+                type: string
+                description: electricity, water, telecom or internet.
+                example: electricity
+        operators:
+          type: array
+          items:
+            type: object
+            required: [code, name]
+            properties:
+              code:
+                type: string
+                description: The `operator` to send to recharge.
+                example: kolbi
+              name:
+                type: string
+                example: Kölbi (ICE)
 
     RechargeResponse:
       type: object
@@ -8251,4 +8872,14 @@ components:
               currency: { type: string }
               user_liabilities_minor: { type: integer }
               reserve_balance_minor: { type: integer }
+              difference_minor:
+                type: integer
+                description: >-
+                  Reserve minus user liabilities, in minor units and signed
+                  (negative when the reserve falls short). Zero when the reserve
+                  is exactly what is owed to users. Read this, not ratio_pct:
+                  a percentage rounded to one decimal hides small shortfalls.
+              fully_backed:
+                type: boolean
+                description: The reserve covers everything owed to users.
               ratio_pct: { type: number }

@@ -85,7 +85,12 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Home')).toBeInTheDocument();
   });
 
-  it('should fall back to Spanish when localStorage has invalid language', () => {
+  // La pantalla de error envuelve a LanguageProvider, asi que tiene que elegir
+  // el idioma igual que el: lo que la persona guardo y, si no hay (o es
+  // invalido), el del navegador. Elegia espanol a secas, y una persona con el
+  // navegador en ingles veia el resto de la app en ingles y la pantalla de error
+  // en espanol.
+  it('sin idioma guardado, o con uno invalido, usa el del navegador (ingles en la prueba)', async () => {
     localStorage.setItem('kiramopay_language', 'xx-invalid');
 
     render(
@@ -94,7 +99,35 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByText('Algo salió mal')).toBeInTheDocument();
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
+  });
+
+  it('sin nada guardado tambien usa el del navegador', async () => {
+    localStorage.clear();
+
+    render(
+      <ErrorBoundary>
+        <ThrowingChild shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+
+    expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
+  });
+
+  // Con el diccionario ya pedido (index.tsx lo pide antes de pintar), la
+  // pantalla de error sale en el idioma desde el primer render y no en espanol
+  // hasta que el trozo se resuelva: una caida al arrancar es justo cuando el
+  // trozo puede no haber llegado.
+  it('con el diccionario ya cargado, el primer render ya esta en el idioma guardado', () => {
+    localStorage.setItem('kiramopay_language', 'en');
+
+    render(
+      <ErrorBoundary>
+        <ThrowingChild shouldThrow={true} />
+      </ErrorBoundary>,
+    );
+
+    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
   });
 
   it('should reset error state and re-render children when retry is clicked', async () => {

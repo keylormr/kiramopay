@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -12,6 +12,7 @@ import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
 import { CATEGORIAS_DE_COMERCIO, categoriaDeComercio } from '@/utils/categoriaDeComercio';
+import { LARGO_MAXIMO_DE_COMERCIO as LARGO, mensajeDelPerfilDeComercio } from '@/utils/erroresDeComercio';
 
 const STATUS_COLOR: Record<MerchantVerificationStatus, string> = {
   pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
@@ -48,6 +49,9 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
   // everything; a manager runs locations/catalog; a cashier only reads.
   const isOwner = merchant.role === 'owner';
   const canManage = isOwner || merchant.role === 'manager';
+  const idRol = useId();
+  // Quien eres en este comercio y que puedes hacer en el.
+  const claveDelRol = isOwner ? 'business_role_owner' : merchant.role === 'manager' ? 'business_role_manager' : 'business_role_cashier';
 
   const [showTeam, setShowTeam] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
@@ -121,7 +125,8 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
       setShowEdit(false);
       onUpdated();
     } else {
-      setError(res.error?.message || t('assistant_action_failed'));
+      // El texto lo pone la pantalla a partir del codigo, no el del servidor.
+      setError(mensajeDelPerfilDeComercio(t, res.error, 'assistant_action_failed'));
     }
   };
 
@@ -184,6 +189,22 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           <p className="text-xs text-[var(--color-danger)] mt-2">{merchant.rejectionReason}</p>
         )}
       </div>
+
+      {/* Tu rol y, si no eres el dueno, quien es: a quien pedirle un permiso. */}
+      <section aria-labelledby={idRol} className="uv-surface-1 rounded-2xl uv-shadow-soft overflow-hidden">
+        <h3 id={idRol} className="px-4 pt-3.5 pb-1 text-xs font-bold uv-text-muted uppercase tracking-wider">
+          {t('business_you_title')}
+        </h3>
+        <div className="divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+          <Row label={t('business_your_role')} value={t(claveDelRol)} />
+          {/* El nombre que el servidor no dio se dice: un hueco o un guion se leerian como un dato. */}
+          {!isOwner && <Row label={t('business_owner_label')} value={merchant.ownerName ?? t('business_no_disponible')} />}
+        </div>
+        <div className="px-4 pt-2 pb-3.5 space-y-1 text-xs uv-text-muted">
+          <p>{t(`${claveDelRol}_desc` as Parameters<typeof t>[0])}</p>
+          {!isOwner && <p>{t('business_owner_contact')}</p>}
+        </div>
+      </section>
 
       {/* Business data */}
       <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -367,7 +388,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
         <div className="space-y-4">
           <div>
             <label className={label}>{t('merchant_name')}</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={LARGO.nombre} className={field} />
           </div>
           <div>
             <label className={label}>{t('merchant_category')}</label>
@@ -383,11 +404,11 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           </div>
           <div>
             <label className={label}>{t('merchant_cedula')}</label>
-            <input value={cedula} onChange={(e) => setCedula(e.target.value)} className={field} inputMode="numeric" />
+            <input value={cedula} onChange={(e) => setCedula(e.target.value)} maxLength={LARGO.cedula} className={field} inputMode="numeric" />
           </div>
           <div>
             <label className={label}>{t('merchant_legal_name')}</label>
-            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} className={field} />
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} maxLength={LARGO.razonSocial} className={field} />
           </div>
 
           {/* Editing the legal identity is not silent: it returns the shop to review. */}

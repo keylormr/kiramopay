@@ -38,6 +38,7 @@ export class HttpAuthRepository implements IAuthRepository {
         status: string;
         plan?: string;
         language?: string | null;
+        passwordless_login?: boolean;
       };
       tokens: { access_token: string; refresh_token: string; expires_at: number };
     }>('/api/v1/auth/login', request, false);
@@ -65,6 +66,7 @@ export class HttpAuthRepository implements IAuthRepository {
       kycLevel: u.kyc_level as 0 | 1 | 2,
       plan: normalizarPlan(u.plan),
       language: u.language,
+      passwordlessLogin: u.passwordless_login === true,
     };
 
     // IMPORTANT: expose the full `tokens` object — the auth store reads
@@ -322,6 +324,13 @@ export class HttpAuthRepository implements IAuthRepository {
     return apiSuccess(undefined as unknown as void);
   }
 
+  async registrarActividad(): Promise<ApiResponse<void>> {
+    // Con el token de acceso (auth=true): si vencio, la renovacion de siempre
+    // lo resuelve; si la sesion ya paso la ventana de inactividad, el servidor
+    // responde 401 y esa renovacion se rechaza.
+    return this.client.post<void>('/api/v1/auth/activity');
+  }
+
   async setLanguage(language: string): Promise<ApiResponse<void>> {
     const res = await this.client.put<void>('/api/v1/users/me/language', { language });
     if (!res.success) {
@@ -358,6 +367,7 @@ export class HttpAuthRepository implements IAuthRepository {
       referral_code?: string;
       plan?: string;
       language?: string | null;
+      passwordless_login?: boolean;
     }>('/api/v1/users/me');
 
     if (!res.success || !res.data) {
@@ -379,6 +389,7 @@ export class HttpAuthRepository implements IAuthRepository {
       referralCode: u.referral_code,
       plan: normalizarPlan(u.plan),
       language: u.language,
+      passwordlessLogin: u.passwordless_login === true,
     };
     return apiSuccess<User>(user);
   }

@@ -103,10 +103,10 @@ describe('HomeView — Agregar cuenta', () => {
     await user.click(screen.getByRole('button', { name: 'Agregar' }));
     const hoja = await screen.findByRole('dialog', { name: 'Abrir nueva cuenta' });
     expect(
-      within(hoja).getByText('Las criptomonedas no necesitan una cuenta aparte: se compran con tu saldo desde Crypto.'),
+      within(hoja).getByText('Las criptomonedas no necesitan una cuenta aparte: se compran con tu saldo desde Cripto.'),
     ).toBeInTheDocument();
 
-    await user.click(within(hoja).getByRole('button', { name: 'Ir a Crypto' }));
+    await user.click(within(hoja).getByRole('button', { name: 'Ir a Cripto' }));
     expect(onOpenCrypto).toHaveBeenCalledTimes(1);
   });
 });

@@ -28,14 +28,12 @@ func NewService(repo *Repository) *Service {
 func (s *Service) SetTopes(t plans.Topes) { s.topes = t }
 
 func (s *Service) CreateCard(ctx context.Context, userID, cardholderName string, req *CreateCardRequest) (*VirtualCard, error) {
-	if req.Currency == "" {
-		req.Currency = "CRC"
+	// Moneda y tipo se validan antes de tocar la base: una invalida volvia como
+	// el error crudo del controlador.
+	if err := validarPeticionDeTarjeta(req); err != nil {
+		return nil, err
 	}
-
 	cardType := req.Type
-	if cardType == "" {
-		cardType = "virtual"
-	}
 
 	// El numero es DECORATIVO y no puede ser el de nadie. Ver numeroDecorativo.
 	cardNumber := numeroDecorativo()

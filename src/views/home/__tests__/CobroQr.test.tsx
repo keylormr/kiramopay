@@ -140,6 +140,51 @@ beforeEach(() => {
   mocks.totpVerify.mockResolvedValue({ success: true, data: { verified: true } });
 });
 
+// Quien cobra con QR desde Inicio es una persona, no un comercio: el texto del
+// codigo fijo hablaba de imprimirlo y pegarlo en el mostrador, y el vencimiento
+// de un cobro de un dia decia "Vence en 1440 min".
+describe('Cobrar con QR — lo que lee una persona', () => {
+  it('el codigo fijo se explica para una persona, no para un mostrador', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+
+    expect(screen.queryByText(/mostrador/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Este código es fijo: compártelo cuando quieras que te paguen.')).toBeInTheDocument();
+  });
+
+  it('el vencimiento de un cobro de un dia se lee en horas', async () => {
+    mocks.createCharge.mockResolvedValue({
+      success: true,
+      data: { ...cobro, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000 + 5_000).toISOString() },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+    await user.type(screen.getByPlaceholderText('0.00'), '5000');
+    await user.click(screen.getByRole('button', { name: 'Cobrar este monto' }));
+
+    expect(await screen.findByText('Vence en 24 h')).toBeInTheDocument();
+    expect(screen.queryByText(/1440/)).not.toBeInTheDocument();
+  });
+
+  it('un cobro que vence pronto sigue leyendose en minutos', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+    await user.type(screen.getByPlaceholderText('0.00'), '5000');
+    await user.click(screen.getByRole('button', { name: 'Cobrar este monto' }));
+
+    expect(await screen.findByText('Vence en 20 min')).toBeInTheDocument();
+  });
+});
+
 describe('Cobrar con QR — el codigo se recicla', () => {
   it('la hoja abre con el codigo puesto, sin paso previo de generarlo', async () => {
     const user = userEvent.setup();
@@ -563,5 +608,53 @@ describe('Pagar un QR — no se pudo verificar el codigo', () => {
     expect(await screen.findByText('Ese código no existe o ya no es válido.')).toBeInTheDocument();
     expect(screen.queryByText('No pudimos verificar el código. Intenta de nuevo.')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+  });
+});
+
+// El comprobante del pago escribia "CRC 1000": codigo de moneda y numero sin
+// miles ni decimales, distinto de todo el resto de la app, y repetia "Pago
+// realizado" en el titulo y bajo el monto.
+describe('Pagar un QR — el comprobante', () => {
+  async function pagar1000() {
+    const user = userEvent.setup();
+    pintar();
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    await user.type(screen.getByPlaceholderText('0.00'), '1000');
+    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+  }
+
+  it('escribe el monto con el formato de la app', async () => {
+    await pagar1000();
+
+    expect(await screen.findByText('₡1,000.00')).toBeInTheDocument();
+    expect(screen.queryByText('CRC 1000')).toBeNull();
+  });
+
+  it('dice "Pago realizado" una sola vez', async () => {
+    await pagar1000();
+
+    await screen.findByText('₡1,000.00');
+    expect(screen.getAllByText('Pago realizado')).toHaveLength(1);
+  });
+});
+
+// Dos botones iguales (flex-1) repartian el ancho a partes iguales: a 390 px
+// "Cobrar este monto" se partia en dos lineas. Copiar mide lo que su texto; el
+// de cobrar se queda con el resto.
+describe('Cobrar con QR — los botones de la hoja a 390 px', () => {
+  it('Copiar no se reparte el ancho a partes iguales con Cobrar este monto', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: 'Cobrar con QR' }));
+    await screen.findByTestId('qr-code');
+
+    const copiar = screen.getByRole('button', { name: 'Copiar' });
+    const cobrar = screen.getByRole('button', { name: 'Cobrar este monto' });
+    expect(copiar.className).not.toMatch(/(^|\s)flex-1(\s|$)/);
+    expect(cobrar.className).toMatch(/(^|\s)flex-1(\s|$)/);
+    expect(cobrar.className).toContain('min-w-0');
   });
 });

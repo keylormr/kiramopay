@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
@@ -7,6 +7,8 @@ import {
   Signal, PhoneCall, Wifi, Tv, MonitorPlay, Cross, ShieldCheck, CarFront,
   LayoutGrid, FileText,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { ServiceCatalog, ServiceOperatorInfo, ServiceProviderInfo } from '@/api';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Button } from '../../components/ui/Button';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
@@ -29,48 +31,72 @@ import {
   llaveNueva,
 } from './llaveDelServicio';
 
-// Proveedores de servicios de Costa Rica
-const SERVICE_PROVIDERS = [
-  // Electricidad
-  { id: 'ice', code: 'ICE', name: 'ICE Electricidad', category: 'electricity' as const, logo: Zap, color: 'from-yellow-500 to-orange-500' },
-  { id: 'cnfl', code: 'CNFL', name: 'CNFL', category: 'electricity' as const, logo: Lightbulb, color: 'from-yellow-400 to-yellow-600' },
-  { id: 'esph', code: 'ESPH', name: 'ESPH Heredia', category: 'electricity' as const, logo: PlugZap, color: 'from-green-500 to-emerald-600' },
-  { id: 'coopelesca', code: 'COOPELESCA', name: 'Coopelesca', category: 'electricity' as const, logo: UtilityPole, color: 'from-blue-500 to-blue-600' },
+// Lo unico que la pantalla sabe por su cuenta de cada empresa u operador es su
+// dibujo y su color. QUE empresas y QUE operadores se ofrecen no vive aqui: sale
+// del servidor (GET /services/providers). La lista que estaba escrita a mano
+// tenia 15 empresas y 11 de ellas no existian alla: cada una respondia
+// INVALID_PROVIDER, que la persona leia como "No se pudo completar la accion".
+interface Dibujo {
+  logo: LucideIcon;
+  color: string;
+}
 
-  // Agua
-  { id: 'aya', code: 'AYA', name: 'AyA', category: 'water' as const, logo: Droplets, color: 'from-blue-400 to-cyan-500' },
-  { id: 'esph-agua', code: 'ESPH-AGUA', name: 'ESPH Agua', category: 'water' as const, logo: ShowerHead, color: 'from-cyan-400 to-blue-500' },
+const DIBUJO_DE_EMPRESA: Record<string, Dibujo> = {
+  ice: { logo: Zap, color: 'from-yellow-500 to-orange-500' },
+  cnfl: { logo: Lightbulb, color: 'from-yellow-400 to-yellow-600' },
+  esph: { logo: PlugZap, color: 'from-green-500 to-emerald-600' },
+  coopelesca: { logo: UtilityPole, color: 'from-blue-500 to-blue-600' },
+  aya: { logo: Droplets, color: 'from-blue-400 to-cyan-500' },
+  'esph-agua': { logo: ShowerHead, color: 'from-cyan-400 to-blue-500' },
+  kolbi: { logo: Smartphone, color: 'from-green-500 to-green-600' },
+  claro: { logo: Signal, color: 'from-red-500 to-red-600' },
+  movistar: { logo: PhoneCall, color: 'from-blue-500 to-indigo-600' },
+  tigo: { logo: Wifi, color: 'from-blue-600 to-blue-700' },
+  liberty: { logo: Tv, color: 'from-purple-500 to-purple-600' },
+  cabletica: { logo: MonitorPlay, color: 'from-orange-500 to-red-500' },
+  ccss: { logo: Cross, color: 'from-green-600 to-emerald-700' },
+  ins: { logo: ShieldCheck, color: 'from-blue-700 to-blue-800' },
+  marchamo: { logo: CarFront, color: 'from-gray-600 to-gray-700' },
+};
 
-  // Telefonía
-  { id: 'kolbi', code: 'KOLBI', name: 'Kolbi', category: 'telecom' as const, logo: Smartphone, color: 'from-green-500 to-green-600' },
-  { id: 'claro', code: 'CLARO', name: 'Claro', category: 'telecom' as const, logo: Signal, color: 'from-red-500 to-red-600' },
-  { id: 'movistar', code: 'MOVISTAR', name: 'Movistar', category: 'telecom' as const, logo: PhoneCall, color: 'from-blue-500 to-indigo-600' },
+// Una empresa nueva del servidor, sin dibujo propio, toma el de su categoria.
+const DIBUJO_DE_CATEGORIA: Record<string, Dibujo> = {
+  electricity: { logo: Zap, color: 'from-yellow-500 to-orange-500' },
+  water: { logo: Droplets, color: 'from-blue-400 to-cyan-500' },
+  telecom: { logo: Smartphone, color: 'from-green-500 to-green-600' },
+  internet: { logo: Wifi, color: 'from-blue-600 to-blue-700' },
+};
 
-  // Internet/Cable
-  { id: 'tigo', code: 'TIGO', name: 'Tigo', category: 'internet' as const, logo: Wifi, color: 'from-blue-600 to-blue-700' },
-  { id: 'liberty', code: 'LIBERTY', name: 'Liberty', category: 'cable' as const, logo: Tv, color: 'from-purple-500 to-purple-600' },
-  { id: 'cabletica', code: 'CABLETICA', name: 'Cabletica', category: 'cable' as const, logo: MonitorPlay, color: 'from-orange-500 to-red-500' },
+const DIBUJO_GENERICO: Dibujo = { logo: FileText, color: 'from-gray-500 to-gray-600' };
 
-  // Otros
-  { id: 'ccss', code: 'CCSS', name: 'CCSS (Caja)', category: 'other' as const, logo: Cross, color: 'from-green-600 to-emerald-700' },
-  { id: 'ins', code: 'INS', name: 'INS Seguros', category: 'insurance' as const, logo: ShieldCheck, color: 'from-blue-700 to-blue-800' },
-  { id: 'marchamo', code: 'MARCHAMO', name: 'Marchamo', category: 'other' as const, logo: CarFront, color: 'from-gray-600 to-gray-700' },
-];
+const dibujoDeEmpresa = (codigo: string, categoria?: string): Dibujo =>
+  DIBUJO_DE_EMPRESA[codigo] ?? (categoria ? DIBUJO_DE_CATEGORIA[categoria] : undefined) ?? DIBUJO_GENERICO;
 
-// Operadores para recargas
-const PHONE_OPERATORS = [
-  { id: 'kolbi', name: 'Kolbi', logo: Smartphone, color: 'from-green-500 to-green-600', amounts: [1000, 2000, 3000, 5000, 10000, 20000] },
-  { id: 'claro', name: 'Claro', logo: Signal, color: 'from-red-500 to-red-600', amounts: [1000, 2000, 5000, 10000, 15000, 20000] },
-  { id: 'movistar', name: 'Movistar', logo: PhoneCall, color: 'from-blue-500 to-blue-600', amounts: [1000, 2000, 5000, 10000, 20000] },
-];
+// Los montos de recarga que se ofrecen por operador. Tampoco son una lista de
+// operadores: un operador que el servidor ofrece y no esta aqui usa los montos
+// de abajo.
+const MONTOS_POR_DEFECTO = [1000, 2000, 5000, 10000, 20000];
+const OPERADOR_CONOCIDO: Record<string, Dibujo & { montos: number[] }> = {
+  kolbi: { logo: Smartphone, color: 'from-green-500 to-green-600', montos: [1000, 2000, 3000, 5000, 10000, 20000] },
+  claro: { logo: Signal, color: 'from-red-500 to-red-600', montos: [1000, 2000, 5000, 10000, 15000, 20000] },
+  movistar: { logo: PhoneCall, color: 'from-blue-500 to-blue-600', montos: [1000, 2000, 5000, 10000, 20000] },
+};
+
+const dibujoDeOperador = (codigo: string): Dibujo & { montos: number[] } =>
+  OPERADOR_CONOCIDO[codigo] ?? { ...DIBUJO_GENERICO, logo: Smartphone, montos: MONTOS_POR_DEFECTO };
+
+/** Una empresa tal como la pinta la pantalla: lo del servidor mas su dibujo. */
+type Empresa = ServiceProviderInfo & Dibujo;
+type Operador = ServiceOperatorInfo & Dibujo & { montos: number[] };
 
 // El servidor niega el cobro con este codigo cuando no hay convenio con la
 // empresa o el operador: no hay a quien entregarle la plata, asi que no la
 // debita. La pantalla lo explica en vez de mostrar un error generico.
 const SIN_CONVENIO = 'SIN_CONVENIO';
 
-const CATEGORIES = [
-  { id: 'all', label: 'cat_all', icon: LayoutGrid },
+// Las categorias que la pantalla sabe nombrar. Se ofrecen solo las que tienen
+// empresas en la lista del servidor: un filtro sin empresas era una lista vacia.
+const CATEGORIAS = [
   { id: 'electricity', label: 'cat_electricity', icon: Zap },
   { id: 'water', label: 'cat_water', icon: Droplets },
   { id: 'telecom', label: 'cat_telecom', icon: Smartphone },
@@ -78,6 +104,27 @@ const CATEGORIES = [
   { id: 'cable', label: 'cat_cable', icon: Tv },
   { id: 'other', label: 'cat_other', icon: FileText },
 ];
+
+// Una categoria que la pantalla no nombra (seguros, por ejemplo) cae en "otros".
+const categoriaDe = (empresa: ServiceProviderInfo): string =>
+  CATEGORIAS.some((c) => c.id === empresa.category) ? empresa.category : 'other';
+
+// Pide la lista al servidor. null si no llego: la red, o una respuesta sin datos.
+async function pedirCatalogo(): Promise<ServiceCatalog | null> {
+  try {
+    const res = await getApiLayer().services.getCatalog();
+    return res.success && res.data ? res.data : null;
+  } catch {
+    return null;
+  }
+}
+
+// Lo que la pantalla sabe de la lista del servidor. Sin lista no hay nada que
+// ofrecer, y no se inventa una: o se esta pidiendo, o fallo y se puede repetir.
+type EstadoDelCatalogo =
+  | { estado: 'cargando' }
+  | { estado: 'error' }
+  | { estado: 'listo'; datos: ServiceCatalog };
 
 export const ServicesView: React.FC = () => {
   const { state, dispatch } = useApp();
@@ -90,8 +137,19 @@ export const ServicesView: React.FC = () => {
   const [showPaymentSheet, setShowPaymentSheet] = useState(false);
   const [showRechargeSheet, setShowRechargeSheet] = useState(false);
   const [showSuccessSheet, setShowSuccessSheet] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<typeof SERVICE_PROVIDERS[0] | null>(null);
-  const [selectedOperator, setSelectedOperator] = useState<typeof PHONE_OPERATORS[0] | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Empresa | null>(null);
+  const [selectedOperator, setSelectedOperator] = useState<Operador | null>(null);
+
+  // La lista de empresas y operadores, y si el cobro se puede entregar, vienen
+  // del servidor. `pedido` descarta la respuesta de una peticion que ya quedo
+  // atras (se repitio mientras la anterior seguia en vuelo).
+  const [catalogo, setCatalogo] = useState<EstadoDelCatalogo>({ estado: 'cargando' });
+  const pedido = useRef(0);
+  const montado = useRef(true);
+  // El servidor nego una empresa o un operador que la lista tenia: la lista
+  // estaba vieja. Si al repetirla ya no esta, el formulario se cierra y este
+  // aviso queda sobre la lista.
+  const [avisoDeLista, setAvisoDeLista] = useState('');
 
   // Form states
   const [clientId, setClientId] = useState('');
@@ -124,20 +182,113 @@ export const ServicesView: React.FC = () => {
   const crcAccount = state.accounts.find(a => a.ccy === 'CRC');
   const balance = crcAccount?.balance || 0;
 
-  const filteredProviders = SERVICE_PROVIDERS.filter(p => {
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+  // La primera carga, al abrir la pantalla.
+  useEffect(() => {
+    montado.current = true;
+    const mio = ++pedido.current;
+    void (async () => {
+      const datos = await pedirCatalogo();
+      if (!montado.current || mio !== pedido.current) return;
+      setCatalogo(datos ? { estado: 'listo', datos } : { estado: 'error' });
+    })();
+    return () => {
+      montado.current = false;
+    };
+  }, []);
+
+  // Repetir la peticion desde un toque o tras un rechazo. `conservar`: sin
+  // tirar la lista que ya se tiene, de modo que si falla la de antes sigue a la
+  // vista; sin ello, un fallo muestra el error. Devuelve la lista nueva, o null
+  // si no llego o ya quedo atras.
+  const cargarCatalogo = useCallback(async (conservar: boolean): Promise<ServiceCatalog | null> => {
+    const mio = ++pedido.current;
+    const datos = await pedirCatalogo();
+    if (!montado.current || mio !== pedido.current) return null;
+    if (datos) setCatalogo({ estado: 'listo', datos });
+    else if (!conservar) setCatalogo({ estado: 'error' });
+    return datos;
+  }, []);
+
+  const reintentarCatalogo = () => {
+    setCatalogo({ estado: 'cargando' });
+    cargarCatalogo(false).catch(() => {});
+  };
+
+  const datosDelCatalogo = catalogo.estado === 'listo' ? catalogo.datos : null;
+  // Sin la lista, ni se sabe si hay convenio: no se ofrece nada que cobrar.
+  const conveniosActivos = datosDelCatalogo?.agreementsActive === true;
+
+  const empresas = useMemo<Empresa[]>(
+    () => (datosDelCatalogo?.providers ?? []).map((p) => ({ ...p, ...dibujoDeEmpresa(p.code, p.category) })),
+    [datosDelCatalogo],
+  );
+  const operadores = useMemo<Operador[]>(
+    () => (datosDelCatalogo?.operators ?? []).map((o) => ({ ...o, ...dibujoDeOperador(o.code) })),
+    [datosDelCatalogo],
+  );
+  const categoriasOfrecidas = useMemo(() => {
+    const presentes = new Set(empresas.map(categoriaDe));
+    return CATEGORIAS.filter((c) => presentes.has(c.id));
+  }, [empresas]);
+
+  // Si la lista se actualizo y la categoria elegida ya no tiene empresas, se
+  // vuelve a "todos" en vez de dejar un filtro vacio sin salida.
+  const categoriaActiva =
+    selectedCategory === 'all' || categoriasOfrecidas.some((c) => c.id === selectedCategory)
+      ? selectedCategory
+      : 'all';
+
+  const filteredProviders = empresas.filter(p => {
+    const matchesCategory = categoriaActiva === 'all' || categoriaDe(p) === categoriaActiva;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.code.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const handleSelectProvider = (provider: typeof SERVICE_PROVIDERS[0]) => {
+  // Los servicios guardados cuya empresa el servidor ya no acepta no se
+  // ofrecen: tocarlos terminaria en INVALID_PROVIDER.
+  const guardadosOfrecidos = state.savedServices.flatMap((saved) => {
+    const empresa = empresas.find((p) => p.code === saved.providerId);
+    return empresa ? [{ saved, empresa }] : [];
+  });
+
+  const nombreDelOperador = (codigo: string) =>
+    operadores.find((o) => o.code === codigo)?.name ?? t('recharge_label');
+
+  // El servidor dijo que la empresa o el operador no existe: la lista de la
+  // pantalla estaba vieja. Se vuelve a pedir; si el elegido ya no esta, no hay
+  // nada que corregir en el formulario: se cierra y el aviso queda sobre la
+  // lista nueva, para que la persona elija otra.
+  const repetirListaTrasRechazo = async (tipo: 'empresa' | 'operador', codigo: string, mensaje: string) => {
+    const nueva = await cargarCatalogo(true);
+    if (!nueva) return;
+    const sigue = tipo === 'empresa'
+      ? nueva.providers.some((p) => p.code === codigo)
+      : nueva.operators.some((o) => o.code === codigo);
+    if (sigue) return;
+    setActionError('');
+    setActionBlocked(false);
+    setAvisoDeLista(mensaje);
+    if (tipo === 'empresa') {
+      setShowPaymentSheet(false);
+      setSelectedProvider(null);
+    } else {
+      setShowRechargeSheet(false);
+      setSelectedOperator(null);
+    }
+  };
+
+  const handleSelectProvider = (provider: Empresa) => {
+    // Sin convenios no hay a quien entregarle el pago: no se abre un formulario
+    // para llenar algo que el servidor va a negar. El aviso ya esta a la vista.
+    if (!conveniosActivos) return;
     setSelectedProvider(provider);
     // El aviso nombra a la empresa: no puede sobrevivir al cambio de proveedor.
     setActionError('');
     setActionBlocked(false);
+    setAvisoDeLista('');
     // Check if user has saved this service
-    const saved = state.savedServices.find(s => s.providerId === provider.id);
+    const saved = state.savedServices.find(s => s.providerId === provider.code);
     if (saved) {
       setClientId(saved.clientId);
       setBillAmount(saved.lastAmount?.toString() || '');
@@ -171,11 +322,11 @@ export const ServicesView: React.FC = () => {
     const llave = llaveDelIntento(
       persona,
       AMBITO_DEL_RECIBO,
-      firmaDelRecibo(selectedProvider.id, clientId, amount),
+      firmaDelRecibo(selectedProvider.code, clientId, amount),
       llaveNueva,
     );
     const res = await getApiLayer().services.payBill({
-      providerId: selectedProvider.id,
+      providerId: selectedProvider.code,
       providerName: selectedProvider.name,
       clientId,
       amount,
@@ -201,7 +352,12 @@ export const ServicesView: React.FC = () => {
       // La llave ya es de otro pago: el siguiente intento necesita otra. Ante
       // cualquier otro error se conserva: sin respuesta, el pago pudo salir.
       if (res.error?.code === 'LLAVE_REUTILIZADA') soltarIntento(persona, AMBITO_DEL_RECIBO, llave);
-      setActionError(mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DEL_RECIBO, CLAVE_GENERICA_DEL_SERVICIO, t));
+      const mensaje = mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DEL_RECIBO, CLAVE_GENERICA_DEL_SERVICIO, t);
+      setActionError(mensaje);
+      // La empresa no existe en el servidor: la lista estaba vieja.
+      if (res.error?.code === 'INVALID_PROVIDER') {
+        repetirListaTrasRechazo('empresa', selectedProvider.code, mensaje).catch(() => {});
+      }
       return;
     }
     // El pago salio, o ya estaba hecho: el siguiente es otro y lleva otra llave.
@@ -242,11 +398,11 @@ export const ServicesView: React.FC = () => {
     const llave = llaveDelIntento(
       persona,
       AMBITO_DE_LA_RECARGA,
-      firmaDeLaRecarga(selectedOperator.id, rechargePhone, rechargeAmount),
+      firmaDeLaRecarga(selectedOperator.code, rechargePhone, rechargeAmount),
       llaveNueva,
     );
     const res = await getApiLayer().services.recharge({
-      operatorId: selectedOperator.id,
+      operatorId: selectedOperator.code,
       phone: rechargePhone,
       amount: rechargeAmount,
       idempotencyKey: llave,
@@ -266,7 +422,11 @@ export const ServicesView: React.FC = () => {
         return;
       }
       if (res.error?.code === 'LLAVE_REUTILIZADA') soltarIntento(persona, AMBITO_DE_LA_RECARGA, llave);
-      setActionError(mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DE_LA_RECARGA, CLAVE_GENERICA_DEL_SERVICIO, t));
+      const mensaje = mensajeDeRechazo(res.error, CLAVES_DEL_RECHAZO_DE_LA_RECARGA, CLAVE_GENERICA_DEL_SERVICIO, t);
+      setActionError(mensaje);
+      if (res.error?.code === 'INVALID_OPERATOR') {
+        repetirListaTrasRechazo('operador', selectedOperator.code, mensaje).catch(() => {});
+      }
       return;
     }
     soltarIntento(persona, AMBITO_DE_LA_RECARGA, llave);
@@ -304,6 +464,36 @@ export const ServicesView: React.FC = () => {
     </p>
   );
 
+  // Lo que se ve mientras la lista no esta (o no llego). Sirve a Servicios y a
+  // Recargas: las dos dependen de lo que el servidor ofrece.
+  const estadoDelCatalogo =
+    catalogo.estado === 'cargando' ? (
+      <p role="status" className="uv-text-muted text-center py-8">{t('loading')}</p>
+    ) : catalogo.estado === 'error' ? (
+      <div className="uv-surface-1 rounded-2xl p-6 text-center space-y-4">
+        <p role="alert" className="uv-text-secondary">{t('services_catalog_error')}</p>
+        <Button variant="secondary" size="md" onClick={reintentarCatalogo}>
+          {t('error_retry')}
+        </Button>
+      </div>
+    ) : null;
+
+  // En produccion todavia no hay convenio con las empresas ni con los
+  // operadores: pagar responderia SIN_CONVENIO. Se avisa antes de que la persona
+  // llene nada, en vez de despues de tocar Pagar.
+  const avisoSinConvenios = datosDelCatalogo && !conveniosActivos ? (
+    <div role="status" className="uv-surface-2 rounded-2xl p-4 space-y-1">
+      <p className="font-bold uv-text-primary text-sm">{t('services_unavailable_title')}</p>
+      <p className="text-sm uv-text-secondary">{t('services_unavailable_hint')}</p>
+    </div>
+  ) : null;
+
+  const avisoDeListaVieja = avisoDeLista ? (
+    <div role="status" className="uv-surface-2 rounded-2xl p-4 text-sm uv-text-secondary">
+      {avisoDeLista}
+    </div>
+  ) : null;
+
   return (
     <div className="pb-24 pt-4 space-y-6 px-4">
       {/* Header */}
@@ -322,7 +512,7 @@ export const ServicesView: React.FC = () => {
       {/* Tabs */}
       <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl" role="tablist">
         <button
-          onClick={() => setActiveTab('services')}
+          onClick={() => { setActiveTab('services'); setAvisoDeLista(''); }}
           role="tab"
           aria-selected={activeTab === 'services'}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
@@ -335,7 +525,7 @@ export const ServicesView: React.FC = () => {
           {t('nav_services')}
         </button>
         <button
-          onClick={() => setActiveTab('recharge')}
+          onClick={() => { setActiveTab('recharge'); setAvisoDeLista(''); }}
           role="tab"
           aria-selected={activeTab === 'recharge'}
           className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
@@ -364,21 +554,24 @@ export const ServicesView: React.FC = () => {
 
       {activeTab === 'services' && (
         <>
+          {estadoDelCatalogo}
+          {avisoSinConvenios}
+          {avisoDeListaVieja}
+
           {/* Servicios guardados */}
-          {state.savedServices.length > 0 && (
+          {guardadosOfrecidos.length > 0 && (
             <div>
               <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
                 {t('my_services')}
               </h3>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                {state.savedServices.map((saved) => {
-                  const provider = SERVICE_PROVIDERS.find(p => p.id === saved.providerId);
-                  if (!provider) return null;
+                {guardadosOfrecidos.map(({ saved, empresa: provider }) => {
                   return (
                     <button
                       key={saved.id}
                       onClick={() => handleSelectProvider(provider)}
-                      className="min-w-[140px] uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]"
+                      disabled={!conveniosActivos}
+                      className="min-w-[140px] uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] disabled:opacity-50"
                     >
                       <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-2`}>
                         <provider.logo size={20} />
@@ -401,79 +594,107 @@ export const ServicesView: React.FC = () => {
             </div>
           )}
 
-          {/* Búsqueda */}
-          <div className="relative">
-            <Icons.Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('search_service')}
-              className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-11 pr-4 py-3 rounded-xl outline-none uv-text-primary placeholder-gray-400"
-            />
-          </div>
+          {datosDelCatalogo && empresas.length === 0 && (
+            <div className="uv-surface-1 rounded-2xl p-8 text-center">
+              <Icons.FileText size={48} className="mx-auto text-gray-300 mb-4" />
+              <p className="uv-text-muted">{t('services_no_providers')}</p>
+            </div>
+          )}
 
-          {/* Categorías */}
-          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('nav_services')}>
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                role="tab"
-                aria-selected={selectedCategory === cat.id}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
-                  selectedCategory === cat.id
-                    ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
-                    : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
-                }`}
-              >
-                <cat.icon size={15} />
-                {t(cat.label)}
-              </button>
-            ))}
-          </div>
+          {datosDelCatalogo && empresas.length > 0 && (
+            <>
+              {/* Búsqueda */}
+              <div className="relative">
+                <Icons.Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('search_service')}
+                  className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-11 pr-4 py-3 rounded-xl outline-none uv-text-primary placeholder-gray-400"
+                />
+              </div>
 
-          {/* Lista de proveedores */}
-          <div className="grid grid-cols-2 gap-3">
-            {filteredProviders.map((provider) => (
-              <button
-                key={provider.id}
-                onClick={() => handleSelectProvider(provider)}
-                className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary dark:hover:border-primary transition-colors"
-              >
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-3`}>
-                  <provider.logo size={24} />
+              {/* Categorías: solo las que tienen empresas */}
+              {categoriasOfrecidas.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('nav_services')}>
+                  {[{ id: 'all', label: 'cat_all', icon: LayoutGrid }, ...categoriasOfrecidas].map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      role="tab"
+                      aria-selected={categoriaActiva === cat.id}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
+                        categoriaActiva === cat.id
+                          ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                          : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
+                      }`}
+                    >
+                      <cat.icon size={15} />
+                      {t(cat.label)}
+                    </button>
+                  ))}
                 </div>
-                <p className="font-bold uv-text-primary">{provider.name}</p>
-                <p className="text-xs text-gray-500">{provider.code}</p>
-              </button>
-            ))}
-          </div>
+              )}
+
+              {/* Lista de proveedores */}
+              <div className="grid grid-cols-2 gap-3">
+                {filteredProviders.map((provider) => (
+                  <button
+                    key={provider.code}
+                    onClick={() => handleSelectProvider(provider)}
+                    disabled={!conveniosActivos}
+                    className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary dark:hover:border-primary transition-colors disabled:opacity-50 disabled:hover:border-[var(--color-border)]"
+                  >
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-3`}>
+                      <provider.logo size={24} />
+                    </div>
+                    <p className="font-bold uv-text-primary">{provider.name}</p>
+                    <p className="text-xs text-gray-500">{provider.code.toUpperCase()}</p>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
 
       {activeTab === 'recharge' && (
         <div className="space-y-6">
+          {estadoDelCatalogo}
+          {avisoSinConvenios}
+          {avisoDeListaVieja}
+
           {/* Operadores */}
-          <div>
-            <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
-              {t('select_operator')}
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
-              {PHONE_OPERATORS.map((op) => (
-                <button
-                  key={op.id}
-                  onClick={() => { setSelectedOperator(op); setActionError(''); setActionBlocked(false); setShowRechargeSheet(true); }}
-                  className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-center hover:border-primary transition-colors"
-                >
-                  <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mx-auto mb-2`}>
-                    <op.logo size={26} />
-                  </div>
-                  <p className="font-bold uv-text-primary">{op.name}</p>
-                </button>
-              ))}
+          {datosDelCatalogo && operadores.length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
+                {t('select_operator')}
+              </h3>
+              <div className="grid grid-cols-3 gap-3">
+                {operadores.map((op) => (
+                  <button
+                    key={op.code}
+                    onClick={() => {
+                      if (!conveniosActivos) return;
+                      setSelectedOperator(op);
+                      setActionError('');
+                      setActionBlocked(false);
+                      setAvisoDeLista('');
+                      setShowRechargeSheet(true);
+                    }}
+                    disabled={!conveniosActivos}
+                    className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-center hover:border-primary transition-colors disabled:opacity-50 disabled:hover:border-[var(--color-border)]"
+                  >
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mx-auto mb-2`}>
+                      <op.logo size={26} />
+                    </div>
+                    <p className="font-bold uv-text-primary">{op.name}</p>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Recargas recientes */}
           {state.rechargeHistory.length > 0 && (
@@ -483,11 +704,11 @@ export const ServicesView: React.FC = () => {
               </h3>
               <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.rechargeHistory.slice(0, 5).map((recharge) => {
-                  const op = PHONE_OPERATORS.find(o => o.id === recharge.operatorId);
+                  const op = dibujoDeOperador(recharge.operatorId);
                   return (
                     <div key={recharge.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white mr-3`}>
-                        {op ? <op.logo size={20} /> : <Smartphone size={20} />}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mr-3`}>
+                        <op.logo size={20} />
                       </div>
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{recharge.phone}</p>
@@ -520,11 +741,11 @@ export const ServicesView: React.FC = () => {
             ) : (
               <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.billHistory.map((bill) => {
-                  const provider = SERVICE_PROVIDERS.find(p => p.id === bill.providerId);
+                  const provider = dibujoDeEmpresa(bill.providerId);
                   return (
                     <div key={bill.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white mr-3`}>
-                        {provider ? <provider.logo size={20} /> : <FileText size={20} />}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mr-3`}>
+                        <provider.logo size={20} />
                       </div>
                       <div className="flex-1">
                         <p className="font-bold uv-text-primary">{bill.providerName}</p>
@@ -559,14 +780,14 @@ export const ServicesView: React.FC = () => {
             ) : (
               <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
                 {state.rechargeHistory.map((recharge) => {
-                  const op = PHONE_OPERATORS.find(o => o.id === recharge.operatorId);
+                  const op = dibujoDeOperador(recharge.operatorId);
                   return (
                     <div key={recharge.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op?.color || 'from-gray-400 to-gray-500'} flex items-center justify-center text-white mr-3`}>
-                        {op ? <op.logo size={20} /> : <Smartphone size={20} />}
+                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mr-3`}>
+                        <op.logo size={20} />
                       </div>
                       <div className="flex-1">
-                        <p className="font-bold uv-text-primary">{op?.name || 'Recarga'}</p>
+                        <p className="font-bold uv-text-primary">{nombreDelOperador(recharge.operatorId)}</p>
                         <p className="text-sm text-gray-500">+506 {recharge.phone}</p>
                         <p className="text-xs text-gray-400">{fechaCorta(recharge.dateISO, language) || recharge.date}</p>
                       </div>
@@ -605,7 +826,7 @@ export const ServicesView: React.FC = () => {
               </div>
               <div>
                 <p className="font-bold uv-text-primary">{selectedProvider.name}</p>
-                <p className="text-sm text-gray-500">{selectedProvider.code}</p>
+                <p className="text-sm text-gray-500">{selectedProvider.code.toUpperCase()}</p>
               </div>
             </div>
           )}
@@ -697,7 +918,7 @@ export const ServicesView: React.FC = () => {
               {t('select_amount')}
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {selectedOperator?.amounts.map((amt) => (
+              {selectedOperator?.montos.map((amt) => (
                 <button
                   key={amt}
                   onClick={() => setRechargeAmount(amt)}

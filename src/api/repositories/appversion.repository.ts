@@ -10,6 +10,12 @@ export interface VersionApp {
    */
   notes?: string[];
   /**
+   * Las mismas novedades en los demas idiomas de la app, por codigo (en, fr, pt,
+   * zh-cn, ja, hi). Un backend anterior no lo manda; un idioma que falta se lee
+   * en espanol (`notes`).
+   */
+  notes_i18n?: Record<string, string[]>;
+  /**
    * La capa web de esta version para actualizar por dentro, sin otro APK: el
    * manifiesto firmado (base64), su firma y la URL del .zip. Solo si el release
    * lo trae para la plataforma que pregunta; la app verifica la firma antes de

@@ -19,11 +19,18 @@ import (
 type Repository struct {
 	db    *pgxpool.Pool
 	redis *redis.Client
+	// idleTimeout es cuanto puede pasar sin una accion de la persona antes de
+	// que una sesion con actividad registrada deje de servir. Lo fija NewService
+	// con JWT_IDLE_MINUTES; cero lo apaga.
+	idleTimeout time.Duration
 }
 
 func NewRepository(db *pgxpool.Pool, redis *redis.Client) *Repository {
 	return &Repository{db: db, redis: redis}
 }
+
+// SetIdleTimeout fija la ventana de inactividad. Cero o negativo la apaga.
+func (r *Repository) SetIdleTimeout(d time.Duration) { r.idleTimeout = d }
 
 // ─────────────────────────────────────────────────────────────────────────
 //  user_sessions (high-level session tracking; ties access+refresh jti)
@@ -40,18 +47,65 @@ type SessionRecord struct {
 	ExpiresAt         time.Time
 }
 
+// CreateSession declara expires_at como ::timestamptz y lo manda en UTC: igual
+// que en InsertRefreshToken, el instante tiene que llegar entero a la base sin
+// depender de la zona de la sesion ni de lo que Postgres infiera del parametro.
 func (r *Repository) CreateSession(ctx context.Context, s *SessionRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO user_sessions
 		   (id, user_id, access_jti, refresh_jti, device_fingerprint,
 		    ip_address, user_agent, expires_at, token_hash, refresh_token_hash)
 		 VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text,
-		         NULLIF($6,'')::inet, $7::text, $8, $9::text, $10::text)`,
+		         NULLIF($6,'')::inet, $7::text, $8::timestamptz, $9::text, $10::text)`,
 		s.ID, s.UserID, s.AccessJTI, s.RefreshJTI, nullable(s.DeviceFingerprint),
-		s.IPAddress, nullable(s.UserAgent), s.ExpiresAt,
+		s.IPAddress, nullable(s.UserAgent), s.ExpiresAt.UTC(),
 		s.AccessJTI, s.RefreshJTI, // legacy token_hash / refresh_token_hash mirror
 	)
 	return err
+}
+
+// UltimaAccionDeLaSesion devuelve la ultima accion de la persona en la sesion
+// cuyo refresh token vigente es refreshJTI, o nil si no hay fila o nunca aviso
+// (un cliente anterior a la migracion 085): el llamante mide entonces desde la
+// emision del token, como siempre.
+func (r *Repository) UltimaAccionDeLaSesion(ctx context.Context, refreshJTI string) (*time.Time, error) {
+	var ultima *time.Time
+	err := r.db.QueryRow(ctx,
+		`SELECT last_activity_at FROM user_sessions
+		  WHERE refresh_jti = $1::uuid AND revoked_at IS NULL`,
+		refreshJTI,
+	).Scan(&ultima)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("ultima accion de la sesion: %w", err)
+	}
+	return ultima, nil
+}
+
+// RegistrarAccion anota que la persona acaba de hacer algo en la sesion de
+// accessJTI. Devuelve false, sin tocar nada, si la sesion ya no sirve: esta
+// cerrada, o lleva mas de la ventana de inactividad sin acciones. Avisar no
+// resucita una sesion vencida: el que llega tarde vuelve a entrar.
+//
+// Una sesion sin actividad registrada (last_activity_at NULL) la empieza a
+// contar con este primer aviso.
+func (r *Repository) RegistrarAccion(ctx context.Context, accessJTI string) (bool, error) {
+	if accessJTI == "" {
+		return false, nil
+	}
+	tag, err := r.db.Exec(ctx,
+		`UPDATE user_sessions SET last_activity_at = NOW()
+		  WHERE access_jti = $1::uuid AND revoked_at IS NULL
+		    AND ($2::float8 <= 0 OR last_activity_at IS NULL
+		         OR last_activity_at >= NOW() - make_interval(secs => $2::float8))`,
+		accessJTI, r.idleTimeout.Seconds(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("registrar accion: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 // MoverSesionAlRotar apunta la fila de sesion del dispositivo al par de tokens
@@ -80,12 +134,12 @@ func (r *Repository) CreateSession(ctx context.Context, s *SessionRecord) error 
 func (r *Repository) MoverSesionAlRotar(ctx context.Context, userID, parentRefreshJTI string, s *SessionRecord) (bool, error) {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE user_sessions
-		    SET access_jti = $3::uuid, refresh_jti = $4::uuid, expires_at = $5,
+		    SET access_jti = $3::uuid, refresh_jti = $4::uuid, expires_at = $5::timestamptz,
 		        token_hash = $3::text, refresh_token_hash = $4::text,
 		        ip_address = COALESCE(NULLIF($6,'')::inet, ip_address),
 		        user_agent = COALESCE(NULLIF($7,''), user_agent)
 		  WHERE user_id = $1::uuid AND refresh_jti = $2::uuid AND revoked_at IS NULL`,
-		userID, parentRefreshJTI, s.AccessJTI, s.RefreshJTI, s.ExpiresAt,
+		userID, parentRefreshJTI, s.AccessJTI, s.RefreshJTI, s.ExpiresAt.UTC(),
 		s.IPAddress, s.UserAgent,
 	)
 	if err != nil {
@@ -104,6 +158,13 @@ func (r *Repository) RevokeSessionByAccessJTI(ctx context.Context, jti string) e
 
 // IsAccessJTIRevoked returns true if the given access-token jti has been
 // revoked at the session level. Fail-closed: any DB/Redis error returns true.
+//
+// Una sesion con actividad registrada que lleva mas de la ventana de
+// inactividad sin una accion de la persona cuenta como revocada: el token de
+// acceso vive 15 minutos y, sin esto, alargaria el cierre por inactividad hasta
+// 45 (los 30 de la ventana mas el token que se emitio en el ultimo momento). El
+// cliente trata el 401 como cualquier otro, intenta renovar, y la renovacion
+// (Service.Refresh) cierra la sesion por la misma razon.
 func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, error) {
 	// Fast path: Redis denylist.
 	if r.redis != nil {
@@ -116,10 +177,14 @@ func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, 
 		}
 	}
 	var revokedAt *time.Time
+	var inactiva bool
 	err := r.db.QueryRow(ctx,
-		`SELECT revoked_at FROM user_sessions WHERE access_jti = $1`,
-		jti,
-	).Scan(&revokedAt)
+		`SELECT revoked_at,
+		        ($2::float8 > 0 AND last_activity_at IS NOT NULL
+		         AND last_activity_at < NOW() - make_interval(secs => $2::float8))
+		   FROM user_sessions WHERE access_jti = $1`,
+		jti, r.idleTimeout.Seconds(),
+	).Scan(&revokedAt, &inactiva)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// No session record found for this jti. We treat as NOT revoked here —
 		// the access middleware also independently validates JWT signature + expiry.
@@ -128,7 +193,7 @@ func (r *Repository) IsAccessJTIRevoked(ctx context.Context, jti string) (bool, 
 	if err != nil {
 		return true, fmt.Errorf("session lookup: %w", err)
 	}
-	return revokedAt != nil, nil
+	return revokedAt != nil || inactiva, nil
 }
 
 // IsLiveSession dice si accessJTI es el token de acceso VIGENTE de una sesion
@@ -167,13 +232,25 @@ type RefreshTokenRecord struct {
 	UserAgent string
 }
 
+// InsertRefreshToken guarda el token con sus fechas como INSTANTES, no como
+// hora de pared.
+//
+// Antes los dos parametros iban con ::timestamp. Ese cast descarta la zona del
+// time.Time y deja solo el reloj de pared; al entrar a la columna TIMESTAMPTZ,
+// Postgres lo toma como hora de la zona de la SESION. Con la base en GMT, como
+// en produccion, el desfase es cero y no se notaba; en cualquier otra zona el
+// vencimiento se corria tantas horas como el desfase (seis de mas en
+// America/Costa_Rica, nueve de menos en Asia/Tokyo: ahi el refresh nacia
+// vencido). Con ::timestamptz el instante viaja entero y la zona de la sesion
+// ya no interviene; .UTC() deja el valor en la zona que usa el resto del
+// backend.
 func (r *Repository) InsertRefreshToken(ctx context.Context, t *RefreshTokenRecord) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO refresh_tokens
 		   (jti, user_id, parent_jti, family_id, token_hash, issued_at, expires_at, ip_address, user_agent)
 		 VALUES ($1::uuid, $2::uuid, NULLIF($3::text,'')::uuid, $4::uuid, $5::text,
-		         $6::timestamp, $7::timestamp, NULLIF($8::text,'')::inet, $9::text)`,
-		t.JTI, t.UserID, t.ParentJTI, t.FamilyID, t.TokenHash, t.IssuedAt, t.ExpiresAt,
+		         $6::timestamptz, $7::timestamptz, NULLIF($8::text,'')::inet, $9::text)`,
+		t.JTI, t.UserID, t.ParentJTI, t.FamilyID, t.TokenHash, t.IssuedAt.UTC(), t.ExpiresAt.UTC(),
 		t.IPAddress, nullable(t.UserAgent),
 	)
 	return err
@@ -216,12 +293,11 @@ func (r *Repository) ConsumeRefreshToken(ctx context.Context, jti, hash string) 
 		return rec, false, fmt.Errorf("refresh token expired")
 	}
 	if reused {
-		// Mark family revoked.
-		_, _ = tx.Exec(ctx,
-			`UPDATE refresh_tokens SET revoked_at = NOW()
-			 WHERE family_id = $1::uuid AND revoked_at IS NULL`,
-			rec.FamilyID,
-		)
+		// Mark family revoked, and the device's session with it: a revoked
+		// family with its session row still open is listed as "connected".
+		if err := cerrarFamilia(ctx, tx, rec.FamilyID, MotivoReusoDeRefresh); err != nil {
+			return rec, true, fmt.Errorf("revoke family on reuse: %w", err)
+		}
 		if err := tx.Commit(ctx); err != nil {
 			return rec, true, fmt.Errorf("commit family revoke: %w", err)
 		}

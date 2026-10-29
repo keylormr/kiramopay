@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -24,8 +25,9 @@ import (
 // niega a usar un tipo de cambio que nadie confirmo hace demasiado.
 
 // URLHacienda es el servicio publico del Ministerio de Hacienda que republica el
-// tipo de cambio de referencia del BCCR. No pide registro ni token, a diferencia
-// del web service del propio BCCR, que exige una suscripcion con correo.
+// tipo de cambio de referencia del BCCR. No pide registro ni token. Es el
+// respaldo del dolar cuando el BCCR falla, la fuente cuando no hay BCCR_TOKEN y
+// la fuente del euro (ver tipo_de_cambio_bccr.go).
 const URLHacienda = "https://api.hacienda.go.cr/indicadores/tc/dolar"
 
 // URLHaciendaEuro es el mismo servicio para el euro. Responde la fecha del BCCR
@@ -53,6 +55,63 @@ type Cotizacion struct {
 	Compra float64
 	Venta  float64
 	Fecha  time.Time
+	// Fuente dice de donde salio esta cotizacion (NombreFuenteBCCR,
+	// NombreFuenteHacienda). Es lo que se guarda en la fila y se publica en
+	// /health: la fuente REAL de la pasada, no una palabra escrita a mano. Una
+	// cotizacion que no la declare se registra como de Hacienda, la unica fuente
+	// que existia antes de esta.
+	Fuente string
+	// FallaPrincipal, si no es nil, dice por que esta cotizacion salio del
+	// respaldo y no de la fuente principal (el BCCR). La cotizacion es buena; el
+	// aviso es para que la falla de la principal no se esconda.
+	FallaPrincipal error
+}
+
+// fuenteDe es la fuente que se anota para una cotizacion.
+func (c *Cotizacion) fuenteDe() string {
+	if c.Fuente == "" {
+		return NombreFuenteHacienda
+	}
+	return c.Fuente
+}
+
+// pasadasFallidasParaAlertar son las pasadas seguidas sin que la fuente
+// confirme a partir de las cuales una falla pasajera deja de registrarse como
+// WARN y pasa a ERROR. Con el intervalo por defecto (una hora) son seis horas:
+// de sobra para que un 503 de Hacienda se arregle solo, y muy lejos de las 96
+// horas de EdadMaximaTipoDeCambio en que cripto en colones deja de operar, asi
+// que la alerta llega con tiempo para actuar.
+const pasadasFallidasParaAlertar = 6
+
+// fallaPasajera marca el error de la fuente que se espera que se arregle solo:
+// un 5xx, un 429 o una red que no responde. Conserva el mensaje del error
+// original, que es el que se publica en /health. Una respuesta que llego pero
+// no sirve (un 404, basura, una cifra fuera de rango) NO lo es: eso no se
+// arregla esperando.
+type fallaPasajera struct{ err error }
+
+func (f fallaPasajera) Error() string { return f.err.Error() }
+func (f fallaPasajera) Unwrap() error { return f.err }
+
+func esFallaPasajera(err error) bool {
+	var f fallaPasajera
+	return errors.As(err, &f)
+}
+
+// estadoPasajero dice si un codigo HTTP de la fuente es de los que se arreglan
+// solos.
+func estadoPasajero(codigo int) bool {
+	return codigo >= http.StatusInternalServerError || codigo == http.StatusTooManyRequests
+}
+
+// nivelDeFalla decide con que nivel se registra una pasada fallida, siendo
+// seguidas el numero de pasadas seguidas sin confirmar contando la actual: WARN
+// si la falla es pasajera y todavia es corta, ERROR en cualquier otro caso.
+func nivelDeFalla(err error, seguidas int) slog.Level {
+	if esFallaPasajera(err) && seguidas < pasadasFallidasParaAlertar {
+		return slog.LevelWarn
+	}
+	return slog.LevelError
 }
 
 // FuenteTipoDeCambio trae la cotizacion vigente del dolar en colones.
@@ -91,11 +150,15 @@ func (f *FuenteHacienda) ObtenerEuro(ctx context.Context) (float64, time.Time, e
 	req.Header.Set("Accept", "application/json")
 	res, err := f.Client.Do(req)
 	if err != nil {
-		return 0, time.Time{}, fmt.Errorf("hacienda euro: %w", err)
+		return 0, time.Time{}, fallaPasajera{fmt.Errorf("hacienda euro: %w", err)}
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return 0, time.Time{}, fmt.Errorf("hacienda euro: HTTP %d", res.StatusCode)
+		err := fmt.Errorf("hacienda euro: HTTP %d", res.StatusCode)
+		if estadoPasajero(res.StatusCode) {
+			err = fallaPasajera{err}
+		}
+		return 0, time.Time{}, err
 	}
 	var cuerpo struct {
 		Fecha   string  `json:"fecha"`
@@ -131,11 +194,15 @@ func (f *FuenteHacienda) Obtener(ctx context.Context) (*Cotizacion, error) {
 	req.Header.Set("Accept", "application/json")
 	res, err := f.Client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("hacienda: %w", err)
+		return nil, fallaPasajera{fmt.Errorf("hacienda: %w", err)}
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("hacienda: HTTP %d", res.StatusCode)
+		err := fmt.Errorf("hacienda: HTTP %d", res.StatusCode)
+		if estadoPasajero(res.StatusCode) {
+			err = fallaPasajera{err}
+		}
+		return nil, err
 	}
 	var cuerpo struct {
 		Venta struct {
@@ -154,7 +221,7 @@ func (f *FuenteHacienda) Obtener(ctx context.Context) (*Cotizacion, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hacienda: fecha ilegible %q", cuerpo.Venta.Fecha)
 	}
-	return &Cotizacion{Compra: cuerpo.Compra.Valor, Venta: cuerpo.Venta.Valor, Fecha: fecha}, nil
+	return &Cotizacion{Compra: cuerpo.Compra.Valor, Venta: cuerpo.Venta.Valor, Fecha: fecha, Fuente: NombreFuenteHacienda}, nil
 }
 
 // validarCotizacion rechaza lo que no puede ser un tipo de cambio del colon.
@@ -193,16 +260,31 @@ type Actualizador struct {
 
 	mu     sync.Mutex
 	estado DiagnosticoTipoDeCambio
+	// falta son las variables de entorno sin cargar que la fuente dice echar de
+	// menos (BCCR_TOKEN). Se republican en cada diagnostico.
+	falta []string
+	// Pasadas seguidas sin que la fuente confirme el dolar y el euro. Deciden
+	// el nivel del registro de una falla pasajera (nivelDeFalla); una pasada
+	// buena las pone en cero.
+	fallasSeguidas, fallasEuroSeguidas int
+	// Pasadas seguidas en que el BCCR no sirvio y el dolar salio del respaldo.
+	// Mismo uso que fallasSeguidas, para la fuente principal.
+	fallasPrincipalSeguidas int
 }
 
 // DiagnosticoTipoDeCambio es lo que se publica en /health.
 type DiagnosticoTipoDeCambio struct {
+	// Fuente es de donde salio la ultima tasa confirmada ("bccr" o "hacienda");
+	// queda vacia mientras ninguna pasada haya confirmado una.
 	Fuente             string     `json:"fuente"`
 	UsdCrc             float64    `json:"usd_crc"`
 	Compra             float64    `json:"compra"`
 	FechaFuente        string     `json:"fecha_fuente,omitempty"`
 	UltimaConfirmacion *time.Time `json:"ultima_confirmacion,omitempty"`
 	UltimoError        string     `json:"ultimo_error,omitempty"`
+	// Falta son los NOMBRES de las variables de entorno que hacen falta para que
+	// el dolar salga del BCCR (BCCR_TOKEN). Jamas un valor.
+	Falta []string `json:"falta,omitempty"`
 }
 
 func NewActualizador(repo *Repository, fuente FuenteTipoDeCambio, cada time.Duration, logger *slog.Logger) *Actualizador {
@@ -212,8 +294,23 @@ func NewActualizador(repo *Repository, fuente FuenteTipoDeCambio, cada time.Dura
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Actualizador{repo: repo, fuente: fuente, cada: cada, logger: logger,
-		estado: DiagnosticoTipoDeCambio{Fuente: "hacienda"}}
+	var falta []string
+	if f, ok := fuente.(interface{ Faltantes() []string }); ok {
+		falta = f.Faltantes()
+	}
+	return &Actualizador{repo: repo, fuente: fuente, cada: cada, logger: logger, falta: falta,
+		estado: DiagnosticoTipoDeCambio{Falta: falta}}
+}
+
+// euroDe devuelve la fuente del euro de una fuente de tipo de cambio, o nil si no
+// tiene. La del dolar con respaldo lleva la suya aparte: el euro sale de Hacienda
+// aunque el dolar salga del BCCR.
+func euroDe(f FuenteTipoDeCambio) FuenteEuro {
+	if c, ok := f.(*FuenteConRespaldo); ok {
+		return c.Euro
+	}
+	fe, _ := f.(FuenteEuro)
+	return fe
 }
 
 // Run actualiza de inmediato y despues cada `cada`, hasta que ctx se cancele.
@@ -221,8 +318,9 @@ func NewActualizador(repo *Repository, fuente FuenteTipoDeCambio, cada time.Dura
 // esta primera pasada, cripto en colones quedaria fuera de servicio una hora.
 //
 // El error de cada pasada no se propaga: ActualizarUnaVez ya lo deja en el
-// diagnostico de /health y en el log con nivel Error, y la siguiente pasada lo
-// vuelve a intentar.
+// diagnostico de /health y en el log (WARN si es una falla pasajera de la
+// fuente y todavia corta, ERROR si no), y la siguiente pasada lo vuelve a
+// intentar.
 func (a *Actualizador) Run(ctx context.Context) {
 	_ = a.ActualizarUnaVez(ctx)
 	t := time.NewTicker(a.cada)
@@ -246,11 +344,23 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 	}
 	if err != nil {
 		a.anotarError(err)
-		// Error y no Warn: si esto se repite durante EdadMaximaTipoDeCambio,
+		a.mu.Lock()
+		a.fallasSeguidas++
+		seguidas := a.fallasSeguidas
+		a.mu.Unlock()
+		// Un 503 que se arregla solo es WARN; si se repite hasta
+		// pasadasFallidasParaAlertar pasadas, o la respuesta llego pero no
+		// sirve, es ERROR: pasadas EdadMaximaTipoDeCambio sin confirmar,
 		// cripto en colones deja de operar, y eso tiene que verse antes.
-		a.logger.Error("tipo de cambio: no se pudo actualizar", "error", err)
+		a.logger.Log(ctx, nivelDeFalla(err, seguidas), "tipo de cambio: no se pudo actualizar",
+			"error", err, "pasadas_seguidas", seguidas)
 		return err
 	}
+	a.mu.Lock()
+	a.fallasSeguidas = 0
+	a.mu.Unlock()
+	fuente := c.fuenteDe()
+	avisoDelRespaldo := a.anotarFallaPrincipal(ctx, c, fuente)
 
 	// Una sola tasa de referencia, la de VENTA, para los dos sentidos. Asi el
 	// precio que la pantalla muestra es exactamente el que se cobra, y una
@@ -270,7 +380,7 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 		{"CRC", "PAB", 1 / c.Venta},
 	}
 	for _, p := range pares {
-		if err := a.repo.RegistrarTipoDeCambio(ctx, p.desde, p.hacia, p.tasa, "hacienda"); err != nil {
+		if err := a.repo.RegistrarTipoDeCambio(ctx, p.desde, p.hacia, p.tasa, fuente); err != nil {
 			a.anotarError(err)
 			a.logger.Error("tipo de cambio: no se pudo guardar", "par", p.desde+"/"+p.hacia, "error", err)
 			return err
@@ -284,26 +394,54 @@ func (a *Actualizador) ActualizarUnaVez(ctx context.Context) error {
 	// Si no se puede guardar, el dolar ya quedo y se sigue: el cobro no depende
 	// de esta tabla, y para un dia sin venta guardada la UIF usa el historial de
 	// exchange_rates. El diagnostico lo dice.
-	var errDelDia string
-	if err := a.repo.RegistrarCotizacionDelDia(ctx, "CRC", c.Fecha, c.Venta, "hacienda"); err != nil {
-		errDelDia = "venta del dia: " + err.Error()
+	var avisos []string
+	if avisoDelRespaldo != "" {
+		avisos = append(avisos, avisoDelRespaldo)
+	}
+	if err := a.repo.RegistrarCotizacionDelDia(ctx, "CRC", c.Fecha, c.Venta, fuente); err != nil {
+		avisos = append(avisos, "venta del dia: "+err.Error())
 		a.logger.Error("tipo de cambio: no se pudo guardar la venta del dia", "error", err)
 	}
-	if fe, ok := a.fuente.(FuenteEuro); ok {
+	if fe := euroDe(a.fuente); fe != nil {
 		a.actualizarEuro(ctx, fe)
 	}
 
 	ahora := time.Now()
 	a.mu.Lock()
 	a.estado = DiagnosticoTipoDeCambio{
-		Fuente: "hacienda", UsdCrc: c.Venta, Compra: c.Compra,
+		Fuente: fuente, UsdCrc: c.Venta, Compra: c.Compra,
 		FechaFuente: c.Fecha.Format("2006-01-02"), UltimaConfirmacion: &ahora,
-		UltimoError: errDelDia,
+		UltimoError: strings.Join(avisos, "; "), Falta: a.falta,
 	}
 	a.mu.Unlock()
 	a.logger.Info("tipo de cambio actualizado", "usd_crc", c.Venta, "compra", c.Compra,
-		"fecha", c.Fecha.Format("2006-01-02"))
+		"fecha", c.Fecha.Format("2006-01-02"), "fuente", fuente)
 	return nil
+}
+
+// anotarFallaPrincipal registra que el BCCR no sirvio cuando el dolar de esta
+// pasada salio del respaldo, y devuelve el texto para el diagnostico ("" si la
+// principal sirvio o no hay principal). Una falla pasajera es WARN mientras sea
+// corta; un token rechazado o una ruta equivocada no se arreglan esperando y van
+// a ERROR de entrada. La principal que vuelve a servir pone la cuenta en cero.
+func (a *Actualizador) anotarFallaPrincipal(ctx context.Context, c *Cotizacion, fuente string) string {
+	a.mu.Lock()
+	switch {
+	case c.FallaPrincipal != nil:
+		a.fallasPrincipalSeguidas++
+	case fuente == NombreFuenteBCCR:
+		a.fallasPrincipalSeguidas = 0
+	}
+	seguidas := a.fallasPrincipalSeguidas
+	a.mu.Unlock()
+
+	if c.FallaPrincipal == nil {
+		return ""
+	}
+	a.logger.Log(ctx, nivelDeFalla(c.FallaPrincipal, seguidas),
+		"tipo de cambio: el BCCR no sirvio, el dolar salio del respaldo",
+		"error", c.FallaPrincipal, "respaldo", fuente, "pasadas_seguidas", seguidas)
+	return fmt.Sprintf("%v; se uso %s", c.FallaPrincipal, fuente)
 }
 
 // actualizarEuro guarda la cotizacion del euro del dia, en euros por dolar como
@@ -316,10 +454,19 @@ func (a *Actualizador) actualizarEuro(ctx context.Context, fe FuenteEuro) {
 		err = validarEuro(dolares, fecha, time.Now())
 	}
 	if err == nil {
-		err = a.repo.RegistrarCotizacionDelDia(ctx, "EUR", fecha, 1/dolares, "hacienda")
+		err = a.repo.RegistrarCotizacionDelDia(ctx, "EUR", fecha, 1/dolares, NombreFuenteHacienda)
 	}
+	a.mu.Lock()
+	if err == nil {
+		a.fallasEuroSeguidas = 0
+	} else {
+		a.fallasEuroSeguidas++
+	}
+	seguidas := a.fallasEuroSeguidas
+	a.mu.Unlock()
 	if err != nil {
-		a.logger.Error("tipo de cambio: no se pudo actualizar el euro", "error", err)
+		a.logger.Log(ctx, nivelDeFalla(err, seguidas), "tipo de cambio: no se pudo actualizar el euro",
+			"error", err, "pasadas_seguidas", seguidas)
 	}
 }
 

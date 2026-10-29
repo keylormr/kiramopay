@@ -52,6 +52,40 @@ func TestLasRutasDelPanelDeEliminacionesPidenAdministrador(t *testing.T) {
 	}
 }
 
+// El capital propio de la empresa es un dato del panel de administracion: dice
+// cuanto dinero propio tiene KiramoPay y cuanto le falta. Nadie mas lo ve. Como
+// las pruebas del handler lo montan sin los middlewares de main.go, esta lee
+// main.go y exige que la ruta viva dentro del grupo con RequireAdmin y
+// RequireLiveSession.
+func TestLaRutaDelCapitalPropioPideAdministrador(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	montada := false
+	var pila []ast.Node
+	ast.Inspect(f, func(n ast.Node) bool {
+		if n == nil {
+			pila = pila[:len(pila)-1]
+			return true
+		}
+		pila = append(pila, n)
+		ruta, metodo, ok := rutaRegistrada(n)
+		if !ok || !strings.HasPrefix(ruta, "/admin/capital") {
+			return true
+		}
+		montada = montada || (metodo == "Get" && ruta == "/admin/capital")
+		admin, sesion := guardasDelGrupo(pila)
+		if !admin || !sesion {
+			t.Errorf("%s %s se monta fuera del grupo con RequireAdmin y RequireLiveSession (admin=%v, sesion=%v)", metodo, ruta, admin, sesion)
+		}
+		return true
+	})
+	if !montada {
+		t.Error("main.go no monta Get /admin/capital")
+	}
+}
+
 // rutaRegistrada reconoce r.Get("/ruta", h), r.Post(...) y demas.
 func rutaRegistrada(n ast.Node) (ruta, metodo string, ok bool) {
 	call, ok := n.(*ast.CallExpr)

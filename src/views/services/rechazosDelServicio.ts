@@ -22,6 +22,8 @@ export const CLAVES_DEL_RECHAZO_DEL_RECIBO: Readonly<Record<string, string>> = {
   // Sin convenio con la empresa: no hay a quien entregarle el pago y no se
   // cobra nada.
   SIN_CONVENIO: 'bill_no_agreement',
+  // La empresa ya no esta en la lista del servidor (o nunca estuvo).
+  INVALID_PROVIDER: 'bill_err_proveedor',
   ...RECHAZOS_DEL_MOTOR,
   // Sin respuesta o con el 500, el pago pudo haber salido. La llave se
   // conserva (ver llaveDelServicio), y eso es lo que permite decir que
@@ -33,6 +35,7 @@ export const CLAVES_DEL_RECHAZO_DEL_RECIBO: Readonly<Record<string, string>> = {
 
 export const CLAVES_DEL_RECHAZO_DE_LA_RECARGA: Readonly<Record<string, string>> = {
   SIN_CONVENIO: 'recharge_no_agreement',
+  INVALID_OPERATOR: 'recharge_err_operador',
   ...RECHAZOS_DEL_MOTOR,
   NETWORK_ERROR: 'recharge_err_sin_confirmar',
   TIMEOUT: 'recharge_err_sin_confirmar',

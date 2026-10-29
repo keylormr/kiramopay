@@ -243,6 +243,21 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return null;
   }
 
+  // Cuando paso cada cosa, en el orden en que pasa. Solo las que ocurrieron: un
+  // acuerdo pendiente no tiene fecha de liberacion.
+  function filasDeFechas(a: EscrowAgreement): Array<{ clave: string; iso: string }> {
+    const candidatas: Array<[string, string | undefined]> = [
+      ['escrow_date_created', a.createdAt],
+      ['escrow_status_funded', a.fundedAt],
+      ['escrow_delivered_badge', a.deliveredAt],
+      ['escrow_status_disputed', a.disputedAt],
+      ['escrow_status_released', a.releasedAt],
+      ['escrow_status_refunded', a.refundedAt],
+      ['escrow_status_cancelled', a.cancelledAt],
+    ];
+    return candidatas.flatMap(([clave, iso]) => (iso ? [{ clave, iso }] : []));
+  }
+
   // El plazo que corre ahora. Vencido, ya no se ofrece reclamar: el servidor
   // lo rechazaria y el resultado ya esta decidido.
   const plazoActual = (a: EscrowAgreement) => (a.deliveredAt ? a.reviewBy : a.deliverBy);
@@ -383,6 +398,9 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
           <div>
             <label className="text-sm font-medium uv-text-secondary mb-1.5 block">{t('escrow_amount')}</label>
+            {/* El acuerdo se crea en colones; sin decirlo, quien tiene saldo en
+                dolares no sabia en que moneda estaba escribiendo. */}
+            <p className="text-xs uv-text-muted mb-1.5">{t('escrow_amount_hint')}</p>
             <CampoMonto
               value={amount}
               onChange={setAmount}
@@ -430,6 +448,24 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 {isBuyer ? t('escrow_you_buyer') : isSeller ? t('escrow_you_seller') : ''}
               </p>
             </div>
+
+            {/* Con quien es el acuerdo y cuando paso cada cosa. */}
+            {(selected.counterpartyName || filasDeFechas(selected).length > 0) && (
+              <dl className="uv-surface-2 rounded-xl px-3 divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+                {selected.counterpartyName && (
+                  <div className="flex items-center justify-between gap-4 py-2.5 text-sm">
+                    <dt className="uv-text-muted shrink-0">{isBuyer ? t('escrow_role_seller') : t('escrow_role_buyer')}</dt>
+                    <dd className="min-w-0 truncate text-right font-semibold uv-text-primary">{selected.counterpartyName}</dd>
+                  </div>
+                )}
+                {filasDeFechas(selected).map((fila) => (
+                  <div key={fila.clave} className="flex items-center justify-between gap-4 py-2.5 text-sm">
+                    <dt className="uv-text-muted shrink-0">{t(fila.clave)}</dt>
+                    <dd className="text-right font-semibold uv-text-primary tabular-nums">{fecha(fila.iso)}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
 
             {selected.disputeReason && (
               <div className="uv-surface-2 rounded-xl p-3 text-sm">

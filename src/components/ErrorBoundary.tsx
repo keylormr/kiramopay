@@ -20,17 +20,12 @@ function marcarRecargaFuerte(): void {
   }
 }
 import {
-  Language,
-  LANGUAGES,
   TranslationKeys,
   defaultTranslations,
+  diccionarioCargado,
   loadLanguage,
 } from '../i18n/translations';
-
-function savedLanguage(): Language {
-  const saved = localStorage.getItem('kiramopay_language');
-  return (saved && LANGUAGES.some((l) => l.code === saved) ? saved : 'es') as Language;
-}
+import { idiomaInicial } from '../i18n/idiomaDeLaPersona';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -45,13 +40,20 @@ interface ErrorBoundaryProps {
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    // Spanish is bundled; the saved language (if any) is preloaded in
-    // componentDidMount so a later crash screen is still localized.
-    this.state = { hasError: false, error: null, messages: defaultTranslations };
+    // Esta pantalla envuelve a LanguageProvider, asi que elige el idioma igual
+    // que el: lo que la persona guardo y, si no hay, el del navegador. Si el
+    // diccionario ya llego (index.tsx lo pide antes de pintar) sale en ese
+    // idioma desde el primer render; si no, en el espanol del paquete hasta que
+    // llegue.
+    this.state = {
+      hasError: false,
+      error: null,
+      messages: diccionarioCargado(idiomaInicial()) ?? defaultTranslations,
+    };
   }
 
   componentDidMount() {
-    loadLanguage(savedLanguage())
+    loadLanguage(idiomaInicial())
       .then((messages) => this.setState({ messages }))
       .catch(() => {
         /* keep the bundled Spanish fallback */

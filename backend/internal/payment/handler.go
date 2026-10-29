@@ -130,6 +130,24 @@ func (h *Handler) Recharge(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, result)
 }
 
+// GetProviders — GET /api/v1/services/providers. Lo que la pantalla de Servicios
+// ofrece (empresas y operadores) y si el cobro se puede entregar.
+func (h *Handler) GetProviders(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
+
+	catalog, err := h.service.Catalog(r.Context())
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+
+	response.JSON(w, http.StatusOK, catalog)
+}
+
 func (h *Handler) GetSavedServices(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	if userID == "" {

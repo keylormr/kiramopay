@@ -120,10 +120,12 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
           <Icons.Phone size={14} className="uv-text-muted shrink-0" aria-hidden="true" />
           <span className="uv-text-secondary tabular-nums truncate">{user.phoneMasked}</span>
         </li>
-        <li className="flex items-center gap-2 min-w-0">
-          <Icons.Mail size={14} className="uv-text-muted shrink-0" aria-hidden="true" />
-          <span className="uv-text-secondary truncate">{user.emailMasked}</span>
-        </li>
+        {user.emailMasked && (
+          <li className="flex items-center gap-2 min-w-0">
+            <Icons.Mail size={14} className="uv-text-muted shrink-0" aria-hidden="true" />
+            <span className="uv-text-secondary truncate">{user.emailMasked}</span>
+          </li>
+        )}
       </ul>
 
       {(blocked || user.expiresAt) && (
@@ -443,7 +445,10 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   );
 
   const tabClass = (active: boolean) =>
-    `flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+    // El icono va sobre el texto en pantalla angosta: tres pestanas en 358 px
+    // dejaban ~74 px de texto junto al icono y "Eliminaciones" salia
+    // "Eliminaci...". Con el ancho de una tableta vuelven a ir lado a lado.
+    `flex-1 min-w-0 px-2 py-2.5 rounded-lg text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 ${
       active ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm' : 'text-gray-500'
     }`;
 
@@ -468,16 +473,16 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
         <div className="px-4 pt-3">
           <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl" role="tablist" aria-label={t('admin_users_title')}>
             <button type="button" role="tab" aria-selected={tab === 'search'} onClick={() => setTab('search')} className={tabClass(tab === 'search')}>
-              <Icons.Search size={14} aria-hidden="true" />
-              {t('admin_users_tab_search')}
+              <Icons.Search size={14} className="shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words text-center leading-tight">{t('admin_users_tab_search')}</span>
             </button>
             <button type="button" role="tab" aria-selected={tab === 'blocked'} onClick={() => setTab('blocked')} className={tabClass(tab === 'blocked')}>
-              <Icons.Lock size={14} aria-hidden="true" />
-              {t('admin_users_tab_blocked')}
+              <Icons.Lock size={14} className="shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words text-center leading-tight">{t('admin_users_tab_blocked')}</span>
             </button>
             <button type="button" role="tab" aria-selected={tab === 'deletions'} onClick={() => setTab('deletions')} className={tabClass(tab === 'deletions')}>
-              <Icons.Trash size={14} aria-hidden="true" />
-              {t('admin_del_tab')}
+              <Icons.Trash size={14} className="shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words text-center leading-tight">{t('admin_del_tab')}</span>
             </button>
           </div>
         </div>
@@ -495,8 +500,8 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
         {tab === 'search' && (
           <>
             <form onSubmit={(e) => { e.preventDefault(); void runSearch(); }} className="px-4 pt-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1 min-w-0">
+              <div className="flex flex-wrap gap-2">
+                <div className="relative flex-1 min-w-0 basis-full min-[480px]:basis-0">
                   <Icons.Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 uv-text-muted pointer-events-none" aria-hidden="true" />
                   <input
                     type="text"
@@ -513,7 +518,7 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                     className="w-full pl-10 pr-3 py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
                   />
                 </div>
-                <button type="submit" disabled={searching} className="shrink-0 px-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold disabled:opacity-50">
+                <button type="submit" disabled={searching} className="shrink-0 basis-full min-[480px]:basis-auto px-4 py-3 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold disabled:opacity-50">
                   {t('admin_users_search_action')}
                 </button>
               </div>

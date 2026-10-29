@@ -27,7 +27,7 @@ export function mensajeDeCobro(t: (k: string) => string, codigo?: string): strin
     case 'COBRO_DUPLICADO_APP_VIEJA':
       return t('qr_err_actualiza_app');
     // Los de forma y de seguridad. Sin estos, la vista caia al texto del
-    // servidor, que esta solo en espanol y en voseo ("no podes pagarte a vos
+    // servidor, que esta solo en espanol ("no puedes pagarte a ti
     // mismo"): con la app en otro idioma el motivo salia sin traducir.
     case 'QR_INVALIDO':
       return t('qr_err_invalido');
@@ -126,6 +126,22 @@ export function minutosParaVencer(expiresAt?: string): number {
   const restante = new Date(expiresAt).getTime() - Date.now();
   if (!Number.isFinite(restante) || restante <= 0) return 0;
   return Math.max(1, Math.round(restante / 60000));
+}
+
+/**
+ * Una duracion en la unidad que se lee de un vistazo: "20 min", "1 h 30 min",
+ * "24 h". Un cobro de un dia se leia "Vence en 1440 min". Las abreviaturas son
+ * las del idioma (duration_hours, duration_minutes). Cero o un valor que no sirve
+ * se lee "0 min", nunca NaN.
+ */
+export function textoDeDuracion(minutos: number, t: (clave: string) => string): string {
+  const total = Number.isFinite(minutos) && minutos > 0 ? Math.round(minutos) : 0;
+  const horas = Math.floor(total / 60);
+  const resto = total % 60;
+  const partes: string[] = [];
+  if (horas > 0) partes.push(t('duration_hours').replace('{n}', String(horas)));
+  if (resto > 0 || horas === 0) partes.push(t('duration_minutes').replace('{n}', String(resto)));
+  return partes.join(' ');
 }
 
 /**

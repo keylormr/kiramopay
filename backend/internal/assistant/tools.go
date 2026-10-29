@@ -7,8 +7,10 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kiramopay/backend/internal/budget"
+	"github.com/kiramopay/backend/internal/country"
 	"github.com/kiramopay/backend/internal/payment"
 	"github.com/kiramopay/backend/internal/transaction"
 	"github.com/kiramopay/backend/internal/wallet"
@@ -25,6 +27,17 @@ type (
 	}
 	BudgetReader interface {
 		List(ctx context.Context, userID string) ([]budget.BudgetRecord, error)
+	}
+	// SummaryReader es el resumen de movimientos por periodo, el mismo que
+	// alimenta la tarjeta "Gastado este mes" del Inicio y la pantalla de
+	// analisis. Es solo lectura.
+	SummaryReader interface {
+		Resumen(ctx context.Context, userID string, rango transaction.RangoResumen) (*transaction.Resumen, error)
+	}
+	// ExchangeRateReader son los tipos de cambio vigentes, los mismos que sirve
+	// GET /exchange-rates y de donde el Inicio saca el dolar para su total.
+	ExchangeRateReader interface {
+		GetExchangeRates(ctx context.Context) ([]country.ExchangeRate, error)
 	}
 	// SavedServicesReader is read-only — it lets the model reference a user's
 	// saved bill provider when *proposing* a payment, but cannot pay anything.
@@ -51,10 +64,33 @@ type Tools struct {
 	budget   BudgetReader
 	saved    SavedServicesReader
 	allowAct bool // whether propose_* (write-intent) tools are advertised
+
+	// Opcionales. Sin resumen no se ofrece el gasto por periodo; sin tipo de
+	// cambio el saldo se entrega por cuenta y sin total.
+	resumen SummaryReader
+	tasas   ExchangeRateReader
+	now     func() time.Time
 }
 
-func NewTools(w WalletReader, tx TransactionReader, b BudgetReader, saved SavedServicesReader) *Tools {
-	return &Tools{wallet: w, tx: tx, budget: b, saved: saved, allowAct: true}
+// ToolOption agrega una fuente opcional a las herramientas. Va aparte de los
+// cuatro lectores obligatorios para no cambiarle la firma a NewTools.
+type ToolOption func(*Tools)
+
+// WithResumen conecta el resumen por periodo: habilita spending_by_period.
+func WithResumen(r SummaryReader) ToolOption { return func(t *Tools) { t.resumen = r } }
+
+// WithTipoDeCambio conecta los tipos de cambio para el total del saldo.
+func WithTipoDeCambio(r ExchangeRateReader) ToolOption { return func(t *Tools) { t.tasas = r } }
+
+// WithReloj fija el reloj con que se decide que mes es "este mes". Para pruebas.
+func WithReloj(now func() time.Time) ToolOption { return func(t *Tools) { t.now = now } }
+
+func NewTools(w WalletReader, tx TransactionReader, b BudgetReader, saved SavedServicesReader, opts ...ToolOption) *Tools {
+	t := &Tools{wallet: w, tx: tx, budget: b, saved: saved, allowAct: true, now: time.Now}
+	for _, opt := range opts {
+		opt(t)
+	}
+	return t
 }
 
 // minorToMajor converts integer minor units (céntimos) to a major-unit float
@@ -66,9 +102,11 @@ func (t *Tools) Declarations() []FunctionDecl {
 	emptyObject := map[string]any{"type": "object", "properties": map[string]any{}}
 	decls := []FunctionDecl{
 		{
-			Name:        "get_balance",
-			Description: "Get the user's current wallet balance in CRC and USD.",
-			Parameters:  emptyObject,
+			Name: "get_balance",
+			Description: "Get the user's wallet balance. Returns each account with its own currency (CRC colones and USD dollars) " +
+				"and, when the exchange rate is available, the combined total in the base currency (colones) and in USD, " +
+				"the same totals the Home screen shows. Never add the accounts yourself or treat one as the other's equivalent.",
+			Parameters: emptyObject,
 		},
 		{
 			Name:        "list_transactions",
@@ -83,7 +121,7 @@ func (t *Tools) Declarations() []FunctionDecl {
 		},
 		{
 			Name:        "spending_summary",
-			Description: "Summarize the user's recent outgoing spending, totalled by transaction type, over the last N transactions.",
+			Description: t.descripcionDeResumenReciente(),
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -101,6 +139,24 @@ func (t *Tools) Declarations() []FunctionDecl {
 			Description: "List the user's saved bill providers (name, provider code, client id) so a bill payment can reference one.",
 			Parameters:  emptyObject,
 		},
+	}
+	if t.resumen != nil {
+		decls = append(decls, FunctionDecl{
+			Name: "spending_by_period",
+			Description: "How much the user spent in a calendar month (Costa Rica time), counting the same movements as " +
+				"\"Spent this month\" on the Home screen. Use it for any question about spending in a month. " +
+				"Returns one figure per currency; never add currencies together.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"period": map[string]any{
+						"type":        "string",
+						"enum":        []any{PeriodThisMonth, PeriodLastMonth},
+						"description": "this_month (default) or last_month.",
+					},
+				},
+			},
+		})
 	}
 	if !t.allowAct {
 		return decls
@@ -180,6 +236,9 @@ func (t *Tools) Invoke(ctx context.Context, userID, name string, args map[string
 	case "spending_summary":
 		r, err := t.spendingSummary(ctx, userID, args)
 		return r, nil, err
+	case "spending_by_period":
+		r, err := t.spendingByPeriod(ctx, userID, args)
+		return r, nil, err
 	case "list_budgets":
 		r, err := t.listBudgets(ctx, userID)
 		return r, nil, err
@@ -201,20 +260,6 @@ func (t *Tools) Invoke(ctx context.Context, userID, name string, args map[string
 	default:
 		return nil, nil, ErrUnknownTool
 	}
-}
-
-func (t *Tools) getBalance(ctx context.Context, userID string) (any, error) {
-	if t.wallet == nil {
-		return nil, ErrUnknownTool
-	}
-	b, err := t.wallet.GetBalance(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"crc": minorToMajor(b.CRC),
-		"usd": minorToMajor(b.USD),
-	}, nil
 }
 
 func argInt(args map[string]any, key string, def, min, max int) int {
@@ -284,23 +329,28 @@ func (t *Tools) spendingSummary(ctx context.Context, userID string, args map[str
 	if err != nil {
 		return nil, err
 	}
-	byType := map[string]int64{}
-	var totalOut int64
+	// Cada moneda por su lado: sumar colones con dolares da un numero que no
+	// existe. Y lo que cuenta como gasto es lo mismo que cuenta el Inicio.
+	gastos := newGastoPorMoneda()
 	for _, r := range res.Transactions {
-		if r.Status != "completed" || !isOutgoing(r.Type) {
+		if r.Status != "completed" || transaction.EsIngresoEnPantalla(r.Type) {
 			continue
 		}
-		byType[r.Type] += r.Amount
-		totalOut += r.Amount
+		gastos.sumar(r.Currency, r.Type, 1, r.Amount)
 	}
-	cats := make([]map[string]any, 0, len(byType))
-	for typ, sum := range byType {
-		cats = append(cats, map[string]any{"type": typ, "total": minorToMajor(sum)})
+	filas := make([]map[string]any, 0, 2)
+	for _, f := range gastos.filas() {
+		filas = append(filas, map[string]any{
+			"currency":       f.moneda,
+			"total_outgoing": minorToMajor(f.centimos),
+			"by_type":        porTipoEnMapas(f.porTipo),
+		})
 	}
 	return map[string]any{
-		"considered":     len(res.Transactions),
-		"total_outgoing": minorToMajor(totalOut),
-		"by_type":        cats,
+		"considered":  len(res.Transactions),
+		"by_currency": filas,
+		"note": "Covers only the most recent movements, not a calendar period. " +
+			"Each currency is totalled separately; never add them together.",
 	}, nil
 }
 
@@ -428,18 +478,6 @@ func argFloat(args map[string]any, key string) (float64, bool) {
 		return f, err == nil
 	default:
 		return 0, false
-	}
-}
-
-// isOutgoing classifies a transaction type as money leaving the user — a small
-// allowlist mirroring the spend-side types used elsewhere.
-func isOutgoing(txType string) bool {
-	switch txType {
-	case "sinpe_send", "qr_payment", "bill_payment", "withdrawal", "p2p_send",
-		"marketplace", "crypto_buy", "payout_sent", "escrow_fund", "recharge":
-		return true
-	default:
-		return false
 	}
 }
 
