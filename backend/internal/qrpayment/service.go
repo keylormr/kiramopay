@@ -1146,15 +1146,17 @@ func (s *Service) armarReporte(ctx context.Context, m *Merchant, v ventanaReport
 	}
 	since := v.desde.UTC()
 
-	daily, err := s.repo.ReportDaily(ctx, m.ID, since, tzOffsetMin)
+	hasta := v.limiteSuperior()
+
+	daily, err := s.repo.ReportDaily(ctx, m.ID, since, hasta, tzOffsetMin)
 	if err != nil {
 		return nil, fmt.Errorf("report daily: %w", err)
 	}
-	byLocation, err := s.repo.ReportByLocation(ctx, m.ID, since)
+	byLocation, err := s.repo.ReportByLocation(ctx, m.ID, since, hasta)
 	if err != nil {
 		return nil, fmt.Errorf("report by location: %w", err)
 	}
-	byCollector, err := s.repo.ReportByCollector(ctx, m.ID, since)
+	byCollector, err := s.repo.ReportByCollector(ctx, m.ID, since, hasta)
 	if err != nil {
 		return nil, fmt.Errorf("report by collector: %w", err)
 	}
@@ -1182,7 +1184,7 @@ func (s *Service) armarReporte(ctx context.Context, m *Merchant, v ventanaReport
 	rep := &MerchantReport{
 		Days:        v.dias,
 		From:        v.desde.Format(formatoDia),
-		To:          v.hasta.Format(formatoDia),
+		To:          v.hastaDia(),
 		Totals:      totals,
 		Daily:       daily,
 		ByLocation:  byLocation,

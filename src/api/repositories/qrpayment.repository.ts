@@ -9,6 +9,13 @@ export type MerchantRole = 'owner' | 'manager' | 'cashier';
 /** Las ventas que trae cada pagina del feed del comercio: el valor por defecto del servidor. */
 export const VENTAS_POR_PAGINA = 50;
 
+/**
+ * Los periodos que ofrece la pantalla del comercio. Los cuenta el SERVIDOR en
+ * el dia de calendario de quien mira (tz): hoy, los ultimos 7 dias, lo que va
+ * del mes y el mes anterior entero.
+ */
+export type PeriodoDeVentas = 'today' | 'week' | 'month' | 'prev_month';
+
 export interface QRMerchant {
   id: string;
   name: string;
@@ -219,6 +226,72 @@ export interface QRPayment {
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
   note?: string;
+  /** La transaccion del pago: la referencia que se le da a quien pregunta. */
+  txId?: string;
+  createdAt: string;
+  /**
+   * Nombres que solo trae el feed del comercio. Faltan (undefined) cuando el
+   * servidor no los dio: la cuenta ya no existe, la sucursal se borro, o la
+   * venta es anterior al equipo. Nunca se rellenan.
+   */
+  payerName?: string;
+  locationName?: string;
+  collectorName?: string;
+}
+
+/** Cantidades de un periodo, en unidades mayores. */
+export interface TotalesDeVentas {
+  gross: number;
+  fee: number;
+  net: number;
+  count: number;
+}
+
+/** Variacion contra el periodo anterior; los porcentajes son null si el anterior fue 0. */
+export interface VariacionDeVentas extends TotalesDeVentas {
+  grossPct: number | null;
+  netPct: number | null;
+  countPct: number | null;
+}
+
+/** Las ventas de un periodo en UNA moneda. `previous` y `delta` solo con el plan Analitica. */
+export interface VentasPorMoneda extends TotalesDeVentas {
+  currency: string;
+  previous?: TotalesDeVentas;
+  delta?: VariacionDeVentas;
+}
+
+export interface ResumenDelPeriodo {
+  period: PeriodoDeVentas;
+  /** Primer y ultimo dia (YYYY-MM-DD) en la zona de quien mira. */
+  from: string;
+  to: string;
+  previousFrom?: string;
+  previousTo?: string;
+  /** Vacio cuando el periodo no tuvo ventas: el servidor lo conto, y un cero asi es un dato. */
+  currencies: VentasPorMoneda[];
+}
+
+/** Lo que muestra el inicio del negocio. Un cajero recibe solo `today`. */
+export interface ResumenDelComercio {
+  plan: PlanComercio;
+  periods: ResumenDelPeriodo[];
+}
+
+/** Las ventas de un dia en una moneda; el total de cada dia de la lista de movimientos. */
+export interface TotalDelDia extends TotalesDeVentas {
+  /** YYYY-MM-DD en la zona de quien mira. */
+  date: string;
+  currency: string;
+}
+
+/** Un retiro del saldo del negocio hacia la cuenta de su dueno. */
+export interface RetiroDelComercio {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  withdrawnByName?: string;
   createdAt: string;
 }
 
@@ -310,7 +383,20 @@ export interface IQRPaymentRepository {
    * antesDe (el id de la ultima venta que ya se vio) trae las que siguen; una
    * pagina mas corta es la ultima.
    */
-  getMerchantPayments(merchantId: string, opciones?: { antesDe?: string }): Promise<ApiResponse<QRPayment[]>>;
+  getMerchantPayments(
+    merchantId: string,
+    opciones?: { antesDe?: string; periodo?: PeriodoDeVentas },
+  ): Promise<ApiResponse<QRPayment[]>>;
+  /**
+   * Ventas de hoy, de 7 dias, del mes y del mes anterior, por moneda, que arma
+   * el servidor. Con el plan Analitica, ademas la comparacion con el periodo
+   * anterior. Un cajero recibe solo hoy.
+   */
+  getMerchantSummary(merchantId: string): Promise<ApiResponse<ResumenDelComercio>>;
+  /** El total de cada dia del periodo, por moneda. */
+  getMerchantDailyTotals(merchantId: string, periodo: PeriodoDeVentas): Promise<ApiResponse<TotalDelDia[]>>;
+  /** Los retiros del saldo del negocio en el periodo. Dueno o encargado. */
+  getMerchantWithdrawals(merchantId: string, periodo: PeriodoDeVentas): Promise<ApiResponse<RetiroDelComercio[]>>;
   /** Aggregated sales report (daily, by location, by collector). Owner/manager. */
   getMerchantReport(merchantId: string, days: number): Promise<ApiResponse<BusinessReport>>;
   /**
@@ -319,7 +405,13 @@ export interface IQRPaymentRepository {
    */
   // idioma: el de la app; el servidor escribe el encabezado, las secciones y
   // el nombre del archivo en ese idioma (sin el, en espanol).
-  exportMerchantReportCsv(merchantId: string, days: number, idioma?: string): Promise<ApiResponse<ArchivoDescargado>>;
+  // periodo: si se da, el servidor exporta ese periodo y `days` no cuenta.
+  exportMerchantReportCsv(
+    merchantId: string,
+    days: number,
+    idioma?: string,
+    periodo?: PeriodoDeVentas,
+  ): Promise<ApiResponse<ArchivoDescargado>>;
   // Team (owner manages; identified by the cedula the employee registered with).
   getStaff(merchantId: string): Promise<ApiResponse<StaffMember[]>>;
   addStaff(merchantId: string, cedula: string, role: 'cashier' | 'manager', locationId?: string): Promise<ApiResponse<StaffMember>>;

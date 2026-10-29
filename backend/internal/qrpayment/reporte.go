@@ -34,6 +34,36 @@ type ventanaReporte struct {
 	desde, hasta  time.Time // [desde, hasta]: la ventana llega hasta ahora
 	anteriorDesde time.Time // [anteriorDesde, anteriorHasta)
 	anteriorHasta time.Time
+	// acotada: la ventana termina en `hasta` y las consultas cortan ahi (el mes
+	// anterior no llega hasta ahora). Las de siempre llegan hasta ahora y no
+	// cortan nada.
+	acotada bool
+}
+
+// hastaDia es el ultimo dia de la ventana, en la zona del cliente.
+func (v ventanaReporte) hastaDia() string {
+	if v.acotada {
+		return diaInclusivo(v.hasta)
+	}
+	return v.hasta.Format(formatoDia)
+}
+
+// anteriorHastaDia es el ultimo dia de la ventana anterior.
+func (v ventanaReporte) anteriorHastaDia() string {
+	if v.acotada {
+		return diaInclusivo(v.anteriorHasta)
+	}
+	return v.anteriorHasta.Format(formatoDia)
+}
+
+// limiteSuperior es el corte de las consultas, o nil si la ventana llega hasta
+// ahora y no corta nada.
+func (v ventanaReporte) limiteSuperior() *time.Time {
+	if !v.acotada {
+		return nil
+	}
+	hasta := v.hasta.UTC()
+	return &hasta
 }
 
 // calcularVentana arma la ventana de `days` dias de calendario en la zona del
@@ -136,7 +166,7 @@ func NombreDelReporteCSV(rep *MerchantReport, idioma string) string {
 func compararTotales(v ventanaReporte, actual, anterior ReportBucket) *ReportComparison {
 	return &ReportComparison{
 		PreviousFrom:   v.anteriorDesde.Format(formatoDia),
-		PreviousTo:     v.anteriorHasta.Format(formatoDia),
+		PreviousTo:     v.anteriorHastaDia(),
 		PreviousTotals: anterior,
 		Delta: ReportDelta{
 			Gross:    actual.Gross - anterior.Gross,

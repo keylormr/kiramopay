@@ -73,8 +73,9 @@ type Merchant struct {
 	ClosedBy      string     `json:"closed_by,omitempty"`
 	ClosureReason string     `json:"closure_reason,omitempty"`
 
-	// OwnerName es el nombre del dueno. Solo lo llena la lista de
-	// administracion, para que se sepa de quien es cada comercio.
+	// OwnerName es el nombre del dueno. Lo llenan la lista de administracion,
+	// para que se sepa de quien es cada comercio, y la lista de quien trabaja en
+	// el comercio sin ser su dueno, para que sepa a quien pedirle un permiso.
 	OwnerName string `json:"owner_name,omitempty"`
 
 	// Role is how the REQUESTING user relates to this merchant (owner, manager
@@ -211,6 +212,15 @@ type QRPaymentRecord struct {
 	TxID        string     `json:"tx_id,omitempty"` // linked transaction ID
 	CreatedAt   time.Time  `json:"created_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+
+	// Nombres que solo llena el feed del comercio (GetMerchantPayments), para
+	// el detalle del cobro. Vacios cuando no se pudieron resolver —la cuenta ya
+	// no existe, la sucursal se borro— o cuando la venta no los tiene: no se
+	// inventan. Para una venta anterior al equipo, collected_by y
+	// collector_name salen los dos vacios.
+	PayerName     string `json:"payer_name,omitempty"`
+	LocationName  string `json:"location_name,omitempty"`
+	CollectorName string `json:"collector_name,omitempty"`
 }
 
 // ── Request DTOs ─────────────────────────────────────────────────────────────

@@ -505,7 +505,7 @@ const Layout = () => {
             ? <BusinessReportsView merchant={activeMerchant} />
             : <BusinessHomeView merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
         case 'movements':
-          return <BusinessMovementsView payments={bizPayments} paymentsFailed={bizPaymentsFailed} />;
+          return <BusinessMovementsView key={activeMerchant.id} merchant={activeMerchant} />;
         case 'settings':
           return (
             <BusinessSettingsView

@@ -3838,12 +3838,14 @@ export interface paths {
         };
         /**
          * Sales report of a merchant (owner or manager)
-         * @description Calendar window of `days` days in the client's timezone, up to now; for a closed merchant, up to the moment it closed, since it no longer sells. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists.
+         * @description Calendar window of `days` days in the client's timezone, up to now; for a closed merchant, up to the moment it closed, since it no longer sells. With the analitica plan the report also carries `comparison`: the same window moved `days` days back and cut at the same hour, so today's half day is not compared with a whole day. With the base plan `comparison` is absent. Anyone who is not the owner or a manager gets 404, without learning whether the merchant exists. With `period` the window is that period (the previous month ends where this one starts) and `days` is ignored.
          */
         get: {
             parameters: {
                 query?: {
                     days?: number;
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period?: "today" | "week" | "month" | "prev_month";
                     /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
                     tz?: number;
                 };
@@ -3862,6 +3864,15 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["MerchantReport"];
+                    };
+                };
+                /** @description INVALID_PERIOD — period is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description NOT_FOUND (unknown merchant, or the caller is not its owner or manager) */
@@ -3890,12 +3901,14 @@ export interface paths {
         };
         /**
          * Export the sales report as CSV (owner or manager, analitica plan)
-         * @description Same window and access as the report, plus the analitica plan. A closed merchant is the exception: its window ends when it closed, and its owner exports with any plan, since the plan was for operating. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has.
+         * @description Same window and access as the report, plus the analitica plan. A closed merchant is the exception: its window ends when it closed, and its owner exports with any plan, since the plan was for operating. The role is checked first: someone outside the team gets 404 and never learns which plan the merchant has. With `period` the window is that period (the movements screen exports the period it is showing) and `days` is ignored.
          */
         get: {
             parameters: {
                 query?: {
                     days?: number;
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period?: "today" | "week" | "month" | "prev_month";
                     /** @description Client offset in minutes WEST of UTC (Costa Rica = 360) */
                     tz?: number;
                     /** @description App language for the header, the section names, the label of the unassigned bucket and the file name. Missing or unknown: Spanish. */
@@ -3917,6 +3930,15 @@ export interface paths {
                     };
                     content: {
                         "text/csv": string;
+                    };
+                };
+                /** @description INVALID_PERIOD — period is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
                 /** @description PLAN_REQUIRED (the merchant does not have the analitica plan) */
@@ -4215,11 +4237,15 @@ export interface paths {
         };
         /**
          * Sales of a merchant, newest first (whole team)
-         * @description Sales by pages, newest first: `limit` of them (50 by default), and with `before` the ones that follow the payment with that id. A page shorter than `limit` is the last one. The owner of a closed merchant still reads them; its former staff does not.
+         * @description Sales by pages, newest first: `limit` of them (50 by default), and with `before` the ones that follow the payment with that id. A page shorter than `limit` is the last one. The owner of a closed merchant still reads them; its former staff does not. With `period` only the payments of that period come, counted in the client's calendar day (`tz`); the period is asked of the server, not filtered on the screen, so a page never hides a day half loaded. Every payment carries the names of who paid, of the location and of the cashier when they could be resolved.
          */
         get: {
             parameters: {
                 query?: {
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period?: "today" | "week" | "month" | "prev_month";
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
                     /** @description Page size. Absent, 50; above the maximum, the maximum. */
                     limit?: number;
                     /** @description Id of the last payment of the previous page. One that is not a payment of this merchant gives an empty page. */
@@ -4242,7 +4268,7 @@ export interface paths {
                         "application/json": components["schemas"]["QRPaymentRecord"][];
                     };
                 };
-                /** @description INVALID_CURSOR — before is not an id. */
+                /** @description INVALID_CURSOR — before is not an id. INVALID_PERIOD — period is not one of the four. */
                 400: {
                     headers: {
                         [name: string]: unknown;
@@ -4253,6 +4279,214 @@ export interface paths {
                 };
                 /** @description NOT_FOUND — unknown merchant, or the caller does not have the role (not told apart). */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/payments/daily": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales of each day of a period, by currency (whole team)
+         * @description One row per day and currency, the most recent day first, for the total of each day in the movements list. Only completed sales count: a refunded payment shows in the list but is not a sale. Currencies are never added together. The day is the client's calendar day (`tz`). The owner of a closed merchant reads it, with the period counted from the day it closed.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period: "today" | "week" | "month" | "prev_month";
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Totals per day and currency (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantDayTotal"][];
+                    };
+                };
+                /** @description INVALID_PERIOD — period is missing or is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FETCH_FAILED — the totals could not be read. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/withdrawals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Withdrawals from the merchant balance in a period (owner or manager)
+         * @description The completed withdrawals from the shop's balance to its owner's account, the most recent first (at most 200). They are movements of the shop, not sales. A cashier does not see the balance, and so does not see what is withdrawn from it: it gets 404, like anyone outside the team.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Calendar period in the client's timezone (see tz): `today`, `week` (the last 7 days, today included), `month` (day 1 up to now) or `prev_month` (the previous month, whole). Any other value is a 400 INVALID_PERIOD. */
+                    period: "today" | "week" | "month" | "prev_month";
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Withdrawals (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantWithdrawalRecord"][];
+                    };
+                };
+                /** @description INVALID_PERIOD — period is missing or is not one of the four. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller is not its owner or a manager (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FETCH_FAILED — the withdrawals could not be read. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales of today, the last 7 days, this month and the previous month, by currency
+         * @description Completed sales per period, one entry per currency (currencies are never added together). A period without sales comes with an empty `currencies`: the server counted it. With the analitica plan every currency also carries `previous` and `delta`: the same period moved back, cut at the same hour (today against yesterday up to now; this month against the previous month up to the same day and hour, whole when it was shorter). With the base plan they are absent. A cashier gets only `today`, without comparison: the week and the month are the business's numbers, like the report. The owner of a closed merchant reads it, with the periods counted from the day it closed.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Client offset in minutes WEST of UTC, as JS getTimezoneOffset returns it (Costa Rica = 360) */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Summary */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantSummary"];
+                    };
+                };
+                /** @description NOT_FOUND — unknown merchant, or the caller is not on its team (not told apart). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description FETCH_FAILED — the summary could not be read. */
+                500: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -11057,7 +11291,7 @@ export interface components {
             closed_by?: string;
             /** @description Why it was closed: owner_request when its owner closed it, or the reason an administrator wrote. Absent while it is open. */
             closure_reason?: string;
-            /** @description Owner's display name (only in the administrator's list) */
+            /** @description Owner's display name. In the administrator's list, and in the list of someone who works at the merchant without owning it (so they know whom to ask for a permission). Absent in the owner's own list and when it could not be resolved. */
             owner_name?: string;
         };
         MerchantProfileRequest: {
@@ -11121,6 +11355,101 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             completed_at?: string;
+            /** @description Who paid. Only in the merchant's sales feed; absent when the account could not be resolved. Never filled in. */
+            payer_name?: string;
+            /** @description Name of the location the charge was for. Absent when the sale has no location (location_id is absent too) or the name could not be resolved. */
+            location_name?: string;
+            /** @description Name of the team member who issued the charge. Absent for a sale from before the team existed (collected_by is absent too). */
+            collector_name?: string;
+        };
+        MerchantDayTotal: {
+            /**
+             * Format: date
+             * @description Calendar day in the client's timezone
+             */
+            date: string;
+            currency: string;
+            /**
+             * Format: int64
+             * @description Minor units charged to payers
+             */
+            gross: number;
+            /**
+             * Format: int64
+             * @description Minor units of commission
+             */
+            fee: number;
+            /**
+             * Format: int64
+             * @description gross - fee
+             */
+            net: number;
+            count: number;
+        };
+        MerchantWithdrawalRecord: {
+            /**
+             * Format: uuid
+             * @description The withdrawal's transaction id
+             */
+            id: string;
+            /**
+             * Format: int64
+             * @description Minor units withdrawn
+             */
+            amount: number;
+            currency: string;
+            status: string;
+            /** @description Who withdrew it; absent when it could not be resolved */
+            withdrawn_by_name?: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MerchantSummaryCurrency: {
+            currency: string;
+            /**
+             * Format: int64
+             * @description Minor units charged to payers
+             */
+            gross: number;
+            /** Format: int64 */
+            fee: number;
+            /** Format: int64 */
+            net: number;
+            count: number;
+            previous?: components["schemas"]["ReportBucket"];
+            delta?: components["schemas"]["ReportDelta"];
+        };
+        MerchantSummaryPeriod: {
+            /** @enum {string} */
+            period: "today" | "week" | "month" | "prev_month";
+            /**
+             * Format: date
+             * @description First day of the period, in the client's timezone
+             */
+            from: string;
+            /**
+             * Format: date
+             * @description Last day of the period
+             */
+            to: string;
+            /**
+             * Format: date
+             * @description Only with the analitica plan
+             */
+            previous_from?: string;
+            /**
+             * Format: date
+             * @description Only with the analitica plan
+             */
+            previous_to?: string;
+            /** @description One entry per currency with sales; empty when the period had none. */
+            currencies: components["schemas"]["MerchantSummaryCurrency"][];
+        };
+        MerchantSummary: {
+            /** @enum {string} */
+            plan: "base" | "analitica";
+            /** @description Today, week, month and prev_month; a cashier gets only today. */
+            periods: components["schemas"]["MerchantSummaryPeriod"][];
         };
         StaffMember: {
             /** Format: uuid */

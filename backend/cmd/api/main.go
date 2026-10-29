@@ -1197,6 +1197,11 @@ func main() {
 			r.Get("/qr/merchants/{id}/balance", qrHandler.GetMerchantBalance)
 			r.Post("/qr/merchants/{id}/withdraw", qrHandler.WithdrawMerchant)
 			r.Get("/qr/merchants/{id}/payments", qrHandler.GetMerchantPayments)
+			// Interfaz del comercio: totales de cada dia, retiros y el resumen por
+			// periodo (hoy, 7 dias, mes y mes anterior).
+			r.Get("/qr/merchants/{id}/payments/daily", qrHandler.GetMerchantDailyTotals)
+			r.Get("/qr/merchants/{id}/withdrawals", qrHandler.GetMerchantWithdrawals)
+			r.Get("/qr/merchants/{id}/summary", qrHandler.GetMerchantSummary)
 			r.Get("/qr/merchants/{id}/report", qrHandler.GetMerchantReport)
 			// Exportacion del reporte: plan analitica del comercio.
 			r.Get("/qr/merchants/{id}/report.csv", qrHandler.GetMerchantReportCSV)

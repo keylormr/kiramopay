@@ -180,7 +180,8 @@ describe('BusinessMovementsView: por dia, con el total de cada dia', () => {
     await waitFor(() =>
       expect(mocks.api.qrPayments.getMerchantPayments).toHaveBeenLastCalledWith('m1', { periodo: 'week', antesDe: `p${VENTAS_POR_PAGINA - 1}` }),
     );
-  });
+    // Una pagina entera de filas con icono: las consultas por rol de jsdom son lentas, no la pantalla.
+  }, 20000);
 });
 
 describe('BusinessMovementsView: un icono por tipo de movimiento', () => {
@@ -253,7 +254,7 @@ describe('BusinessMovementsView: el detalle de cada cobro', () => {
     mocks.api.qrPayments.getMerchantPayments.mockResolvedValue({
       success: true,
       data: [cobro('p1', {
-        amount: 100000, fee: 500, txId: 'tx-9f3a', locationId: 'l1', collectedBy: 'u3', note: '2x Cafe',
+        txId: 'tx-9f3a', locationId: 'l1', collectedBy: 'u3', note: '2x Cafe',
         payerName: 'Ana Mora', locationName: 'Sucursal Centro', collectorName: 'Luis Rojas',
       })],
     });

@@ -311,9 +311,9 @@ func TestTotalesPorDia_AgrupanPorDiaYMonedaYSoloContabilizanLoCompletado(t *test
 	}
 
 	type fila struct {
-		fecha, moneda          string
-		bruto, comision, neto  int64
-		cobros                 int
+		fecha, moneda         string
+		bruto, comision, neto int64
+		cobros                int
 	}
 	quiero := []fila{
 		{"2026-10-29", "CRC", 100000, 500, 99500, 1}, // la devuelta (5.000) no cuenta

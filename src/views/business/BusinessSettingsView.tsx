@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
@@ -49,6 +49,9 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
   // everything; a manager runs locations/catalog; a cashier only reads.
   const isOwner = merchant.role === 'owner';
   const canManage = isOwner || merchant.role === 'manager';
+  const idRol = useId();
+  // Quien eres en este comercio y que puedes hacer en el.
+  const claveDelRol = isOwner ? 'business_role_owner' : merchant.role === 'manager' ? 'business_role_manager' : 'business_role_cashier';
 
   const [showTeam, setShowTeam] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
@@ -186,6 +189,22 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           <p className="text-xs text-[var(--color-danger)] mt-2">{merchant.rejectionReason}</p>
         )}
       </div>
+
+      {/* Tu rol y, si no eres el dueno, quien es: a quien pedirle un permiso. */}
+      <section aria-labelledby={idRol} className="uv-surface-1 rounded-2xl uv-shadow-soft overflow-hidden">
+        <h3 id={idRol} className="px-4 pt-3.5 pb-1 text-xs font-bold uv-text-muted uppercase tracking-wider">
+          {t('business_you_title')}
+        </h3>
+        <div className="divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+          <Row label={t('business_your_role')} value={t(claveDelRol)} />
+          {/* El nombre que el servidor no dio se dice: un hueco o un guion se leerian como un dato. */}
+          {!isOwner && <Row label={t('business_owner_label')} value={merchant.ownerName ?? t('business_no_disponible')} />}
+        </div>
+        <div className="px-4 pt-2 pb-3.5 space-y-1 text-xs uv-text-muted">
+          <p>{t(`${claveDelRol}_desc` as Parameters<typeof t>[0])}</p>
+          {!isOwner && <p>{t('business_owner_contact')}</p>}
+        </div>
+      </section>
 
       {/* Business data */}
       <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">

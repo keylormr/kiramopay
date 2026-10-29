@@ -16,11 +16,15 @@ import type {
   QRCharge,
   CatalogItem,
   MerchantLocation,
+  ResumenDelComercio,
 } from '@/api/repositories/qrpayment.repository';
 import { mensajeDelRechazoDelCobro, minutosParaVencer, textoDeDuracion } from '@/utils/erroresQr';
 import { conteoConPlural } from '@/utils/conteo';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
-import { fechaCorta } from '@/utils/fechaPlazo';
+import { movimientoDeCobro, type MovimientoDelComercio } from '@/utils/movimientosDelComercio';
+import { DetalleDeMovimiento } from './DetalleDeMovimiento';
+import { MovimientoFila } from './MovimientoFila';
+import { VentasDelNegocio, ventasDelPeriodo } from './VentasDelNegocio';
 
 interface Props {
   merchant: QRMerchant;
@@ -29,12 +33,6 @@ interface Props {
   paymentsFailed?: boolean;
   onReload: () => void;
 }
-
-const isToday = (iso: string) => {
-  const d = new Date(iso);
-  const now = new Date();
-  return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-};
 
 const CLAVES_DEL_RECHAZO_DEL_RETIRO: Readonly<Record<string, string>> = {
   // Sin respuesta, el retiro pudo haber salido. La llave se conserva, y eso es
@@ -47,7 +45,7 @@ const CLAVES_DEL_RECHAZO_DEL_RETIRO: Readonly<Record<string, string>> = {
 };
 
 export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, paymentsFailed = false, onReload }) => {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { state } = useApp();
   const base = state.accounts.find((a) => a.ccy === state.baseCurrency) || state.accounts[0];
   const ccy = base?.ccy ?? 'CRC';
@@ -103,6 +101,30 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     }`);
   // El retiro que ya estaba hecho (la repeticion): se dice en el inicio.
   const [retiroYaHecho, setRetiroYaHecho] = useState(false);
+
+  // Las ventas de hoy, de 7 dias y del mes las cuenta el servidor, en el dia de
+  // calendario de quien mira. undefined = cargando; null = no se pudo traer: no
+  // se pinta un cero en su lugar. Se vuelve a pedir cada vez que la lista de
+  // cobros se recarga, que es cuando entro una venta.
+  const [resumen, setResumen] = useState<ResumenDelComercio | null | undefined>(undefined);
+  const [intentoResumen, setIntentoResumen] = useState(0);
+  // El cobro reciente abierto en su detalle.
+  const [abierto, setAbierto] = useState<MovimientoDelComercio | null>(null);
+
+  useEffect(() => {
+    const api = getApiLayer().qrPayments;
+    if (!api) return;
+    let cancelled = false;
+    void Promise.resolve()
+      .then(() => api.getMerchantSummary(merchant.id))
+      .then((res) => {
+        if (!cancelled) setResumen(res.success && res.data ? res.data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setResumen(null);
+      });
+    return () => { cancelled = true; };
+  }, [merchant.id, payments, intentoResumen]);
 
   useEffect(() => {
     if (!canSeeBalance) return; // the endpoint is owner/manager-only
@@ -180,16 +202,14 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     formatMoney(v, (moneda || ccy) as CurrencyCode, { decimals: 2 });
   const SIN_DATO = '—';
 
-  // Un cobro trae su propia moneda. Sumarlos todos juntos y rotularlos con el
-  // simbolo de la moneda base de la aplicacion mezcla colones con dolares y
-  // ademas los etiqueta mal: el mismo defecto que se corrigio en la analitica.
-  const enMoneda = payments.filter((p) => (p.currency || ccy) === ccy);
-  const otraMoneda = payments.length - enMoneda.length;
-
-  const todays = enMoneda.filter((p) => isToday(p.createdAt));
-  const todayGross = todays.reduce((s, p) => s + p.amount, 0);
-  const totalFee = enMoneda.reduce((s, p) => s + p.fee, 0);
-  const ventana = enMoneda.length;
+  // Las ventas de hoy por moneda, la moneda base primero. Cada moneda en su
+  // linea: colones y dolares no se suman. Sin respuesta del servidor no hay
+  // cifra, y no se inventa un cero.
+  const hoy = resumen?.periods.find((p) => p.period === 'today');
+  const ventasDeHoy = hoy ? ventasDelPeriodo(hoy, ccy) : null;
+  const textoDeVentas = (v: { gross: number; count: number; currency: string }) =>
+    `${money(v.gross, v.currency)} · ${conteoConPlural(t, 'business_charges_count', v.count)}`;
+  const sinResumen = resumen === null;
 
   const cartItems = catalog.filter((c) => (cart[c.id] ?? 0) > 0);
   const cartTotal = cartItems.reduce((s, c) => s + c.price * (cart[c.id] ?? 0), 0);
@@ -345,8 +365,16 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">
               {balance === null ? '—' : money(balance)}
             </div>
-            <div className="relative text-white/70 text-sm">
-              {t('business_sales_today')}: {paymentsFailed ? SIN_DATO : `${money(todayGross)} · ${conteoConPlural(t, 'business_charges_count', todays.length)}`}
+            <div className="relative text-white/70 text-sm space-y-0.5">
+              {sinResumen ? (
+                <p>{`${t('business_sales_today')}: ${t('business_no_disponible')}`}</p>
+              ) : ventasDeHoy ? (
+                ventasDeHoy.map((v, i) => (
+                  <p key={v.currency}>{i === 0 ? `${t('business_sales_today')}: ${textoDeVentas(v)}` : textoDeVentas(v)}</p>
+                ))
+              ) : (
+                <span aria-hidden="true" className="inline-block h-4 w-44 rounded bg-white/20 animate-pulse" />
+              )}
             </div>
             {isOwner && (
               <button
@@ -364,9 +392,17 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             <span className="relative text-xs font-semibold uppercase tracking-wider text-white/70">
               {t('business_sales_today')}
             </span>
-            <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">{paymentsFailed ? SIN_DATO : money(todayGross)}</div>
+            <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">
+              {sinResumen ? SIN_DATO : ventasDeHoy ? money(ventasDeHoy[0].gross, ventasDeHoy[0].currency) : (
+                <span aria-hidden="true" className="inline-block h-8 w-36 rounded bg-white/20 animate-pulse align-middle" />
+              )}
+            </div>
             <div className="relative text-white/70 text-sm">
-              {conteoConPlural(t, 'business_charges_count', todays.length)} · {t('business_cashier_hint')}
+              {sinResumen
+                ? t('business_sales_summary_failed')
+                : ventasDeHoy
+                  ? `${conteoConPlural(t, 'business_charges_count', ventasDeHoy[0].count)} · ${t('business_cashier_hint')}`
+                  : t('loading')}
             </div>
           </>
         )}
@@ -398,68 +434,42 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
         {t('merchant_generate_qr')}
       </Button>
 
-      {/* Totales de la ventana consultada.
-          El servidor entrega los ULTIMOS 50 cobros, no el historico. Llamar
-          "total vendido" a la suma de esa ventana es dar por total un numero
-          truncado: un comercio con mas de 50 ventas veia menos de lo que
-          vendio, sin ninguna senal. Se rotula por lo que es, y el historico
-          completo esta en la pestana de reportes, que si agrega en el
-          servidor. */}
-      <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="uv-text-muted">{conteoConPlural(t, 'business_sales_window', ventana)}</span>
-          <span className="font-semibold uv-text-primary tabular-nums">
-            {paymentsFailed ? SIN_DATO : money(enMoneda.reduce((s, p) => s + p.amount, 0))}
-          </span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="uv-text-muted">{t('business_commission_paid')}</span>
-          <span className="font-semibold uv-text-primary tabular-nums">{paymentsFailed ? SIN_DATO : money(totalFee)}</span>
-        </div>
-        <div className="flex justify-between text-sm border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pt-2">
-          <span className="uv-text-muted">{t('merchant_net_received')}</span>
-          <span className="font-bold uv-text-primary tabular-nums">
-            {paymentsFailed ? SIN_DATO : money(enMoneda.reduce((s, p) => s + (p.amount - p.fee), 0))}
-          </span>
-        </div>
-        {otraMoneda > 0 && (
-          <p className="pt-1 text-xs uv-text-muted">
-            {t('other_currency_note').replace('{n}', String(otraMoneda))}
-          </p>
-        )}
-        {paymentsFailed && (
-          <button
-            onClick={onReload}
-            className="mt-1 w-full rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] py-2 text-sm font-bold uv-text-primary"
-          >
-            {t('error_retry')}
-          </button>
-        )}
-      </div>
+      {/* Ventas de hoy, de 7 dias y del mes, que cuenta el servidor. Antes habia
+          aqui la suma de los ultimos 50 cobros: una cifra sin periodo que
+          cambiaba con la cantidad de ventas y no decia de cuando era. */}
+      <VentasDelNegocio
+        resumen={resumen}
+        monedaBase={ccy}
+        esDelNegocio={canSeeBalance}
+        onReintentar={() => { setResumen(undefined); setIntentoResumen((n) => n + 1); }}
+      />
 
       {/* Recent movements */}
       <div>
         <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-2">{t('business_movements')}</h3>
         {paymentsFailed ? (
-          <p className="text-sm uv-text-muted">{t('business_sales_load_failed')}</p>
+          <div className="space-y-2">
+            <p className="text-sm uv-text-muted">{t('business_sales_load_failed')}</p>
+            <button
+              type="button"
+              onClick={onReload}
+              className="w-full rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] py-2 text-sm font-bold uv-text-primary"
+            >
+              {t('error_retry')}
+            </button>
+          </div>
         ) : payments.length === 0 ? (
           <p className="text-sm uv-text-muted">{t('merchant_history_empty')}</p>
         ) : (
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
             {payments.slice(0, 5).map((p) => (
-              <div key={p.id} className="flex items-center justify-between px-4 py-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold uv-text-primary tabular-nums">{money(p.amount - p.fee, p.currency)}</p>
-                  <p className="text-[11px] uv-text-muted">
-                    {t('merchant_fee_label')} {money(p.fee, p.currency)} · {fechaCorta(p.createdAt, language)}
-                  </p>
-                </div>
-                <p className="text-[11px] uv-text-muted shrink-0">{t('merchant_gross')} {money(p.amount, p.currency)}</p>
-              </div>
+              <MovimientoFila key={p.id} movimiento={movimientoDeCobro(p)} tzOffsetMin={new Date().getTimezoneOffset()} onAbrir={setAbierto} conFecha />
             ))}
           </div>
         )}
       </div>
+
+      <DetalleDeMovimiento movimiento={abierto} tzOffsetMin={new Date().getTimezoneOffset()} onClose={() => setAbierto(null)} />
 
       {/* Withdraw to the owner's personal wallet */}
       <BottomSheet isOpen={showWithdraw} onClose={() => setShowWithdraw(false)} title={t('business_withdraw')}>
