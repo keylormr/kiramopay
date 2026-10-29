@@ -137,6 +137,32 @@ describe('Dividir cuenta, detalle: estado del grupo y cancelacion', () => {
   });
 });
 
+describe('Capital propio en el panel: dice cuanto falta y que no frena nada', () => {
+  it.each(idiomas)('%s: tiene todos los textos', (_idioma, d) => {
+    for (const clave of [
+      'admin_capital_menu', 'admin_capital_menu_desc', 'admin_capital_title', 'admin_capital_explain',
+      'admin_capital_shortfall', 'admin_capital_ok', 'admin_capital_failed', 'admin_capital_empty',
+    ]) {
+      expect(d[clave]?.trim(), clave).toBeTruthy();
+    }
+  });
+
+  // El faltante lleva el monto: sin el marcador, el texto no diria cuanto.
+  it.each(idiomas)('%s: el aviso de faltante lleva el marcador del monto', (_idioma, d) => {
+    expect(d.admin_capital_shortfall).toContain('{monto}');
+  });
+
+  conLaFrase('admin_capital_explain', {
+    es: 'las operaciones siguen funcionando',
+    en: 'operations keep working',
+    fr: 'les opérations continuent de fonctionner',
+    pt: 'as operações continuam funcionando',
+    'zh-cn': '业务照常运行',
+    ja: '取引は通常どおり続行されます',
+    hi: 'ऑपरेशन चलते रहते हैं',
+  });
+});
+
 describe('Pagos protegidos: fecha de creacion y moneda del monto', () => {
   it.each(idiomas)('%s: tiene el rotulo de la fecha y la moneda', (_idioma, d) => {
     expect(d.escrow_date_created?.trim()).toBeTruthy();

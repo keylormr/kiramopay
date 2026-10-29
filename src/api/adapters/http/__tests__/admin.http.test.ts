@@ -42,3 +42,52 @@ describe('HttpAdminRepository y el plan de una persona', () => {
     expect(res.error?.code).toBe('RATE_LIMITED');
   });
 });
+
+describe('HttpAdminRepository y el capital propio', () => {
+  it('lee GET /api/v1/admin/capital y devuelve lo que dice el libro, por moneda', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: {
+        currencies: [
+          { currency: 'CRC', balance_minor: -19670, shortfall_minor: 19670, negative: true },
+          { currency: 'USD', balance_minor: 0, shortfall_minor: 0, negative: false },
+        ],
+        as_of: '2026-10-29T15:00:00Z',
+      },
+    });
+    const res = await new HttpAdminRepository(fakeClient({ get })).capitalPropio();
+
+    expect(get).toHaveBeenCalledWith('/api/v1/admin/capital');
+    expect(res.success).toBe(true);
+    expect(res.data).toEqual([
+      { moneda: 'CRC', saldoMinor: -19670, faltanteMinor: 19670, enNegativo: true },
+      { moneda: 'USD', saldoMinor: 0, faltanteMinor: 0, enNegativo: false },
+    ]);
+  });
+
+  it('un fallo conserva el codigo y no inventa monedas en cero', async () => {
+    const get = vi.fn().mockResolvedValue({ success: false, error: { code: 'CAPITAL_UNAVAILABLE', message: 'x' } });
+    const res = await new HttpAdminRepository(fakeClient({ get })).capitalPropio();
+
+    expect(res.success).toBe(false);
+    expect(res.error?.code).toBe('CAPITAL_UNAVAILABLE');
+    expect(res.data).toBeUndefined();
+  });
+
+  it('una respuesta que no trae la lista no es un exito con cero cuentas', async () => {
+    const get = vi.fn().mockResolvedValue({ success: true, data: { as_of: 'x' } });
+    const res = await new HttpAdminRepository(fakeClient({ get })).capitalPropio();
+
+    expect(res.success).toBe(false);
+  });
+
+  it('una fila sin saldo numerico no se cuenta como cero', async () => {
+    const get = vi.fn().mockResolvedValue({
+      success: true,
+      data: { currencies: [{ currency: 'CRC', balance_minor: 'raro' }] },
+    });
+    const res = await new HttpAdminRepository(fakeClient({ get })).capitalPropio();
+
+    expect(res.success).toBe(false);
+  });
+});
