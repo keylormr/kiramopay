@@ -11,11 +11,16 @@ import { conteoConPlural } from '@/utils/conteo';
 import { dinero } from './MovimientoFila';
 import { ChipVariacion } from './ChipVariacion';
 
-/** Los periodos del inicio, en el orden en que se leen. */
-const PERIODOS_DEL_INICIO: ReadonlyArray<{ id: PeriodoDeVentas; etiqueta: string; contra: string }> = [
-  { id: 'today', etiqueta: 'business_period_today', contra: 'business_sales_vs_yesterday' },
-  { id: 'week', etiqueta: 'business_period_week', contra: 'business_sales_vs_week' },
-  { id: 'month', etiqueta: 'business_period_month', contra: 'business_sales_vs_month' },
+/**
+ * Los periodos del inicio, en el orden en que se leen. El periodo anterior se
+ * corta en el mismo punto que el actual (la misma hora de ayer, el mismo tramo
+ * del mes anterior), y los rotulos lo dicen: "contra ayer" se leeria como contra
+ * el dia entero.
+ */
+const PERIODOS_DEL_INICIO: ReadonlyArray<{ id: PeriodoDeVentas; etiqueta: string; contra: string; sinAntes: string }> = [
+  { id: 'today', etiqueta: 'business_period_today', contra: 'business_sales_vs_yesterday', sinAntes: 'business_sales_prev_none_today' },
+  { id: 'week', etiqueta: 'business_period_week', contra: 'business_sales_vs_week', sinAntes: 'business_sales_prev_none_week' },
+  { id: 'month', etiqueta: 'business_period_month', contra: 'business_sales_vs_month', sinAntes: 'business_sales_prev_none_month' },
 ];
 
 /**
@@ -77,7 +82,7 @@ export const VentasDelNegocio: React.FC<Props> = ({ resumen, monedaBase, esDelNe
       ) : (
         <>
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
-            {PERIODOS_DEL_INICIO.map(({ id, etiqueta, contra }) => {
+            {PERIODOS_DEL_INICIO.map(({ id, etiqueta, contra, sinAntes }) => {
               const periodo = resumen.periods.find((p) => p.period === id);
               if (!periodo) return null;
               const nombre = t(etiqueta as Parameters<typeof t>[0]);
@@ -86,18 +91,26 @@ export const VentasDelNegocio: React.FC<Props> = ({ resumen, monedaBase, esDelNe
                 <div key={id} role="group" aria-label={nombre} className="flex items-start justify-between gap-4 px-4 py-3.5">
                   <span className="shrink-0 whitespace-nowrap pt-0.5 text-sm font-semibold uv-text-secondary">{nombre}</span>
                   <div className="min-w-0 flex-1 space-y-2.5 text-right">
-                    {filas.map((f) => (
-                      <div key={f.currency}>
-                        <p className="text-lg font-bold uv-text-primary tabular-nums">{dinero(f.gross, f.currency)}</p>
-                        <p className="text-xs uv-text-muted tabular-nums">{cuenta(f.count)}</p>
-                        {f.delta && (
-                          <p className="mt-1 flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-xs uv-text-muted">
-                            <ChipVariacion pct={f.delta.grossPct} />
-                            <span>{t(contra as Parameters<typeof t>[0])}</span>
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                    {filas.map((f) => {
+                      // El periodo anterior sin cobros no tiene porcentaje que dar: se
+                      // dice en una sola frase, sin chip ni signo.
+                      const antesSinVentas = f.previous ? f.previous.count === 0 : f.delta?.grossPct === null;
+                      return (
+                        <div key={f.currency}>
+                          <p className="text-lg font-bold uv-text-primary tabular-nums">{dinero(f.gross, f.currency)}</p>
+                          <p className="text-xs uv-text-muted tabular-nums">{cuenta(f.count)}</p>
+                          {f.delta && antesSinVentas && (
+                            <p className="mt-1 text-xs uv-text-muted">{t(sinAntes as Parameters<typeof t>[0])}</p>
+                          )}
+                          {f.delta && !antesSinVentas && f.delta.grossPct !== null && (
+                            <p className="mt-1 flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-xs uv-text-muted">
+                              <ChipVariacion pct={f.delta.grossPct} />
+                              <span>{t(contra as Parameters<typeof t>[0])}</span>
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

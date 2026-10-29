@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { BusinessHomeView } from '../BusinessHomeView';
 import type { QRMerchant, QRPayment, ResumenDelComercio, VentasPorMoneda } from '@/api/repositories/qrpayment.repository';
@@ -87,7 +87,7 @@ describe('BusinessHomeView', () => {
     expect(await screen.findByText('No se pudieron cargar las ventas.')).toBeTruthy();
     // ₡0.00 seria una afirmacion sobre las ventas del dia que nadie hizo.
     expect(screen.queryByText('₡0.00')).toBeNull();
-    expect(screen.queryByText(/Ventas de hoy: ₡0/)).toBeNull();
+    expect(screen.queryByText(/Ventas de hoy/)).toBeNull();
   });
 
   it('un comercio que de verdad no vendio hoy si ve cero', async () => {
@@ -129,14 +129,19 @@ describe('BusinessHomeView: singular y plural', () => {
   it('las ventas de hoy dicen de que es la cuenta: "1 cobro", no un "1" suelto', async () => {
     pintar();
 
-    expect(await screen.findByText('Ventas de hoy: ₡1,000.00 · 1 cobro')).toBeTruthy();
+    const hoy = await grupoDeHoy();
+    expect(within(hoy).getByText('₡1,000.00')).toBeTruthy();
+    expect(within(hoy).getByText('1 cobro')).toBeTruthy();
   });
 
   it('las ventas de hoy con varios cobros: "3 cobros"', async () => {
     mocks.getMerchantSummary.mockResolvedValue({ success: true, data: resumenDeHoy([venta('CRC', 3500, 3)]) });
     pintar();
 
-    expect(await screen.findByText('Ventas de hoy: ₡3,500.00 · 3 cobros')).toBeTruthy();
-    await waitFor(() => expect(within(screen.getByRole('group', { name: 'Hoy' })).getByText('3 cobros')).toBeTruthy());
+    const hoy = await grupoDeHoy();
+    expect(within(hoy).getByText('₡3,500.00')).toBeTruthy();
+    expect(within(hoy).getByText('3 cobros')).toBeTruthy();
+    // Una sola vez: la tarjeta del saldo no las repite.
+    expect(screen.queryByText(/Ventas de hoy/)).toBeNull();
   });
 });

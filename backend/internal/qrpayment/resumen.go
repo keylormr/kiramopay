@@ -189,7 +189,7 @@ func (s *Service) VentasDelComercioEnPeriodo(
 	} else if limit > 200 {
 		limit = 200
 	}
-	v := calcularVentanaDePeriodo(anclarAhora(m, ahora), p, tzOffsetMin)
+	v := calcularVentanaDePeriodo(anclarAhora(m, ahora), p, sanearDesfase(tzOffsetMin))
 	desde, hasta := v.desde.UTC(), v.hasta.UTC()
 	return s.repo.GetMerchantPaymentsEnVentana(ctx, m.ID, limit, antesDe, &desde, &hasta)
 }
@@ -219,7 +219,7 @@ func (s *Service) RetirosDelComercio(
 	if err != nil || m == nil || (role != RoleOwner && role != RoleManager) {
 		return nil, ErrComercioNoEncontrado
 	}
-	v := calcularVentanaDePeriodo(anclarAhora(m, ahora), p, tzOffsetMin)
+	v := calcularVentanaDePeriodo(anclarAhora(m, ahora), p, sanearDesfase(tzOffsetMin))
 	return s.repo.RetirosDelComercio(ctx, m.ID, v.desde.UTC(), v.hasta.UTC())
 }
 

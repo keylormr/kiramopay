@@ -608,6 +608,33 @@ func TestRetiros_SeListanPorPeriodoYSoloLosVeElDuenoOElEncargado(t *testing.T) {
 	}
 }
 
+// Un desfase fuera de rango (tz=9999) no rompe la consulta ni abre una ventana
+// rara: se lee como UTC, igual que en los totales por dia.
+func TestRetiros_UnDesfaseFueraDeRangoSeLeeComoUTC(t *testing.T) {
+	v := armarVentas(t)
+	ctx := context.Background()
+
+	r, err := v.svc.WithdrawToOwner(ctx, v.merchant.ID, v.owner, "CRC", 20000, "retiro-desfase")
+	if err != nil {
+		t.Fatalf("retiro: %v", err)
+	}
+	// 03:00Z del 29: hoy en UTC, pero todavia ayer (21:00 del 28) en Costa Rica.
+	if _, err := v.pool.Exec(ctx, `UPDATE transactions SET created_at = '2026-10-29T03:00:00Z' WHERE id = $1::uuid`, r.TransactionID); err != nil {
+		t.Fatalf("mover retiro: %v", err)
+	}
+
+	enCostaRica, err := v.svc.RetirosDelComercio(ctx, v.merchant.ID, v.owner, qrpayment.PeriodoHoy, 360, ahoraDeLaInterfaz)
+	if err != nil || len(enCostaRica) != 0 {
+		t.Fatalf("en Costa Rica el retiro es de ayer: %+v (err %v)", enCostaRica, err)
+	}
+	for _, tz := range []int{0, 9999, -9999} {
+		retiros, err := v.svc.RetirosDelComercio(ctx, v.merchant.ID, v.owner, qrpayment.PeriodoHoy, tz, ahoraDeLaInterfaz)
+		if err != nil || len(retiros) != 1 || retiros[0].ID != r.TransactionID {
+			t.Fatalf("tz=%d debia leerse como UTC y traer el retiro: %+v (err %v)", tz, retiros, err)
+		}
+	}
+}
+
 func TestRetiros_UnRetiroDeOtroComercioNoSeMezcla(t *testing.T) {
 	v := armarVentas(t)
 	ctx := context.Background()

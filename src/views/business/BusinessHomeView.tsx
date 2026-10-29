@@ -207,8 +207,6 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   // cifra, y no se inventa un cero.
   const hoy = resumen?.periods.find((p) => p.period === 'today');
   const ventasDeHoy = hoy ? ventasDelPeriodo(hoy, ccy) : null;
-  const textoDeVentas = (v: { gross: number; count: number; currency: string }) =>
-    `${money(v.gross, v.currency)} · ${conteoConPlural(t, 'business_charges_count', v.count)}`;
   const sinResumen = resumen === null;
 
   const cartItems = catalog.filter((c) => (cart[c.id] ?? 0) > 0);
@@ -362,20 +360,11 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             <span className="relative text-xs font-semibold uppercase tracking-wider text-white/70">
               {t('business_balance')}
             </span>
-            <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">
+            <div className="relative text-3xl font-black mt-1 tabular-nums">
               {balance === null ? '—' : money(balance)}
             </div>
-            <div className="relative text-white/70 text-sm space-y-0.5">
-              {sinResumen ? (
-                <p>{`${t('business_sales_today')}: ${t('business_no_disponible')}`}</p>
-              ) : ventasDeHoy ? (
-                ventasDeHoy.map((v, i) => (
-                  <p key={v.currency}>{i === 0 ? `${t('business_sales_today')}: ${textoDeVentas(v)}` : textoDeVentas(v)}</p>
-                ))
-              ) : (
-                <span aria-hidden="true" className="inline-block h-4 w-44 rounded bg-white/20 animate-pulse" />
-              )}
-            </div>
+            {/* Las ventas de hoy ya estan en la seccion "Ventas" de abajo, que se
+                muestra a todos los roles: repetirlas aqui las contaba dos veces. */}
             {isOwner && (
               <button
                 onClick={() => { setWdError(''); setRetiroYaHecho(false); setShowWithdraw(true); }}

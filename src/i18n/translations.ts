@@ -416,6 +416,9 @@ export type TranslationKeys = {
   business_sales_vs_yesterday: string;
   business_sales_vs_week: string;
   business_sales_vs_month: string;
+  business_sales_prev_none_today: string;
+  business_sales_prev_none_week: string;
+  business_sales_prev_none_month: string;
   business_sales_compare_locked: string;
   business_sales_summary_failed: string;
   business_no_disponible: string;
