@@ -55,11 +55,12 @@ export const IconoDeMovimiento: React.FC<{ tipo: TipoDeMovimiento; grande?: bool
 };
 
 /**
- * Lo que el movimiento hizo con el saldo del negocio, con su signo escrito: un
- * cobro suma lo que el negocio recibe (neto), una devolucion y un retiro restan.
+ * El monto del movimiento con su signo escrito: un cobro suma lo que se vendio
+ * (el bruto, el mismo con el que se arma el total de cada dia), una devolucion y
+ * un retiro restan. La comision y el neto estan en el detalle.
  */
 export function montoConSigno(m: MovimientoDelComercio): { texto: string; entra: boolean } {
-  if (m.tipo === 'cobro') return { texto: `+${dinero(m.neto, m.moneda)}`, entra: true };
+  if (m.tipo === 'cobro') return { texto: `+${dinero(m.monto, m.moneda)}`, entra: true };
   return { texto: `−${dinero(m.monto, m.moneda)}`, entra: false };
 }
 

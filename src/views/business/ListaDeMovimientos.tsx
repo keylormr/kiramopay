@@ -49,7 +49,7 @@ export const ListaDeMovimientos: React.FC<Props> = ({ movimientos, tzOffsetMin, 
               <div className="flex items-start justify-between gap-3 px-1 pb-2">
                 <h3 id={idTitulo} className="min-w-0 text-sm">
                   {relativo && <span className="font-bold uv-text-primary">{relativo} </span>}
-                  <span className={relativo ? 'uv-text-muted' : 'font-bold uv-text-primary'}>{primeraMayuscula(fecha, language)}</span>
+                  <span className={relativo ? 'uv-text-muted' : 'font-bold uv-text-primary'}>{relativo ? fecha : primeraMayuscula(fecha, language)}</span>
                 </h3>
                 <div className="shrink-0 text-right text-xs uv-text-muted tabular-nums">
                   {totales === null ? (

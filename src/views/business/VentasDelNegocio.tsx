@@ -84,14 +84,14 @@ export const VentasDelNegocio: React.FC<Props> = ({ resumen, monedaBase, esDelNe
               const filas = ventasDelPeriodo(periodo, monedaBase);
               return (
                 <div key={id} role="group" aria-label={nombre} className="flex items-start justify-between gap-4 px-4 py-3.5">
-                  <span className="pt-0.5 text-sm font-semibold uv-text-secondary">{nombre}</span>
-                  <div className="min-w-0 space-y-2.5 text-right">
+                  <span className="shrink-0 whitespace-nowrap pt-0.5 text-sm font-semibold uv-text-secondary">{nombre}</span>
+                  <div className="min-w-0 flex-1 space-y-2.5 text-right">
                     {filas.map((f) => (
                       <div key={f.currency}>
                         <p className="text-lg font-bold uv-text-primary tabular-nums">{dinero(f.gross, f.currency)}</p>
                         <p className="text-xs uv-text-muted tabular-nums">{cuenta(f.count)}</p>
                         {f.delta && (
-                          <p className="mt-1 flex items-center justify-end gap-1.5 text-xs uv-text-muted">
+                          <p className="mt-1 flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-xs uv-text-muted">
                             <ChipVariacion pct={f.delta.grossPct} />
                             <span>{t(contra as Parameters<typeof t>[0])}</span>
                           </p>

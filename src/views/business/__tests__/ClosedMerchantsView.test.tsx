@@ -98,7 +98,7 @@ describe('ClosedMerchantsView', () => {
     await user.click(await screen.findByRole('button', { name: /Cafeteria Central/ }));
 
     await waitFor(() => expect(mockApi.qrPayments.getMerchantPayments).toHaveBeenCalledWith('m1'));
-    expect(await screen.findByText('+₡995.00')).toBeInTheDocument();
+    expect(await screen.findByText('+₡1,000.00')).toBeInTheDocument();
     expect(screen.getByText(/Ya no cobra ni se puede editar/)).toBeInTheDocument();
     // Solo lectura: lo unico que se toca es volver, las dos pestanas y cada venta
     // para ver su detalle.
@@ -122,8 +122,8 @@ describe('ClosedMerchantsView', () => {
     await user.click(await screen.findByRole('button', { name: 'Ver más ventas' }));
 
     expect(mockApi.qrPayments.getMerchantPayments).toHaveBeenLastCalledWith('m1', { antesDe: 'p50' });
-    expect(await screen.findByText('+₡1,990.00')).toBeInTheDocument();
-    expect(screen.getAllByText('+₡995.00')).toHaveLength(50);
+    expect(await screen.findByText('+₡2,000.00')).toBeInTheDocument();
+    expect(screen.getAllByText('+₡1,000.00')).toHaveLength(50);
     // La ultima pagina vino incompleta: no hay mas que pedir.
     expect(screen.queryByRole('button', { name: 'Ver más ventas' })).toBeNull();
     // Cien filas con icono: las consultas por rol de jsdom son lentas, no la pantalla.
@@ -136,7 +136,7 @@ describe('ClosedMerchantsView', () => {
     pintar();
 
     await user.click(await screen.findByRole('button', { name: /Cafeteria Central/ }));
-    await screen.findByText('+₡995.00');
+    await screen.findByText('+₡1,000.00');
     expect(screen.queryByRole('button', { name: 'Ver más ventas' })).toBeNull();
   });
 
@@ -154,7 +154,7 @@ describe('ClosedMerchantsView', () => {
 
     expect(await screen.findByText('No se pudieron cargar más ventas.')).toBeInTheDocument();
     expect(screen.queryByText('server text')).toBeNull();
-    expect(screen.getAllByText('+₡995.00')).toHaveLength(50);
+    expect(screen.getAllByText('+₡1,000.00')).toHaveLength(50);
     expect(screen.getByRole('button', { name: 'Ver más ventas' })).toBeInTheDocument();
   });
 
