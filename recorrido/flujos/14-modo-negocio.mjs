@@ -1,7 +1,7 @@
 // Modo negocio del comercio de keilor: catalogo de productos, movimientos de
 // venta, reportes y retiro del saldo del negocio a su billetera personal.
 import { llave } from '../lib/entorno.mjs';
-import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, cambiarAPerfil, reposar } from '../lib/ui.mjs';
+import { abrirSesion, ir, boton, ultimoDialogo, dialogo, sinDialogos, verTexto, cambiarAPerfil, reposar } from '../lib/ui.mjs';
 import { clientes, centimos, asegurarComercio, adminKp, problemasDelLibro } from '../lib/comun.mjs';
 import { esperarHasta } from '../lib/api.mjs';
 import { reColones, txt, escapar } from '../lib/textos.mjs';
@@ -45,15 +45,29 @@ export default {
       await keilor.page.getByText(reColones(antes.negocio / 100)).first().waitFor({ state: 'visible', timeout: 10000 });
     });
 
-    await f.paso('El resumen del inicio del negocio concuerda en singular y plural', async (c) => {
-      // Con un solo cobro dice "Último cobro", con varios "Últimos N cobros" (nunca "Últimos 1 cobros").
-      const n = ventas.length;
-      const esperado = n === 1 ? txt('Último cobro') : `Últimos ${n} cobros`;
-      const aparece = await keilor.page.getByText(new RegExp(`^${escapar(esperado)}$`)).first().waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false);
-      if (!aparece) {
-        const hallado = await keilor.page.getByText(/[ÚU]ltimos?\s+(\d+\s+)?cobros?/).first().innerText().catch(() => null);
-        c.ok(false, `el resumen dice ${JSON.stringify(hallado)}: con ${n} cobro(s) debería decir "${esperado}"`);
+    await f.paso('Inicio: la sección "Ventas" (hoy, 7 días y mes) trae lo mismo que el resumen del servidor, con "1 cobro" en singular y "N cobros" en plural', async (c) => {
+      // El servidor cuenta cada periodo en el dia de calendario de quien mira (tz=360, Costa Rica, el mismo
+      // que usa el navegador del recorrido). La pantalla escribe el bruto y la cantidad de cobros de cada uno.
+      const resumen = (await api.keilor.exigir('GET', `${base()}/summary?tz=360`)).data;
+      const periodos = [['today', txt('Hoy')], ['week', txt('7 días')], ['month', txt('Este mes')]];
+      for (const [id, nombre] of periodos) {
+        const delServidor = resumen.periods.find((p) => p.period === id);
+        c.exigir(delServidor, `el resumen del servidor no trae el periodo "${id}"`);
+        const fila = delServidor.currencies.find((m) => m.currency === 'CRC') ?? { gross: 0, count: 0 };
+        // Con un solo cobro dice "1 cobro", con varios "N cobros" (nunca "1 cobros").
+        const cuenta = (fila.count === 1 ? txt('{n} cobro') : txt('{n} cobros')).replace('{n}', fila.count.toLocaleString('en-US'));
+        const grupo = keilor.page.getByRole('group', { name: nombre, exact: true });
+        const aparece = await grupo.getByText(new RegExp(`^${escapar(cuenta)}$`)).first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true, () => false);
+        if (!aparece) {
+          const hallado = await grupo.innerText().catch(() => null);
+          c.ok(false, `"${nombre}" dice ${JSON.stringify(hallado)}: el servidor cuenta ${fila.count} cobro(s) y debería decir "${cuenta}"`);
+          continue;
+        }
+        const bruto = await grupo.getByText(reColones(fila.gross / 100)).first().waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false);
+        c.ok(bruto, `"${nombre}" no muestra el bruto ₡${fila.gross / 100} que cuenta el servidor`);
       }
+      const mal = await keilor.page.getByText(/(^|\D)1 cobros/).count();
+      c.ok(mal === 0, 'la pantalla escribe "1 cobros" en plural');
     }, { seguir: true });
 
     await f.paso(`Ajustes > Catálogo: agrega el producto "${producto}" de ₡2.500`, async (c) => {
@@ -97,13 +111,91 @@ export default {
       await sinDialogos(keilor.page).catch(() => {});
     });
 
-    await f.paso('Movimientos: la pantalla lista las ventas con su neto, comisión y bruto', async (c) => {
-      await ir(keilor.page, txt('Movimientos'));
+    await f.paso('Movimientos: la venta sale bajo su día con el bruto en la fila, y su detalle trae la comisión y el neto que guarda el servidor', async (c) => {
       const venta = ventas[0];
-      const neto = (venta.amount - venta.fee) / 100;
-      await keilor.page.getByText(reColones(neto)).first().waitFor({ state: 'visible', timeout: 10000 });
       c.ok(venta.fee < venta.amount, `comisión inesperada: ${venta.fee} sobre ${venta.amount}`);
       c.igual(venta.status, 'completed', 'estado de la venta');
+      c.exigir(venta.charge_id, 'la venta más reciente no trae el cobro del que salió (charge_id)');
+      const neto = venta.amount - venta.fee;
+
+      // Lo que guarda el servidor: el libro acredita al comercio el neto y a las comisiones la comisión.
+      const lineas = bd.asiento({ llavePrefijo: `qr2:${venta.charge_id}:` });
+      const alComercio = lineas.find((l) => l.codigo.startsWith('MERCHANT:') && l.direccion === 'credit');
+      const alasComisiones = lineas.find((l) => l.codigo === 'SYSTEM:FEES:CRC' && l.direccion === 'credit');
+      c.ok(alComercio && Number(alComercio.monto) === neto, `el libro acredita al comercio ${alComercio?.monto} y el neto de la venta es ${neto}`);
+      c.ok(alasComisiones && Number(alasComisiones.monto) === venta.fee, `el libro acredita a las comisiones ${alasComisiones?.monto} y la comisión de la venta es ${venta.fee}`);
+
+      // El dia de la venta y el de hoy, en Costa Rica (la zona del navegador del recorrido y del tz=360 de la API).
+      const diaCR = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Costa_Rica' }).format(d);
+      const hoy = diaCR(new Date());
+      const ayer = diaCR(new Date(Date.now() - 86_400_000));
+      const dia = diaCR(new Date(venta.created_at));
+      c.exigir(dia >= ayer, `la venta más reciente es del ${dia}, de hace más de dos días: corra antes el flujo "cobro-qr"`);
+      const rotulo = dia === hoy ? txt('Hoy') : txt('Ayer');
+
+      await ir(keilor.page, txt('Movimientos'));
+      // Por omision la pantalla muestra "7 días". El total de cada día lo cuenta el servidor.
+      await boton(keilor.page, txt('7 días'), { exacto: true }).waitFor({ state: 'visible' });
+      c.igual(await boton(keilor.page, txt('7 días'), { exacto: true }).getAttribute('aria-pressed'), 'true', 'periodo elegido por omisión');
+      const totales = (await api.keilor.exigir('GET', `${base()}/payments/daily?period=week&tz=360`)).data ?? [];
+      const delDia = totales.find((t) => t.date === dia && t.currency === 'CRC');
+      c.exigir(delDia, `el servidor no trae el total del ${dia} en colones`);
+
+      const seccion = keilor.page.locator('section').filter({ has: keilor.page.getByRole('heading', { name: new RegExp(`^${escapar(rotulo)}\\b`) }) });
+      await seccion.first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => {
+        c.exigir(false, `la lista no tiene un día rotulado "${rotulo}" (el de la venta, ${dia})`);
+      });
+      const cuenta = (delDia.count === 1 ? txt('{n} cobro') : txt('{n} cobros')).replace('{n}', delDia.count.toLocaleString('en-US'));
+      const totalDelDia = new RegExp(`${reColones(delDia.gross / 100).source}\\s*·\\s*${escapar(cuenta)}(?![a-zA-Z])`);
+      await seccion.getByText(totalDelDia).first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {
+        c.ok(false, `el día ${dia} no muestra su total del servidor: ₡${delDia.gross / 100} · ${cuenta}`);
+      });
+
+      // La fila: el cobro con el BRUTO y su signo, y el nombre de quien pagó.
+      const fila = seccion.locator('[data-testid="movimiento"][data-tipo="cobro"]').first();
+      await fila.waitFor({ state: 'visible', timeout: 8000 });
+      const textoFila = await fila.innerText();
+      c.ok(new RegExp(`\\+${reColones(venta.amount / 100).source}`).test(textoFila), `la fila dice ${JSON.stringify(textoFila)} y debería sumar el bruto +₡${venta.amount / 100}`);
+      if (venta.payer_name) c.ok(textoFila.includes(venta.payer_name), `la fila no dice quién pagó (${venta.payer_name}): ${JSON.stringify(textoFila)}`);
+
+      // El detalle: bruto, comisión y neto, como los guarda el servidor.
+      await fila.click();
+      const hoja = dialogo(keilor.page, txt('Detalle del cobro'));
+      await hoja.waitFor({ state: 'visible', timeout: 8000 });
+      const valorDe = async (etiqueta) => {
+        const dt = hoja.locator('dt').filter({ hasText: new RegExp(`^${escapar(etiqueta)}$`) }).first();
+        const hay = await dt.waitFor({ state: 'visible', timeout: 4000 }).then(() => true, () => false);
+        return hay ? (await dt.locator('xpath=following-sibling::dd[1]').innerText()).trim() : null;
+      };
+      const aColones = (colones) => reColones(colones);
+      const exigirMonto = async (etiqueta, minor) => {
+        const texto = await valorDe(etiqueta);
+        c.ok(texto !== null && aColones(minor / 100).test(texto), `el detalle dice ${etiqueta}=${JSON.stringify(texto)} y el servidor guarda ₡${minor / 100}`);
+      };
+      await exigirMonto(txt('Monto'), venta.amount);
+      await exigirMonto(txt('Comisión'), venta.fee);
+      await exigirMonto(txt('Neto recibido'), neto);
+      if (venta.payer_name) c.igual(await valorDe(txt('Pagador')), venta.payer_name, 'pagador en el detalle');
+      c.igual(await valorDe(txt('Referencia')), venta.tx_id || venta.id, 'referencia en el detalle');
+      c.igual(await valorDe(txt('Estado')), txt('Completado'), 'estado en el detalle');
+      await keilor.page.keyboard.press('Escape');
+      await sinDialogos(keilor.page).catch(() => {});
+
+      // El filtro "Hoy" deja solo el dia de hoy, con el mismo total que da el servidor.
+      if (dia === hoy) {
+        await boton(keilor.page, txt('Hoy'), { exacto: true }).click();
+        c.igual(await boton(keilor.page, txt('Hoy'), { exacto: true }).getAttribute('aria-pressed'), 'true', 'periodo "Hoy" elegido');
+        await keilor.page.getByRole('heading', { name: /^Hoy\b/ }).first().waitFor({ state: 'visible', timeout: 8000 });
+        c.igual(await keilor.page.getByRole('heading', { name: /^Ayer\b/ }).count(), 0, 'días de ayer con el filtro "Hoy"');
+        const deHoy = (await api.keilor.exigir('GET', `${base()}/payments/daily?period=today&tz=360`)).data ?? [];
+        const crcHoy = deHoy.find((t) => t.date === hoy && t.currency === 'CRC');
+        c.exigir(crcHoy, 'el servidor no trae el total de hoy en colones');
+        const cuentaHoy = (crcHoy.count === 1 ? txt('{n} cobro') : txt('{n} cobros')).replace('{n}', crcHoy.count.toLocaleString('en-US'));
+        await keilor.page.getByText(new RegExp(`${reColones(crcHoy.gross / 100).source}\\s*·\\s*${escapar(cuentaHoy)}(?![a-zA-Z])`)).first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {
+          c.ok(false, `con el filtro "Hoy" falta el total ₡${crcHoy.gross / 100} · ${cuentaHoy}`);
+        });
+        await boton(keilor.page, txt('7 días'), { exacto: true }).click();
+      }
     });
 
     await f.paso('Reportes de 7, 30 y 90 días coinciden con las ventas del servidor', async (c) => {

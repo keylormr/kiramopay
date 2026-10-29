@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -66,16 +67,15 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 		conn.Release()
 		return fmt.Errorf("acquire migration advisory lock: %w", err)
 	}
-	// The lock is now held; release it and the connection on every exit path.
-	lockTimeoutSet := false
-	defer func() { releaseMigrationConn(conn, lockTimeoutSet) }()
+	// The lock is now held; end the session (and with it the lock) on every exit
+	// path. The connection never goes back to the pool: see closeMigrationConn.
+	defer closeMigrationConn(conn)
 
 	if ms := lockTimeoutMS(); ms > 0 {
 		// #nosec G201 -- ms is a validated non-negative integer, not user input.
 		if _, err := conn.Exec(ctx, fmt.Sprintf(`SET lock_timeout = %d`, ms)); err != nil {
 			return fmt.Errorf("set lock_timeout: %w", err)
 		}
-		lockTimeoutSet = true
 	}
 
 	if _, err := conn.Exec(ctx, `
@@ -158,24 +158,29 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error {
 	return nil
 }
 
-// releaseMigrationConn unwinds the migration connection: it resets the session
-// lock_timeout (if set), releases the advisory lock, and returns the connection
-// to the pool. If the advisory unlock fails the lock could otherwise linger on
-// a pooled connection and block every future migration run, so the connection
-// is destroyed instead — ending its session, which makes PostgreSQL drop the
-// lock automatically.
-func releaseMigrationConn(conn *pgxpool.Conn, resetLockTimeout bool) {
-	bg := context.Background()
-	if resetLockTimeout {
-		_, _ = conn.Exec(bg, `RESET lock_timeout`)
-	}
-	if _, err := conn.Exec(bg, `SELECT pg_advisory_unlock($1)`, migrationLockKey); err != nil {
+// closeMigrationConn ends the session the migrations ran on. It is closed and
+// NOT handed back to the pool, for two reasons:
+//
+//   - PL/pgSQL caches, per session, the plan of every function it has already
+//     run. A migration that fires a trigger function (043 seeds exchange_rates,
+//     which runs fn_fx_close_active()) and a later one that changes the type of
+//     a column that function reads (075: timestamp -> timestamptz) leave that
+//     session holding a plan for the old type. The first INSERT the application
+//     makes on that same connection then fails with "type of parameter N does
+//     not match that when preparing the plan". It only happens on a database
+//     built from scratch, where the whole chain runs in one session.
+//   - Closing the session makes PostgreSQL drop the advisory lock and the
+//     session lock_timeout by itself, so there is no unlock to forget or to fail.
+//
+// The pool simply opens a new connection when it needs one. The close is bounded
+// so a dead peer cannot hang the boot.
+func closeMigrationConn(conn *pgxpool.Conn) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := conn.Hijack().Close(ctx); err != nil {
 		slog.Default().With("component", "migrate").
-			Warn("migration advisory unlock failed; discarding connection", "error", err)
-		_ = conn.Hijack().Close(bg)
-		return
+			Warn("closing the migration connection failed", "error", err)
 	}
-	conn.Release()
 }
 
 // applyTx runs a migration and records it atomically in one transaction, so a
