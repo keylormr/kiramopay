@@ -120,20 +120,39 @@ describe('Dividir cuenta, detalle: estado del grupo y cancelacion', () => {
       'splitpay_detail_state_cancelled',
       'splitpay_detail_cancelled_note',
       'splitpay_share_not_charged',
-      'splitpay_cancel_paid_warning',
+      'splitpay_cancel_blocked_paid',
     ]) {
       expect(d[clave]?.trim(), clave).toBeTruthy();
     }
   });
 
-  conLaFrase('splitpay_cancel_paid_warning', {
-    es: 'no recibe su dinero de vuelta',
-    en: 'does not get their money back',
-    fr: "n'est pas remboursé",
-    pt: 'não recebe o dinheiro de volta',
-    'zh-cn': '不会收到退款',
-    ja: '返金されません',
-    hi: 'पैसे वापस नहीं मिलते',
+  // Una division donde alguien ya pago no se cancela (decision del dueno): el
+  // texto dice el motivo, en lugar de ofrecer el boton.
+  conLaFrase('splitpay_cancel_blocked_paid', {
+    es: 'ya pagó su parte',
+    en: 'already paid their share',
+    fr: 'déjà payé sa part',
+    pt: 'já pagou a sua parte',
+    'zh-cn': '已经有人付了',
+    ja: 'すでに支払った人がいる',
+    hi: 'पहले ही चुका दिया',
+  });
+
+  // El aviso viejo prometia lo contrario: que cancelar era posible y que lo
+  // pagado se quedaba con quien creo la division.
+  it.each(idiomas)('%s: ya no existe el aviso de cancelar con pagos hechos', (_idioma, d) => {
+    expect(d.splitpay_cancel_paid_warning).toBeUndefined();
+  });
+
+  // La ayuda tampoco puede prometer que el creador cancela siempre.
+  conLaFrase('help_splitpay_body', {
+    es: 'mientras nadie haya pagado su parte',
+    en: 'as long as nobody has paid their share',
+    fr: "tant que personne n'a payé sa part",
+    pt: 'enquanto ninguém tiver pago a sua parte',
+    'zh-cn': '只要还没有人付款',
+    ja: 'まだ誰も支払っていない間',
+    hi: 'जब तक किसी ने अपना हिस्सा न चुकाया हो',
   });
 });
 

@@ -1346,7 +1346,7 @@ export type TranslationKeys = {
   splitpay_detail_state_cancelled: string;
   splitpay_detail_cancelled_note: string;
   splitpay_share_not_charged: string;
-  splitpay_cancel_paid_warning: string;
+  splitpay_cancel_blocked_paid: string;
   splitpay_decline_share: string;
   splitpay_cancel_split: string;
   splitpay_confirm_decline: string;
