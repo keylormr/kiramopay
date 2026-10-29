@@ -317,7 +317,8 @@ async function recorrer(cdp) {
   // (CUENTAS_LOCALES de LoginView); aca la contesta el servidor simulado.
   await escribirEn(cdp, 'input[type="text"]', 'demo');
   await esperar(500);
-  await hasta('se envia el identificador', () => enviarFormulario(cdp, 'input[type="text"]'));
+  // El identificador no va en un <form>: se toca Continuar, como una persona.
+  await hasta('se envia el identificador', () => tocar(cdp, ['Continuar']));
   await hasta('pide la contrasena', () => hay(cdp, 'input[type="password"]'));
   await escribirEn(cdp, 'input[type="password"]', 'DemoLocal2026!');
   await esperar(500);
@@ -389,18 +390,29 @@ async function recorrer(cdp) {
 }
 
 async function principal() {
-  const mayor = Number(String(process.env.WEBVIEW_VERSION || '').split('.')[0]) || 0;
   const { cdp, socket, version } = await conectarAlWebView();
   resumen.socket = socket;
   resumen.navegador = version.Browser || version['User-Agent'] || null;
   console.log(`WebView: ${resumen.navegador} (socket ${socket})`);
+  // La version que dio dumpsys y, si no la dio, la que dice el propio WebView.
+  const textoVersion = process.env.WEBVIEW_VERSION || String(resumen.navegador || '').match(/Chrome\/([\d.]+)/)?.[1] || '';
+  const mayor = Number(textoVersion.split('.')[0]) || 0;
 
   if (mayor && mayor < WEBVIEW_MINIMO) {
     // La app arranco y el WebView esta vivo; la capa web no puede correr en un
     // motor tan viejo, asi que no hay pantallas que recorrer.
-    resumen.omitido = `WebView ${process.env.WEBVIEW_VERSION} < ${WEBVIEW_MINIMO}`;
-    paso('arranque (sin recorrido)', { captura: captura('arranque') });
-    console.log(`::warning::API ${API_LEVEL}: el WebView de la imagen es ${process.env.WEBVIEW_VERSION}; la capa web pide ${WEBVIEW_MINIMO}+. Se comprobo solo que la app instala, arranca y no se cae.`);
+    resumen.omitido = `WebView ${textoVersion} < ${WEBVIEW_MINIMO}`;
+    await esperar(5000);
+    // Lo que dijo la consola del WebView al cargar la capa web (el motivo de la
+    // pantalla en blanco, si la hay).
+    let consola = '';
+    try {
+      consola = adb('logcat', '-d', '-s', 'Capacitor/Console').trim();
+    } catch {
+      consola = '';
+    }
+    paso('arranque (sin recorrido)', { captura: captura('arranque'), consola: consola.split('\n').slice(-10) });
+    console.log(`::warning::API ${API_LEVEL}: el WebView de la imagen es ${textoVersion}; la capa web pide ${WEBVIEW_MINIMO}+. Se comprobo solo que la app instala, arranca y no se cae.`);
     cdp.cerrar();
     return;
   }
