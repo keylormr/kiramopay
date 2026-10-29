@@ -98,13 +98,37 @@ describe('CryptoView a 390 px — el encabezado del portafolio', () => {
 });
 
 describe('CryptoView a 390 px — las filas de activos', () => {
-  it('el nombre se trunca antes de pegarse al precio', async () => {
+  // A 390 px la fila de Ethereum decia "Ether..." (el nombre se cortaba con
+  // puntos suspensivos para no pegarse al precio). El nombre es lo que identifica
+  // al activo: se muestra completo. Si no caben juntos, el precio baja a otra
+  // linea; si el nombre solo ya no cabe, pasa a la linea de abajo en vez de cortarse.
+  it('el nombre se muestra completo: no se corta con puntos suspensivos', async () => {
     montar();
 
     const nombre = await screen.findByText('Ethereum');
-    expect(tiene(nombre, 'truncate')).toBe(true);
+    expect(tiene(nombre, 'truncate')).toBe(false);
+    expect(tiene(nombre, 'min-w-0')).toBe(true);
+    expect(tiene(nombre, 'break-words')).toBe(true);
+  });
+
+  it('si el nombre y el precio no caben juntos, el precio baja de linea y no se pegan', async () => {
+    montar();
+
+    const nombre = await screen.findByText('Ethereum');
     const fila = nombre.parentElement as HTMLElement;
-    expect(tiene(fila, 'gap-2')).toBe(true);
+    expect(tiene(fila, 'flex-wrap')).toBe(true);
+    expect(tiene(fila, 'gap-x-2')).toBe(true);
+  });
+
+  it('el saldo de la segunda linea tampoco se corta', async () => {
+    montar();
+
+    const nombre = await screen.findByText('Ethereum');
+    const filaSaldo = (nombre.parentElement as HTMLElement).nextElementSibling as HTMLElement;
+    const saldo = filaSaldo.firstElementChild as HTMLElement;
+    expect(saldo.textContent).toMatch(/ETH/);
+    expect(tiene(saldo, 'truncate')).toBe(false);
+    expect(tiene(filaSaldo, 'flex-wrap')).toBe(true);
   });
 
   it('el precio no se encoge ni se parte', async () => {
