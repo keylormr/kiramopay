@@ -97,8 +97,11 @@ the release decides which one each phone takes:
 - **Inside the app.** When the new version only changes the web layer (screens,
   texts, logic in `dist/`), the barrier downloads it by itself with a progress
   bar, verifies it and restarts the app already updated. No file in Downloads,
-  no system installer. Plugin: `@capawesome/capacitor-live-update` 6.9.2
-  (pinned, MIT), self-hosted; it never talks to Capawesome's servers.
+  no system installer. Plugin: `@capawesome/capacitor-live-update` 8.7.1
+  (pinned, MIT), self-hosted; it never talks to Capawesome's servers. Since
+  8.2 every download carries an `X-Capawesome-Device-Id` header (a random id
+  per installation on Android, `identifierForVendor` on iOS); with self-hosting
+  it only reaches GitHub, where the package lives.
 - **APK.** When the native part changed (a plugin, the Capacitor version, a
   permission, Firebase), the web package cannot run on the old binary and the
   barrier offers the APK, as before. It is also the way out if the in-app update

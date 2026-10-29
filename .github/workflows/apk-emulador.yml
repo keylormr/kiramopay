@@ -1,0 +1,128 @@
+name: APK en emulador
+
+# Compila un APK de DEPURACION y lo recorre en emuladores de Android (API 34 y
+# API 24, el minimo de la app: Android 7.0). Prueba lo nativo que ci.yml no ve:
+# que el binario instala, arranca, muestra las pantallas y abre el menu de
+# compartir al exportar, sin caerse. La imagen de API 24 trae el WebView de
+# fabrica (69), anterior a android.minWebViewVersion: ahi se comprueba que la
+# app muestra la pagina para actualizarlo (public/webview-viejo) y no queda en
+# blanco.
+#
+# No publica nada ni usa secretos: sin tag, sin release, sin paquete de la
+# actualizacion interna y sin la llave de firma de produccion (un APK debug se
+# firma con la llave de depuracion que genera Gradle en el runner). La capa web
+# sale con VITE_API_URL vacio, en modo demostracion: nunca habla con
+# api.kiramopay.com. El acceso, que siempre va por HTTP, lo contesta
+# scripts/emulador/recorrido.mjs desde dentro del WebView.
+#
+# Sin google-services.json ni VITE_PUSH_NATIVO: la app no ofrece los avisos y
+# nunca llama a PushNotifications.register(), que sin ese archivo cierra la app.
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'package.json'
+      - 'capacitor.config.*'
+      - 'scripts/emulador/**'
+      - '.github/workflows/apk-emulador.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apk-emulador-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: APK de depuracion
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Capa web en modo demostracion
+        env:
+          VITE_API_URL: ''
+        run: npm run build
+
+      # Capacitor 8 y sus plugins compilan con Java 21.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Capacitor sync (android)
+        run: npx cap sync android
+
+      - name: Compilar el APK de depuracion
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kiramopay-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  emulador:
+    name: Emulador API ${{ matrix.api }}
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [34, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      # El recorrido usa fetch y WebSocket de Node 22: sin npm ci.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: kiramopay-debug-apk
+          path: apk
+
+      # Aceleracion por hardware para el emulador en el runner de Linux.
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Instalar, abrir y recorrer la app
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          # La accion corre cada linea por separado: todo va en un solo guion.
+          script: bash scripts/emulador/recorrido.sh apk/app-debug.apk capturas-api-${{ matrix.api }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-api-${{ matrix.api }}
+          path: capturas-api-${{ matrix.api }}
+          if-no-files-found: warn
+          retention-days: 14

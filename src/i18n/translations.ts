@@ -938,6 +938,7 @@ export type TranslationKeys = {
   share_transactions_desc: string;
   export_success: string;
   export_copy_failed: string;
+  export_failed: string;
   export_col_id: string;
   export_col_date: string;
   export_col_title: string;
@@ -1889,6 +1890,7 @@ export type TranslationKeys = {
   business_report_export: string;
   business_report_exporting: string;
   business_report_exported: string;
+  business_report_shared: string;
   business_report_export_failed: string;
   business_report_export_plan: string;
   business_report_export_web_only: string;

@@ -245,11 +245,11 @@ Capacitor, asi que del lado nativo no falta nada.
 
 - **Sin notificaciones push.** El proyecto no incluye el plugin de push ni el
   entitlement de APNs. Android tampoco (no hay `google-services.json`).
-- **`capacitor-native-biometric` es de la epoca de Capacitor 3.** Declara
-  `@capacitor/core@^3.4.3` y su podspec apunta a iOS 13. Trae fuente Swift y el
-  Podfile lo resuelve bien, pero es el componente con mas chance de dar
-  problemas en el primer build real contra Xcode 26. Si aparece, el reemplazo
-  mantenido es `@aparajita/capacitor-biometric-auth`.
+- **La biometria usa `@capgo/capacitor-native-biometric`**, la continuacion
+  mantenida de `capacitor-native-biometric` (que era de la epoca de Capacitor 3
+  y no se publica desde 2023). Misma API y mismas entradas del Keychain
+  (`kSecClassInternetPassword` por `server`). Como todo el proyecto sobre
+  Capacitor 8, todavia no paso por un build real contra Xcode 26.
 - **El boton "Descargar app" del login sigue siendo solo Android.** No se le
   agrego una variante iOS porque hasta que exista un canal (TestFlight o Ad Hoc)
   no hay a donde apuntar.

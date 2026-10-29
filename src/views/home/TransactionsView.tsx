@@ -20,6 +20,7 @@ import {
   copyTransactionsToClipboard,
   shareTransactions,
 } from '@/utils/export';
+import type { EstadoExport } from '@/utils/entregarArchivo';
 import type { Transaction } from '@/types';
 
 // Filas viejas del backend pueden llegar sin moneda; se asume la del pais.
@@ -294,15 +295,24 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
   // contraparte ni nota trae el titulo vacio y la fila del archivo quedaba sin
   // nombre, mientras la lista lo mostraba como "Transferencia SINPE enviada".
   const conTitulos = () => filtered.map((tx) => ({ ...tx, title: txTitle(tx, t) }));
-  const handleExportCSV = () => {
-    exportTransactionsCSV(conTitulos(), t);
-    setShowExportSheet(false);
-    showToast(t('export_success'));
+  // El aviso depende de como termino la entrega: en el telefono se abre el menu
+  // de compartir y la persona puede cerrarlo sin mandar nada. Ahi no se dice
+  // "Exportado": antes se decia siempre, tambien cuando el archivo no iba a
+  // ningun lado.
+  const avisarExportacion = (estado: EstadoExport) => {
+    if (estado === 'listo' || estado === 'compartido') showToast(t('export_success'));
+    else if (estado === 'error') showToast(t('export_failed'), 'error');
+    else if (estado === 'solo_web') showToast(t('business_report_export_web_only'), 'error');
   };
-  const handleExportJSON = () => {
-    exportTransactionsJSON(conTitulos(), t);
+  const handleExportCSV = async () => {
+    const estado = await exportTransactionsCSV(conTitulos(), t);
     setShowExportSheet(false);
-    showToast(t('export_success'));
+    avisarExportacion(estado);
+  };
+  const handleExportJSON = async () => {
+    const estado = await exportTransactionsJSON(conTitulos(), t);
+    setShowExportSheet(false);
+    avisarExportacion(estado);
   };
   const handleCopy = async () => {
     const ok = await copyTransactionsToClipboard(conTitulos(), t);

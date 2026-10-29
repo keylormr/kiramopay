@@ -34,6 +34,7 @@ const DIAS_DEL_PERIODO: Readonly<Record<PeriodoDeVentas, number>> = { today: 1, 
 
 const AVISO_DE_EXPORTACION: Partial<Record<EstadoExport, { clave: string; tono: 'ok' | 'mal' }>> = {
   listo: { clave: 'business_report_exported', tono: 'ok' },
+  compartido: { clave: 'business_report_shared', tono: 'ok' },
   error: { clave: 'business_report_export_failed', tono: 'mal' },
   plan: { clave: 'business_report_export_plan', tono: 'mal' },
   solo_web: { clave: 'business_report_export_web_only', tono: 'mal' },

@@ -14,7 +14,7 @@ const nativo = vi.hoisted(() => ({
   deleteCredentials: vi.fn(),
 }));
 
-vi.mock('capacitor-native-biometric', () => ({
+vi.mock('@capgo/capacitor-native-biometric', () => ({
   NativeBiometric: nativo,
   BiometryType: {
     NONE: 0,
@@ -24,6 +24,7 @@ vi.mock('capacitor-native-biometric', () => ({
     FACE_AUTHENTICATION: 4,
     IRIS_AUTHENTICATION: 5,
     MULTIPLE: 6,
+    DEVICE_CREDENTIAL: 7,
   },
 }));
 

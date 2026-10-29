@@ -1,6 +1,6 @@
 # KiramoPay iOS
 
-Build iOS via Capacitor 6. La misma app web que el APK, empaquetada en un
+Build iOS via Capacitor 8. La misma app web que el APK, empaquetada en un
 WKWebView con acceso a Keychain, Face ID / Touch ID y camara.
 
 El runbook de firma y distribucion esta en [`docs/IOS_IPA.md`](../docs/IOS_IPA.md).
@@ -9,10 +9,10 @@ El runbook de firma y distribucion esta en [`docs/IOS_IPA.md`](../docs/IOS_IPA.m
 
 | Herramienta | Version |
 |-------------|---------|
-| Node.js | 18+ |
+| Node.js | 22+ (lo exige el CLI de Capacitor 8) |
 | Xcode | 26+ (obligatorio para subir a App Store Connect desde 2026-04-28) |
 | CocoaPods | 1.12+ |
-| Deployment target | iOS 13.0 |
+| Deployment target | iOS 15.0 |
 
 ## Build de desarrollo
 
@@ -71,7 +71,8 @@ estar en `CORS_ORIGINS` del backend.
 | `@capacitor/splash-screen` | splash de `Assets.xcassets/Splash.imageset` |
 | `@capacitor/status-bar` | barra de estado |
 | `@aparajita/capacitor-secure-storage` | Keychain (refresh token) |
-| `capacitor-native-biometric` | Face ID / Touch ID + Keychain de credenciales |
+| `@capgo/capacitor-native-biometric` | Face ID / Touch ID + Keychain de credenciales |
+| `@capawesome/capacitor-live-update` | actualizacion interna de la capa web (paquetes firmados, ver `docs/ANDROID_APK.md`) |
 
 El boton fisico de atras no existe en iOS: el listener `backButton` de
 `App.tsx` sencillamente nunca dispara ahi. No hay nada que ajustar.
