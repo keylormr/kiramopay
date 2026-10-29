@@ -187,6 +187,7 @@ func (s *Service) runOnceErr(ctx context.Context) (*Report, error) {
 	// When auto-fix clears everything this is 0; capped/un-fixable drift keeps it
 	// non-zero so the LedgerDrift alert pages a human. (See k8s/monitoring.)
 	middleware.SetLedgerDriftCRC(abs(rpt.DriftCRC - rpt.FixedDriftCRC))
+	s.avisarCapitalNegativo(ctx)
 	if s.logger != nil {
 		s.logger.Info("reconcile complete",
 			"wallets_total", rpt.WalletsTotal,
@@ -202,6 +203,47 @@ func (s *Service) runOnceErr(ctx context.Context) (*Report, error) {
 		)
 	}
 	return rpt, nil
+}
+
+// avisarCapitalNegativo deja un WARN por cada moneda cuyo capital propio
+// (SYSTEM:CAPITAL:<moneda>, migracion 087) esta en negativo.
+//
+// El capital no tiene piso a proposito: las operaciones siguen funcionando aunque
+// quede debajo de cero (decision del dueno: "Permitir y avisar"), y el panel de
+// administracion dice cuanto falta. Esto es el aviso del lado del servidor, para
+// el registro y las alertas. Se hace aqui, en la pasada periodica, y no en el
+// camino de cada asiento: calcular el saldo de la cuenta de capital suma todo su
+// diario, que crece con cada comision cobrada.
+//
+// Es de mejor esfuerzo: no abre nada ni cambia ningun saldo, y si no se puede
+// leer lo dice y la conciliacion sigue.
+func (s *Service) avisarCapitalNegativo(ctx context.Context) {
+	if s.logger == nil {
+		return
+	}
+	rows, err := s.db.Query(ctx, `
+		SELECT currency, balance_minor
+		  FROM ledger_account_balances
+		 WHERE type = 'capital' AND balance_minor < 0
+		 ORDER BY currency`)
+	if err != nil {
+		s.logger.Warn("no se pudo revisar el capital propio", "error", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var moneda string
+		var saldo int64
+		if err := rows.Scan(&moneda, &saldo); err != nil {
+			s.logger.Warn("no se pudo revisar el capital propio", "error", err)
+			return
+		}
+		s.logger.Warn("capital propio en negativo",
+			"moneda", moneda, "saldo_minor", saldo, "faltante_minor", -saldo)
+	}
+	if err := rows.Err(); err != nil {
+		s.logger.Warn("no se pudo revisar el capital propio", "error", err)
+	}
 }
 
 // survey reads the drift view without locks and returns total wallet count plus

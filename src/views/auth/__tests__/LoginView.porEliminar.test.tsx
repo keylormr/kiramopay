@@ -169,7 +169,11 @@ describe('LoginView — cuenta con la eliminacion en curso', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Reactivar mi cuenta' }));
 
-    expect(await screen.findByText('Esta cuenta está bloqueada. Escribe a soporte.')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        (_contenido, el) => el?.tagName === 'P' && el.textContent === 'Esta cuenta está bloqueada. Escribe a soporte@kiramopay.com.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reactivar mi cuenta' })).toBeNull();
     expect(onLogin).not.toHaveBeenCalled();
   });

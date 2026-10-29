@@ -3975,6 +3975,16 @@ paths:
     delete:
       tags: [Split Payments]
       summary: Cancel a split
+      description: >-
+        Only the person who created the split can cancel it, and only while
+        nobody else has paid their share. Once someone has paid, the split can
+        no longer be cancelled: that money is already in the creator's account
+        and cancelling would not return it. The creator's own share is born
+        paid and does not count; a declined share does not count either.
+        Cancelling a split that is already cancelled is not an error. Whether
+        anyone has paid is decided under a lock on the split, so a payment and a
+        cancellation at the same moment cannot leave a cancelled split with a
+        paid share: one of the two wins and the other is rejected.
       security:
         - bearerAuth: []
       parameters:
@@ -3982,6 +3992,23 @@ paths:
       responses:
         '204':
           description: Split cancelled
+        '400':
+          description: >-
+            CANCEL_FAILED — the split does not exist, the caller did not
+            create it, or it already closed (all shares settled or declined).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            SPLIT_HAS_PAYMENTS — someone other than the creator has already
+            paid their share, so the split can no longer be cancelled. Nothing
+            changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/splits/{id}/pay:
     post:
@@ -6262,6 +6289,62 @@ paths:
                 properties:
                   saldo_minor: { type: integer, format: int64 }
                   moneda: { type: string, example: CRC }
+
+  /api/v1/admin/capital:
+    get:
+      tags: [Admin]
+      summary: Own capital of the company, per currency
+      description: >-
+        The balance of each SYSTEM:CAPITAL:<currency> ledger account
+        (migration 087): the company's own cash, kept apart from what is owed
+        to users (the reserve is exactly equal to that). Crypto purchases and
+        sales move money between the reserve and the capital, fees enter it and
+        promotions leave it. The account has no floor on purpose: it can go
+        negative and operations keep working. When it does, `shortfall_minor`
+        is how much would have to be deposited with real money to get back to
+        zero. The figure comes from the ledger (the immutable journal), never
+        from a client-side calculation. Admin only.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: One row per currency that has a capital account.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currencies:
+                    type: array
+                    items:
+                      type: object
+                      required: [currency, balance_minor, shortfall_minor, negative]
+                      properties:
+                        currency: { type: string, example: CRC }
+                        balance_minor:
+                          type: integer
+                          format: int64
+                          description: Signed balance in minor units; negative when the capital is short.
+                          example: -19670
+                        shortfall_minor:
+                          type: integer
+                          format: int64
+                          minimum: 0
+                          description: How much is missing to reach zero (0 when the balance is not negative).
+                          example: 19670
+                        negative: { type: boolean }
+                  as_of:
+                    type: string
+                    format: date-time
+        '503':
+          description: >-
+            CAPITAL_UNAVAILABLE — the ledger could not be read. There are no
+            currencies in the answer: a zero would claim that nothing is
+            missing, and what is known is nothing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/admin/promociones/fondos:
     post:

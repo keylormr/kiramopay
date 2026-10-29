@@ -1147,12 +1147,16 @@ export const CryptoView: React.FC = () => {
                       {asset.icon}
                     </div>
                     <div className="flex-1 min-w-0 text-left">
-                      <div className="flex justify-between items-center gap-2">
-                        <span className="font-bold uv-text-primary truncate">{asset.name}</span>
-                        <span className="font-bold uv-text-primary shrink-0 whitespace-nowrap">{montoUsd(value, asset.currentPrice)}</span>
+                      {/* El nombre es lo que identifica al activo: se muestra
+                          completo ("Ether..." no dice nada). Si el nombre y el
+                          precio no caben juntos, el precio baja de linea; si el
+                          nombre solo no cabe, pasa a una segunda linea. */}
+                      <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-0.5">
+                        <span className="min-w-0 break-words font-bold uv-text-primary">{asset.name}</span>
+                        <span className="ml-auto font-bold uv-text-primary shrink-0 whitespace-nowrap">{montoUsd(value, asset.currentPrice)}</span>
                       </div>
-                      <div className="flex justify-between items-center gap-2 mt-1">
-                        <span className="text-sm text-gray-500 truncate">{formatCrypto(asset.balance)} {asset.symbol}</span>
+                      <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-0.5 mt-1">
+                        <span className="min-w-0 break-words text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
                         {/* Ganancia o perdida desde la compra, no el cambio de
                             24 h ni la tendencia de la curva: se rotula para
                             que no se lean como la misma cifra. */}
@@ -1200,7 +1204,7 @@ export const CryptoView: React.FC = () => {
                         {getTxIcon(tx.type)}
                       </div>
                       <div className="flex-1 min-w-0 text-left">
-                        <div className="font-bold text-sm uv-text-primary truncate">
+                        <div className="font-bold text-sm uv-text-primary break-words">
                           {getTxLabel(tx.type)} {tx.fromAsset}{tx.toAsset ? ` → ${tx.toAsset}` : ''}
                         </div>
                         <div className="text-xs text-gray-500">{fechaLegible(tx.date, language, t('crypto_just_now'))}</div>
@@ -1370,8 +1374,8 @@ export const CryptoView: React.FC = () => {
                         {asset?.icon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center gap-2">
-                          <span className="font-bold uv-text-primary truncate">{position.asset} {t('staking')}</span>
+                        <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1">
+                          <span className="min-w-0 break-words font-bold uv-text-primary">{position.asset} {t('staking')}</span>
                           {/* Una tasa en verde anunciaba un rendimiento que el
                               servidor no acredita: el ganado se queda en cero. */}
                           <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold uv-surface-2 uv-text-secondary">

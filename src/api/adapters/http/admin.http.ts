@@ -1,5 +1,6 @@
 import type {
   IAdminRepository,
+  CapitalPorMoneda,
   AdminUser,
   AdminUserStatus,
   PlanAsignado,
@@ -226,6 +227,32 @@ export class HttpAdminRepository implements IAdminRepository {
     });
     if (!res.success || !res.data) return fail(res);
     return apiSuccess({ saldoMinor: res.data.saldo_minor });
+  }
+
+  async capitalPropio(): Promise<ApiResponse<CapitalPorMoneda[]>> {
+    const res = await this.client.get<{ currencies?: unknown }>('/api/v1/admin/capital');
+    if (!res.success || !res.data || !Array.isArray(res.data.currencies)) return fail(res);
+    const filas: CapitalPorMoneda[] = [];
+    for (const fila of res.data.currencies) {
+      const f = fila as { currency?: unknown; balance_minor?: unknown; shortfall_minor?: unknown; negative?: unknown };
+      // Una fila a medias se descarta entera: pintarla con un saldo inventado
+      // (cero) diria "no falta nada" donde lo unico que se sabe es "no se leyo".
+      if (
+        typeof f.currency !== 'string' || !f.currency ||
+        typeof f.balance_minor !== 'number' || !Number.isFinite(f.balance_minor) ||
+        typeof f.shortfall_minor !== 'number' || !Number.isFinite(f.shortfall_minor) ||
+        typeof f.negative !== 'boolean'
+      ) {
+        return falla(res, 'CAPITAL_UNREADABLE');
+      }
+      filas.push({
+        moneda: f.currency,
+        saldoMinor: f.balance_minor,
+        faltanteMinor: f.shortfall_minor,
+        enNegativo: f.negative,
+      });
+    }
+    return apiSuccess(filas);
   }
 
   async getUser(id: string): Promise<ApiResponse<AdminUser>> {

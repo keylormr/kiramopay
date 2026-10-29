@@ -45,6 +45,27 @@ import { useGastoDelMes } from './useGastoDelMes';
 
 type QRCurrency = 'BTC' | 'ETH' | 'CRC' | 'USD';
 
+/**
+ * Lo que el carrusel de Cuentas deja a cada lado de las tarjetas para que no
+ * recorte la sombra de la cuenta elegida.
+ *
+ * El carrusel se desplaza de lado (overflow-x: auto) y un contenedor que se
+ * desplaza recorta todo lo que sale de su caja, tambien hacia arriba y hacia
+ * abajo. La cuenta elegida lleva --shadow-primary (0 8px 20px): la sombra se
+ * extiende 20 px a cada lado, 12 hacia arriba y 28 hacia abajo, y quedaba
+ * cortada en el borde de la tarjeta como un rectangulo azul palido. Es el mismo
+ * defecto de BottomSheet y se resuelve igual: relleno del tamano de la sombra y
+ * un margen negativo igual de grande, para que el Inicio no se mueva.
+ *
+ * Arriba cabe en el hueco de 12 px que deja el titulo (mb-3); abajo, en el
+ * relleno de 8 px que el carrusel ya tenia (pb-2) mas el hueco entre secciones
+ * (24 px). Los lados sobresalen hacia el relleno de la pantalla (px-4); la
+ * pantalla principal recorta lo que pasa del borde (overflow-x-hidden).
+ */
+const HOLGURA_SOMBRA_CARRUSEL = { lado: 20, arriba: 12, abajo: 28 } as const;
+/** Lo que el carrusel ya dejaba bajo las tarjetas (pb-2): se conserva. */
+const RELLENO_BAJO_EL_CARRUSEL = 8;
+
 interface HomeViewProps {
   onViewAllTransactions?: () => void;
   onOpenAnalytics?: () => void;
@@ -766,7 +787,21 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       {/* Accounts List (Horizontal Scroll) */}
       <div>
         <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('accounts')}</h3>
-        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('accounts')}>
+        <div
+          className="flex gap-3 overflow-x-auto no-scrollbar"
+          style={{
+            paddingTop: HOLGURA_SOMBRA_CARRUSEL.arriba,
+            paddingRight: HOLGURA_SOMBRA_CARRUSEL.lado,
+            paddingBottom: HOLGURA_SOMBRA_CARRUSEL.abajo,
+            paddingLeft: HOLGURA_SOMBRA_CARRUSEL.lado,
+            marginTop: -HOLGURA_SOMBRA_CARRUSEL.arriba,
+            marginRight: -HOLGURA_SOMBRA_CARRUSEL.lado,
+            marginBottom: RELLENO_BAJO_EL_CARRUSEL - HOLGURA_SOMBRA_CARRUSEL.abajo,
+            marginLeft: -HOLGURA_SOMBRA_CARRUSEL.lado,
+          }}
+          role="tablist"
+          aria-label={t('accounts')}
+        >
           {state.accounts.map((acc) => {
             const selected = state.baseCurrency === acc.ccy;
             return (

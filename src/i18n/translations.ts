@@ -267,8 +267,8 @@ export type TranslationKeys = {
   support: string;
   help_center: string;
   faq: string;
-  chat_support: string;
-  support_soon_desc: string;
+  support_write_title: string;
+  support_write_desc: string;
   about: string;
   version: string;
 
@@ -1052,6 +1052,14 @@ export type TranslationKeys = {
   admin_promo_warning: string;
   admin_promo_done: string;
   admin_promo_failed: string;
+  admin_capital_menu: string;
+  admin_capital_menu_desc: string;
+  admin_capital_title: string;
+  admin_capital_explain: string;
+  admin_capital_shortfall: string;
+  admin_capital_ok: string;
+  admin_capital_failed: string;
+  admin_capital_empty: string;
   // Las tarjetas de resumen suman lo que se trajo, no todo el historial: la
   // pantalla lo dice en vez de presentar un subtotal como si fuera el total.
   tx_totals_scope: string;
@@ -1379,7 +1387,7 @@ export type TranslationKeys = {
   splitpay_detail_state_cancelled: string;
   splitpay_detail_cancelled_note: string;
   splitpay_share_not_charged: string;
-  splitpay_cancel_paid_warning: string;
+  splitpay_cancel_blocked_paid: string;
   splitpay_decline_share: string;
   splitpay_cancel_split: string;
   splitpay_confirm_decline: string;

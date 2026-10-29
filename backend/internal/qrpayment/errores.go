@@ -39,7 +39,7 @@ var (
 	// afecta filas. Quien llama lo traduce leyendo el estado real.
 	ErrCobroNoReclamable = errors.New("el cobro ya no se puede reclamar")
 
-	ErrNoPodesPagarte = errors.New("no podes pagarte a vos mismo")
+	ErrNoPodesPagarte = errors.New("no puedes pagarte a ti mismo")
 	ErrMontoRequerido = errors.New("este codigo necesita que indiques el monto")
 
 	// ErrComercioNoDisponible: el codigo es de un comercio que todavia no esta

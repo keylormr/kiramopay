@@ -97,10 +97,14 @@ describe('Pagina /eliminar-cuenta — la respuesta escrita al confirmar', () => 
     expect(texto).not.toMatch(/saldo|2031|se suprimen/);
   });
 
-  it('una cuenta que no se elimina por esta via lo dice y lleva al contacto de privacidad', async () => {
+  it('una cuenta que no se elimina por esta via lo dice y lleva al correo de soporte', async () => {
     const texto = await confirmar(responder(200, { success: true, data: { status: 'verified', outcome: 'rejected' } }));
     expect(texto).toMatch(/no se puede eliminar desde esta página/);
-    expect(porId('paso-listo').querySelector('a[href="/privacidad/#contacto"]')).not.toBeNull();
+    const enlace = porId('paso-listo').querySelector('a[href="mailto:soporte@kiramopay.com"]');
+    expect(enlace).not.toBeNull();
+    expect(enlace?.textContent).toBe('soporte@kiramopay.com');
+    // Ya no manda a buscar un "contacto de privacidad" que la politica no define.
+    expect(porId('paso-listo').querySelector('a[href="/privacidad/#contacto"]')).toBeNull();
     // Tambien es una respuesta escrita: no se borro nada, y el derecho de acudir
     // a la PRODHAB. Sin el motivo.
     expect(texto).toMatch(/No se borró nada/);

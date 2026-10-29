@@ -68,6 +68,7 @@ const ClosedMerchantsView = lazyConRecarga(() => import('./views/business/Closed
 const AdminUsersView = lazyConRecarga(() => import('./views/admin/AdminUsersView').then(m => ({ default: m.AdminUsersView })));
 const AdminDisputasView = lazyConRecarga(() => import('./views/admin/AdminDisputasView').then(m => ({ default: m.AdminDisputasView })));
 const AdminPromocionesView = lazyConRecarga(() => import('./views/admin/AdminPromocionesView').then(m => ({ default: m.AdminPromocionesView })));
+const AdminCapitalView = lazyConRecarga(() => import('./views/admin/AdminCapitalView').then(m => ({ default: m.AdminCapitalView })));
 const PlansView = lazyConRecarga(() => import('./views/plans/PlansView').then(m => ({ default: m.PlansView })));
 const SessionsView = lazyConRecarga(() => import('./views/sessions/SessionsView').then(m => ({ default: m.SessionsView })));
 const AssistantView = lazyConRecarga(() => import('./views/assistant/AssistantView').then(m => ({ default: m.AssistantView })));
@@ -268,7 +269,7 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
-type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'closedMerchants' | 'adminUsers' | 'adminDisputas' | 'adminPromociones' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
+type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'closedMerchants' | 'adminUsers' | 'adminDisputas' | 'adminPromociones' | 'adminCapital' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
 
 // Keyed by TabId on purpose: adding a tab without deciding whether deep links
 // may reach it becomes a compile error instead of a silently dead route.
@@ -524,7 +525,7 @@ const Layout = () => {
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
       case 'crypto': return <CryptoView />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenClosedMerchants={() => setOverlayView('closedMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} onOpenBudget={() => setOverlayView('budget')} onOpenRecurring={() => setOverlayView('recurring')} />;
+      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenClosedMerchants={() => setOverlayView('closedMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenAdminCapital={() => setOverlayView('adminCapital')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} onOpenBudget={() => setOverlayView('budget')} onOpenRecurring={() => setOverlayView('recurring')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -593,8 +594,10 @@ const Layout = () => {
         </Suspense>
       </main>
 
-      {/* Bottom Navigation */}
-      <nav role="navigation" aria-label={t('nav_main_aria')} className="fixed bottom-0 left-0 right-0 z-40 uv-surface-1/95 backdrop-blur-lg border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
+      {/* Bottom Navigation. Fondo OPACO: al 95 % con desenfoque se adivinaba el
+          texto de la lista que pasa por detrás ("-₡1.00" bajo "Inicio"). Una
+          barra fija no necesita transparencia. */}
+      <nav role="navigation" aria-label={t('nav_main_aria')} className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--color-surface-1)] dark:bg-[var(--color-surface-1-dark)] border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
         <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
           {NAV_ITEMS.map((item) => {
             const active = currentNavId === item.id;
@@ -680,6 +683,9 @@ const Layout = () => {
         )}
         {overlayView === 'adminPromociones' && (
           <AdminPromocionesView onClose={() => setOverlayView(null)} />
+        )}
+        {overlayView === 'adminCapital' && (
+          <AdminCapitalView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'plans' && (
           <PlansView onClose={cerrarPlanes} />

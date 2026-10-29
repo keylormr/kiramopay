@@ -280,7 +280,7 @@ func TestCryptoErrores_CumplenElContrato(t *testing.T) {
 			"CRYPTO_SEND_UNAVAILABLE", "enviar cripto no esta disponible"},
 
 		{"enviar: a uno mismo", http.MethodPost, "/api/v1/crypto/send", http.StatusBadRequest,
-			"CRYPTO_SEND_SELF", "no podes enviarte cripto a vos mismo"},
+			"CRYPTO_SEND_SELF", "no puedes enviarte cripto a ti mismo"},
 		{"enviar: llave de otro envio", http.MethodPost, "/api/v1/crypto/send", http.StatusConflict,
 			"LLAVE_REUTILIZADA", "esa operacion ya se hizo con otro monto o para otra persona"},
 		{"enviar: no alcanza para el monto mas la comision", http.MethodPost, "/api/v1/crypto/send", http.StatusUnprocessableEntity,

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { AdminUsersView } from '../AdminUsersView';
@@ -103,6 +103,25 @@ describe('AdminUsersView a 390 px', () => {
       const pestana = screen.getByRole('tab', { name: new RegExp(nombre) });
       expect(clases(pestana)).toContain('px-2');
       expect(clases(pestana)).toContain('min-w-0');
+    }
+  });
+
+  // "Eliminaciones" se veia "Eliminaci..." (tres pestanas en 358 px dejan ~74 px
+  // de texto junto al icono y la etiqueta se cortaba con puntos suspensivos). El
+  // nombre de la pestana se muestra completo: el icono va arriba del texto en
+  // pantalla angosta y la etiqueta puede pasar a una segunda linea.
+  it('las etiquetas de las pestanas se muestran completas: pasan de linea en vez de cortarse', () => {
+    setup();
+
+    for (const nombre of ['Buscar', 'Bloqueadas', 'Eliminaciones']) {
+      const pestana = screen.getByRole('tab', { name: new RegExp(nombre) });
+      const etiqueta = within(pestana).getByText(nombre);
+      expect(clases(etiqueta)).not.toContain('truncate');
+      expect(clases(etiqueta)).toContain('break-words');
+      expect(clases(etiqueta)).toContain('text-center');
+      // Icono sobre el texto en angosto; lado a lado cuando hay ancho.
+      expect(clases(pestana)).toContain('flex-col');
+      expect(clases(pestana).some((c) => c.startsWith('sm:flex-row'))).toBe(true);
     }
   });
 });

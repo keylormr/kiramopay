@@ -70,10 +70,12 @@ describe('Centro de ayuda', () => {
     const user = userEvent.setup();
     setup();
 
-    // Ni chat 24/7 ni telefono de soporte: el unico canal real es el asistente.
+    // Ni chat 24/7 ni telefono de soporte, ni un chat que "llegara pronto": los
+    // canales reales son el asistente y el correo de soporte.
     expect(screen.queryByText(/24\/7/)).not.toBeInTheDocument();
     expect(screen.queryByText(/800-KIRAMO/)).not.toBeInTheDocument();
-    expect(screen.getByText(/chat en vivo llegará pronto/)).toBeInTheDocument();
+    expect(screen.queryByText(/llegará pronto|próximamente/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/chat con soporte/i)).not.toBeInTheDocument();
 
     // Y los envios a numeros sin cuenta se rechazan; no cuestan ₡150.
     await user.click(screen.getByText('¿Cuánto cuesta enviar por SINPE Móvil?'));
@@ -94,6 +96,28 @@ describe('Centro de ayuda', () => {
     await user.click(screen.getByText('¿Cómo se protege mi información?'));
     expect(await screen.findByText(/Tu contraseña nunca se guarda/)).toBeInTheDocument();
     expect(screen.getByText(/Ningún sistema es infalible/)).toBeInTheDocument();
+  });
+
+  // Antes la pantalla decia "el chat llegara pronto" y no daba a quien escribir.
+  // Ahora el pie de la ayuda lleva el correo de soporte como enlace.
+  it('al pie ofrece escribir a soporte por correo', () => {
+    setup();
+
+    expect(screen.getByRole('heading', { name: 'Escribir a soporte' })).toBeInTheDocument();
+    const enlace = screen.getByRole('link', { name: 'soporte@kiramopay.com' });
+    expect(enlace).toHaveAttribute('href', 'mailto:soporte@kiramopay.com');
+  });
+
+  it('la respuesta de "¿Hay alguien a quién escribirle?" da el correo, no solo el asistente', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByText('¿Hay alguien a quién escribirle?'));
+
+    const enlaces = screen.getAllByRole('link', { name: 'soporte@kiramopay.com' });
+    // El del pie y el de la respuesta.
+    expect(enlaces).toHaveLength(2);
+    for (const e of enlaces) expect(e).toHaveAttribute('href', 'mailto:soporte@kiramopay.com');
   });
 
   it('se traduce con el idioma de la app', async () => {

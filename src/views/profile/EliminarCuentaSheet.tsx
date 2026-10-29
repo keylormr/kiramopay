@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Icons } from '../../components/Icons';
+import { TextoConCorreo } from '../../components/TextoConCorreo';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -226,7 +227,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
       {items.map((x) => (
         <li key={x} className="text-sm uv-text-secondary leading-relaxed flex gap-2">
           <span aria-hidden="true" className="mt-2 w-1 h-1 rounded-full bg-current shrink-0 opacity-60" />
-          <span>{x}</span>
+          <TextoConCorreo texto={x} />
         </li>
       ))}
     </ul>
@@ -438,7 +439,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
               </div>
             )}
 
-            {error && <p id={idError} role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
+            {error && <p id={idError} role="alert" className="text-sm text-[var(--color-danger)]"><TextoConCorreo texto={error} /></p>}
 
             <div className="space-y-2.5 pt-1">
               <button type="submit" disabled={!puedeEnviar} className={BOTON_PELIGRO}>

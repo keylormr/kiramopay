@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { EliminarCuentaSheet } from '../EliminarCuentaSheet';
@@ -98,6 +98,11 @@ describe('EliminarCuentaSheet — revision previa', () => {
     expect(screen.getByText(/acuerdo de garantía abierto/)).toBeInTheDocument();
     // Un codigo que esta version no conoce cae en el generico en vez de romper.
     expect(screen.getByText(/Hay algo pendiente en tu cuenta/)).toBeInTheDocument();
+    // Y ese caso manda a soporte con la direccion como enlace.
+    expect(screen.getByRole('link', { name: 'soporte@kiramopay.com' })).toHaveAttribute(
+      'href',
+      'mailto:soporte@kiramopay.com',
+    );
     // Sin nada que confirmar: no hay contrasena que pedir.
     expect(screen.queryByLabelText('Contraseña actual')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continuar' })).toBeNull();
@@ -247,6 +252,12 @@ describe('EliminarCuentaSheet — confirmacion', () => {
     const alerta = await screen.findByRole('alert');
     expect(alerta).toHaveTextContent('No pudimos pedir la eliminación');
     expect(alerta).not.toHaveTextContent('secreta');
+    // Si sigue fallando, la persona sabe a donde escribir.
+    expect(alerta).toHaveTextContent('soporte@kiramopay.com');
+    expect(within(alerta).getByRole('link', { name: 'soporte@kiramopay.com' })).toHaveAttribute(
+      'href',
+      'mailto:soporte@kiramopay.com',
+    );
   });
 
   it('si algo cambio entre la revision y el envio (409), lista lo pendiente y no suelta la sesion', async () => {
