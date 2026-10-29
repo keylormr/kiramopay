@@ -221,6 +221,12 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 		SenderCounterpartyName:   creatorName,
 		ReceiverCounterpartyName: share.UserName,
 		EnLaMismaTx: func(ctx context.Context, tx pgx.Tx, _ string) error {
+			// Primero el candado del grupo: una cancelacion en curso espera a que
+			// este pago confirme, y una que ya confirmo se ve aqui como "ya no
+			// esta activa" y el dinero no se mueve. Ver CancelarSiNadiePago.
+			if err := BloquearGrupoActivoEnTx(ctx, tx, groupID); err != nil {
+				return err
+			}
 			if err := ReclamarCuotaEnTx(ctx, tx, groupID, userID); err != nil {
 				return err
 			}
@@ -231,8 +237,10 @@ func (s *Service) PayShare(ctx context.Context, userID, groupID string) error {
 		// El motivo del modulo se devuelve tal cual: envuelto en "settle split
 		// share: post ledger: en la misma tx: ..." la pantalla mostraria las
 		// tripas en vez de "esa cuota ya no esta pendiente".
-		if errors.Is(err, ErrCuotaNoReclamable) {
-			return ErrCuotaNoReclamable
+		for _, motivo := range []error{ErrCuotaNoReclamable, ErrNotActive, ErrGroupNotFound} {
+			if errors.Is(err, motivo) {
+				return motivo
+			}
 		}
 		return fmt.Errorf("settle split share: %w", err)
 	}
@@ -281,6 +289,13 @@ func (s *Service) liquidarSiNoQuedaNadaPendiente(ctx context.Context, groupID st
 	_ = s.repo.MarcarLiquidadaSiSigueActiva(ctx, groupID)
 }
 
+// CancelSplit cancela la division, y solo mientras nadie ajeno al creador haya
+// pagado: lo pagado ya esta en la cuenta de quien la creo y cancelar no lo
+// devuelve. Devuelve ErrSplitHasPayments si alguien pago.
+//
+// La lectura de aqui solo comprueba quien pide; que nadie haya pagado se decide
+// DENTRO de la transaccion del repositorio, bajo el candado del grupo, porque un
+// pago puede confirmar en cualquier momento.
 func (s *Service) CancelSplit(ctx context.Context, userID, groupID string) error {
 	group, err := s.repo.GetGroup(ctx, groupID)
 	if err != nil {
@@ -289,7 +304,7 @@ func (s *Service) CancelSplit(ctx context.Context, userID, groupID string) error
 	if group.CreatorID != userID {
 		return ErrNotCreator
 	}
-	return s.repo.UpdateGroupStatus(ctx, groupID, "cancelled")
+	return s.repo.CancelarSiNadiePago(ctx, groupID)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

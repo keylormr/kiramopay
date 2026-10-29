@@ -5619,7 +5619,10 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** Cancel a split */
+        /**
+         * Cancel a split
+         * @description Only the person who created the split can cancel it, and only while nobody else has paid their share. Once someone has paid, the split can no longer be cancelled: that money is already in the creator's account and cancelling would not return it. The creator's own share is born paid and does not count; a declined share does not count either. Cancelling a split that is already cancelled is not an error. Whether anyone has paid is decided under a lock on the split, so a payment and a cancellation at the same moment cannot leave a cancelled split with a paid share: one of the two wins and the other is rejected.
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -5637,6 +5640,24 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content?: never;
+                };
+                /** @description CANCEL_FAILED — the split does not exist, the caller did not create it, or it already closed (all shares settled or declined). */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description SPLIT_HAS_PAYMENTS — someone other than the creator has already paid their share, so the split can no longer be cancelled. Nothing changed. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
                 };
             };
         };

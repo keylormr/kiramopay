@@ -58,6 +58,16 @@ const CLAVES_DEL_ESTADO_DEL_GRUPO: Readonly<Record<string, string>> = {
   cancelled: 'splitpay_detail_state_cancelled',
 };
 
+// Una division donde alguien ya pago no se puede cancelar (decision del dueno:
+// "No se puede cancelar"): el dinero de esa cuota ya esta en la cuenta de quien
+// creo la division y cancelar no lo devuelve. La cuota del propio creador no
+// cuenta: nace pagada y no mueve dinero. Una cuota cuya cuenta se elimino llega
+// sin userId y sigue siendo una cuota ajena pagada, igual que en el servidor
+// (`IS DISTINCT FROM`). Quien decide de verdad es el servidor; esto solo evita
+// ofrecer un boton que se va a rechazar.
+const hayPagosAjenos = (shares: SplitShare[], creatorId: string) =>
+  shares.some((c) => c.status === 'paid' && c.userId !== creatorId);
+
 export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { t } = useLanguage();
   const [splits, setSplits] = useState<SplitGroup[]>([]);
@@ -186,9 +196,10 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setLoadTrigger(n => n + 1);
   };
 
+  // Devuelve el detalle que quedo en pantalla, o null si no se pudo cargar.
   const abrirDetalle = async (groupId: string) => {
     const api = getApiLayer();
-    if (!api.splitPay) return;
+    if (!api.splitPay) return null;
     setCargandoDetalle(true);
     setErrorDetalle(null);
     setDetalle(null);
@@ -196,9 +207,10 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setCargandoDetalle(false);
     if (!res.success || !res.data) {
       setErrorDetalle(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'splitpay_err_detail', t));
-      return;
+      return null;
     }
     setDetalle(res.data);
+    return res.data;
   };
 
   const pagarMiParte = async () => {
@@ -248,6 +260,18 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
     setProcesandoAccion(false);
     setConfirmando(null);
     if (!res.success) {
+      if (res.error?.code === 'SPLIT_HAS_PAYMENTS') {
+        // Alguien pago despues de que se abrio este detalle. Se recarga para ver
+        // la cuota nueva; si lo recargado ya explica el motivo (el texto que
+        // reemplaza al boton), basta, y si no, se dice aqui. Nunca el aviso
+        // generico de "no pudimos cancelar": el motivo es conocido.
+        const recargado = await abrirDetalle(detalle.group.id);
+        if (!recargado || !hayPagosAjenos(recargado.shares, recargado.group.creatorId)) {
+          setErrorDetalle(t('splitpay_cancel_blocked_paid'));
+        }
+        setLoadTrigger(n => n + 1);
+        return;
+      }
       setErrorDetalle(mensajeDeRechazo(res.error, SIN_CLAVES_PROPIAS, 'splitpay_err_cancel', t));
       return;
     }
@@ -517,15 +541,6 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 <p className="text-sm text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
                   {confirmando === 'decline' ? t('splitpay_confirm_decline') : t('splitpay_confirm_cancel')}
                 </p>
-                {/* Cancelar solo cambia el estado del grupo: el dinero que
-                    otros ya pagaron esta en la cuenta de quien creo la
-                    division y no vuelve solo. La cuota del propio creador no
-                    cuenta: nace pagada y no mueve dinero. */}
-                {confirmando === 'cancel' && detalle.shares.some((c) => c.status === 'paid' && c.userId !== detalle.group.creatorId) && (
-                  <p className="text-sm font-semibold text-[var(--color-danger-strong)] dark:text-[var(--color-danger-strong-dark)]">
-                    {t('splitpay_cancel_paid_warning')}
-                  </p>
-                )}
                 <div className="flex gap-3">
                   <Button
                     variant="secondary"
@@ -565,13 +580,20 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     </>
                   )}
                 {detalle.group.status === 'active' && !!yoID && detalle.group.creatorId === yoID && (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmando('cancel')}
-                    className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] hover:opacity-80"
-                  >
-                    {t('splitpay_cancel_split')}
-                  </button>
+                  hayPagosAjenos(detalle.shares, detalle.group.creatorId) ? (
+                    // Con un pago hecho no hay boton: en su lugar, el motivo.
+                    <p role="status" className="rounded-xl px-3 py-2 text-sm uv-surface-2 uv-text-secondary">
+                      {t('splitpay_cancel_blocked_paid')}
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmando('cancel')}
+                      className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] hover:opacity-80"
+                    >
+                      {t('splitpay_cancel_split')}
+                    </button>
+                  )
                 )}
               </div>
             )}

@@ -216,8 +216,30 @@ func (h *Handler) CancelSplit(w http.ResponseWriter, r *http.Request) {
 	groupID := chi.URLParam(r, "id")
 
 	if err := h.service.CancelSplit(r.Context(), userID, groupID); err != nil {
-		response.Error(w, http.StatusBadRequest, "CANCEL_FAILED", err.Error())
+		status, code, msg := respuestaDeLaCancelacion(err)
+		response.Error(w, status, code, msg)
 		return
 	}
 	response.NoContent(w)
+}
+
+// respuestaDeLaCancelacion traduce el rechazo de cancelar una division.
+//
+// Una division donde alguien ya pago sale con su propio codigo y un 409: la
+// peticion es valida, es el estado de la division lo que la impide, y la pantalla
+// lo explica en el idioma de la persona a partir del CODIGO. Los demas motivos del
+// modulo conservan CANCEL_FAILED. Lo que no se reconoce (un fallo de la base) es
+// un 500: nada que corregir en el pedido, y response.Error deja el detalle en el
+// log y no lo manda al cliente.
+func respuestaDeLaCancelacion(err error) (int, string, string) {
+	if errors.Is(err, ErrSplitHasPayments) {
+		return http.StatusConflict, "SPLIT_HAS_PAYMENTS",
+			"the split already has payments and can no longer be cancelled"
+	}
+	for _, motivo := range []error{ErrGroupNotFound, ErrNotCreator, ErrNotActive} {
+		if errors.Is(err, motivo) {
+			return http.StatusBadRequest, "CANCEL_FAILED", motivo.Error()
+		}
+	}
+	return http.StatusInternalServerError, "CANCEL_FAILED", err.Error()
 }

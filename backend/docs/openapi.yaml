@@ -3771,6 +3771,16 @@ paths:
     delete:
       tags: [Split Payments]
       summary: Cancel a split
+      description: >-
+        Only the person who created the split can cancel it, and only while
+        nobody else has paid their share. Once someone has paid, the split can
+        no longer be cancelled: that money is already in the creator's account
+        and cancelling would not return it. The creator's own share is born
+        paid and does not count; a declined share does not count either.
+        Cancelling a split that is already cancelled is not an error. Whether
+        anyone has paid is decided under a lock on the split, so a payment and a
+        cancellation at the same moment cannot leave a cancelled split with a
+        paid share: one of the two wins and the other is rejected.
       security:
         - bearerAuth: []
       parameters:
@@ -3778,6 +3788,23 @@ paths:
       responses:
         '204':
           description: Split cancelled
+        '400':
+          description: >-
+            CANCEL_FAILED — the split does not exist, the caller did not
+            create it, or it already closed (all shares settled or declined).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            SPLIT_HAS_PAYMENTS — someone other than the creator has already
+            paid their share, so the split can no longer be cancelled. Nothing
+            changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/splits/{id}/pay:
     post:
