@@ -1,15 +1,15 @@
 # KiramoPay Android
 
-Android build via Capacitor 6. La app web se empaqueta como un WebView nativo con acceso a APIs de dispositivo.
+Android build via Capacitor 8. La app web se empaqueta como un WebView nativo con acceso a APIs de dispositivo.
 
 ## Requisitos
 
 | Herramienta | Version |
 |-------------|---------|
-| Node.js | 18+ |
-| Android Studio | 2024+ |
-| JDK | 17 |
-| Android SDK | API 34+ |
+| Node.js | 22+ (lo exige el CLI de Capacitor 8) |
+| Android Studio | Otter 2025.2.1+ |
+| JDK | 21 |
+| Android SDK | API 36 (minimo de la app: API 24, Android 7.0) |
 
 ## Build de Desarrollo
 

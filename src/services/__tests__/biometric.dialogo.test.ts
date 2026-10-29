@@ -15,7 +15,7 @@ const { verifyIdentity } = vi.hoisted(() => {
   return { verifyIdentity: vi.fn() };
 });
 
-vi.mock('capacitor-native-biometric', () => ({
+vi.mock('@capgo/capacitor-native-biometric', () => ({
   NativeBiometric: { verifyIdentity },
   BiometryType: {},
 }));

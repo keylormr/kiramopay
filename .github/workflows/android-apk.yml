@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - run: npm ci
@@ -80,10 +80,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/paquete-web.mjs android "$GITHUB_REF_NAME"
 
+      # Capacitor 8 y sus plugins compilan con Java 21 (sourceCompatibility
+      # VERSION_21 en sus build.gradle): con un JDK 17 Gradle no los compila.
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       # v3 instala el paquete `tools`, que Google retiro: el sdkmanager del
       # runner ya no lo encuentra y el paso falla antes de compilar. v4 instala

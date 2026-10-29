@@ -1,5 +1,12 @@
 // Servicio de autenticación biométrica
-import { NativeBiometric, BiometryType } from 'capacitor-native-biometric';
+//
+// @capgo/capacitor-native-biometric es la continuacion mantenida de
+// capacitor-native-biometric, que no se publica desde 2023: misma API y mismo
+// lugar para las credenciales (SharedPreferences cifradas con una llave del
+// Keystore en Android, Keychain en iOS, con el mismo nombre por `server`). Lo
+// que guardo el plugin anterior se sigue leyendo despues de instalar la
+// version nueva.
+import { NativeBiometric, BiometryType } from '@capgo/capacitor-native-biometric';
 import { traducirFueraDeReact } from '@/i18n/mensajesDeError';
 
 export interface BiometricResult {
