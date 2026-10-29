@@ -12,6 +12,19 @@ export interface PlanAsignado {
 }
 
 /**
+ * El capital propio de la empresa en una moneda, tal como lo dice el libro
+ * contable. Va en unidades menores y con su signo. El capital no tiene piso: si
+ * esta en negativo las operaciones siguen funcionando y `faltanteMinor` es lo que
+ * habria que depositar con dinero real para volver a cero.
+ */
+export interface CapitalPorMoneda {
+  moneda: string;
+  saldoMinor: number;
+  faltanteMinor: number;
+  enNegativo: boolean;
+}
+
+/**
  * A user as the admin console sees it. The identity fields arrive already
  * masked by the server (last digits only, obfuscated mailbox); the full values
  * never reach the client.
@@ -179,4 +192,12 @@ export interface IAdminRepository {
    * tiene que corresponder a un deposito real, por eso lleva referencia.
    */
   fondearPromociones(amountMinor: number, referencia: string, idempotencyKey: string): Promise<ApiResponse<{ saldoMinor: number }>>;
+
+  // ── Capital propio ──
+  /**
+   * El capital propio de la empresa por moneda, leido del libro contable (nunca
+   * calculado aqui). Una fila que no se entiende o una lista ausente es un fallo,
+   * no un cero: un cero diria "no falta nada" y lo que hay es "no se sabe".
+   */
+  capitalPropio(): Promise<ApiResponse<CapitalPorMoneda[]>>;
 }

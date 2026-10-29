@@ -27,6 +27,7 @@ import (
 	"github.com/kiramopay/backend/internal/b2b"
 	"github.com/kiramopay/backend/internal/budget"
 	"github.com/kiramopay/backend/internal/buildinfo"
+	"github.com/kiramopay/backend/internal/capital"
 	"github.com/kiramopay/backend/internal/cards"
 	"github.com/kiramopay/backend/internal/config"
 	"github.com/kiramopay/backend/internal/country"
@@ -687,6 +688,9 @@ func main() {
 
 	marketplaceHandler := marketplace.NewHandler(marketplaceService)
 	loyaltyHandler := loyalty.NewHandler(loyaltyService)
+	// El capital propio de la empresa, por moneda, para el panel de
+	// administracion. Solo lee el libro.
+	capitalHandler := capital.NewHandler(capital.NewRepository(pool))
 	qrHandler := qrpayment.NewHandler(qrService)
 	splitHandler := splitpay.NewHandler(splitService)
 	// El titular de la tarjeta es el nombre de la persona, el de su perfil.
@@ -1335,6 +1339,11 @@ func main() {
 				// que corresponder a un deposito real.
 				r.Get("/admin/promociones", loyaltyHandler.Promociones)
 				r.Post("/admin/promociones/fondos", loyaltyHandler.FondearPromociones)
+
+				// El capital propio de la empresa (migracion 087): puede quedar
+				// en negativo sin frenar nada, y el panel dice cuanto falta por
+				// moneda. Solo lectura del libro.
+				r.Get("/admin/capital", capitalHandler.Saldos)
 
 				// UIF / AML reporting queue
 				r.Get("/admin/uif/reports", uifHandler.ListReports)

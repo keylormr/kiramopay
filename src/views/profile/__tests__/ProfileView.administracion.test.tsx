@@ -4,7 +4,7 @@ import { LanguageProvider } from '@/i18n/LanguageContext';
 import { ProfileView } from '../ProfileView';
 
 // Las entradas del administrador (verificar comercios, usuarios, disputas del
-// escrow, fondo de promociones) estaban dentro de "Herramientas de comercio",
+// escrow, fondo de promociones, capital propio) estaban dentro de "Herramientas de comercio",
 // mezcladas con las del dueno de un negocio. Tienen su propia seccion, con su
 // encabezado, y solo la ve un administrador.
 
@@ -37,7 +37,7 @@ vi.mock('@/hooks/useApp', () => ({
   }),
 }));
 
-const ENTRADAS_DE_ADMINISTRADOR = ['Verificar comercios', 'Usuarios', 'Disputas de escrow', 'Fondo de promociones'];
+const ENTRADAS_DE_ADMINISTRADOR = ['Verificar comercios', 'Usuarios', 'Disputas de escrow', 'Fondo de promociones', 'Capital propio'];
 
 // El encabezado y su lista comparten el contenedor.
 const seccion = (encabezado: string) => {
@@ -64,7 +64,7 @@ afterEach(() => {
 });
 
 describe('ProfileView: seccion de administracion', () => {
-  it('un administrador ve su propia seccion con las cuatro entradas', async () => {
+  it('un administrador ve su propia seccion con las cinco entradas', async () => {
     mocks.listPendingMerchants.mockResolvedValue({ success: true, data: [] });
     pintar();
 
@@ -92,15 +92,18 @@ describe('ProfileView: seccion de administracion', () => {
     mocks.listPendingMerchants.mockResolvedValue({ success: true, data: [] });
     const onOpenAdminDisputas = vi.fn();
     const onOpenAdminMerchants = vi.fn();
+    const onOpenAdminCapital = vi.fn();
     const user = userEvent.setup();
-    pintar({ onOpenAdminDisputas, onOpenAdminMerchants });
+    pintar({ onOpenAdminDisputas, onOpenAdminMerchants, onOpenAdminCapital });
 
     await screen.findByRole('heading', { name: 'Administración' });
     await user.click(screen.getByRole('button', { name: /Disputas de escrow/ }));
     await user.click(screen.getByRole('button', { name: /Verificar comercios/ }));
+    await user.click(screen.getByRole('button', { name: /Capital propio/ }));
 
     expect(onOpenAdminDisputas).toHaveBeenCalledTimes(1);
     expect(onOpenAdminMerchants).toHaveBeenCalledTimes(1);
+    expect(onOpenAdminCapital).toHaveBeenCalledTimes(1);
   });
 
   it('quien no es administrador no ve la seccion ni sus entradas', async () => {

@@ -9933,6 +9933,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/capital": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own capital of the company, per currency
+         * @description The balance of each SYSTEM:CAPITAL:<currency> ledger account (migration 087): the company's own cash, kept apart from what is owed to users (the reserve is exactly equal to that). Crypto purchases and sales move money between the reserve and the capital, fees enter it and promotions leave it. The account has no floor on purpose: it can go negative and operations keep working. When it does, `shortfall_minor` is how much would have to be deposited with real money to get back to zero. The figure comes from the ledger (the immutable journal), never from a client-side calculation. Admin only.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description One row per currency that has a capital account. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            currencies?: {
+                                /** @example CRC */
+                                currency: string;
+                                /**
+                                 * Format: int64
+                                 * @description Signed balance in minor units; negative when the capital is short.
+                                 * @example -19670
+                                 */
+                                balance_minor: number;
+                                /**
+                                 * Format: int64
+                                 * @description How much is missing to reach zero (0 when the balance is not negative).
+                                 * @example 19670
+                                 */
+                                shortfall_minor: number;
+                                negative: boolean;
+                            }[];
+                            /** Format: date-time */
+                            as_of?: string;
+                        };
+                    };
+                };
+                /** @description CAPITAL_UNAVAILABLE — the ledger could not be read. There are no currencies in the answer: a zero would claim that nothing is missing, and what is known is nothing. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/promociones/fondos": {
         parameters: {
             query?: never;
