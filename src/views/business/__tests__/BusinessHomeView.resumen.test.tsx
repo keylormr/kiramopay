@@ -96,6 +96,19 @@ const resumenSinAntes = (): ResumenDelComercio => ({
 
 const pagos: QRPayment[] = [];
 
+// La seccion existe desde el primer render y queda ocupada (aria-busy) mientras
+// llega el resumen del servidor. Leer sus periodos apenas aparece la seccion es
+// una carrera contra esa respuesta: se espera a que termine de cargar.
+const seccionDeVentas = async (nombre = 'Ventas') => {
+  const seccion = await screen.findByRole('region', { name: nombre });
+  await waitFor(() => expect(seccion).toHaveAttribute('aria-busy', 'false'));
+  return seccion;
+};
+
+// La respuesta llega despues, como la de un servidor de verdad: una prueba que
+// leyera los periodos sin esperarla fallaria siempre, no segun el humor del CI.
+const llegaDespues = <T,>(valor: T, ms = 25) => new Promise<T>((resolver) => setTimeout(() => resolver(valor), ms));
+
 const pintar = (m: QRMerchant = comercio(), payments: QRPayment[] = pagos, paymentsFailed = false) =>
   render(
     <LanguageProvider>
@@ -110,14 +123,14 @@ beforeEach(() => {
   mocks.api.qrPayments.getMerchantBalance.mockResolvedValue({ success: true, data: 777 });
   mocks.api.qrPayments.getCatalog.mockResolvedValue({ success: true, data: [] });
   mocks.api.qrPayments.getLocations.mockResolvedValue({ success: true, data: [] });
-  mocks.api.qrPayments.getMerchantSummary.mockResolvedValue({ success: true, data: resumenBase() });
+  mocks.api.qrPayments.getMerchantSummary.mockImplementation(() => llegaDespues({ success: true, data: resumenBase() }));
 });
 
 describe('BusinessHomeView: ventas de hoy, de 7 dias y del mes', () => {
   it('muestra los tres periodos con la cantidad de cobros rotulada', async () => {
     pintar();
 
-    const seccion = await screen.findByRole('region', { name: 'Ventas' });
+    const seccion = await seccionDeVentas();
     const hoy = within(seccion).getByRole('group', { name: 'Hoy' });
     const semana = within(seccion).getByRole('group', { name: '7 días' });
     const mes = within(seccion).getByRole('group', { name: 'Este mes' });
@@ -135,7 +148,7 @@ describe('BusinessHomeView: ventas de hoy, de 7 dias y del mes', () => {
     pintar(comercio(), [
       { id: 'a', qrCodeId: 'q', payerId: 'p', receiverId: 'r', amount: 1000, fee: 5, currency: 'CRC', status: 'completed', createdAt: '2026-07-02T10:00:00Z' },
     ]);
-    await screen.findByRole('region', { name: 'Ventas' });
+    await seccionDeVentas();
 
     expect(screen.queryByText(/Últimos? \d* ?cobros?/i)).toBeNull();
     expect(screen.queryByText(/Último cobro/i)).toBeNull();
@@ -143,7 +156,7 @@ describe('BusinessHomeView: ventas de hoy, de 7 dias y del mes', () => {
 
   it('la tarjeta del saldo no repite las ventas de hoy: ya estan en la seccion Ventas', async () => {
     pintar();
-    const seccion = await screen.findByRole('region', { name: 'Ventas' });
+    const seccion = await seccionDeVentas();
 
     expect(within(seccion).getByRole('group', { name: 'Hoy' })).toBeInTheDocument();
     expect(screen.queryByText(/Ventas de hoy/)).toBeNull();
@@ -162,7 +175,7 @@ describe('BusinessHomeView: ventas de hoy, de 7 dias y del mes', () => {
     });
     pintar();
 
-    const hoy = within(await screen.findByRole('region', { name: 'Ventas' })).getByRole('group', { name: 'Hoy' });
+    const hoy = within(await seccionDeVentas()).getByRole('group', { name: 'Hoy' });
     expect(within(hoy).getByText('₡0.00')).toBeInTheDocument();
     expect(within(hoy).getByText('0 cobros')).toBeInTheDocument();
   });
@@ -180,7 +193,7 @@ describe('BusinessHomeView: ventas de hoy, de 7 dias y del mes', () => {
     });
     pintar();
 
-    const hoy = within(await screen.findByRole('region', { name: 'Ventas' })).getByRole('group', { name: 'Hoy' });
+    const hoy = within(await seccionDeVentas()).getByRole('group', { name: 'Hoy' });
     expect(within(hoy).getByText('₡1,000.00')).toBeInTheDocument();
     expect(within(hoy).getByText('$50.00')).toBeInTheDocument();
     expect(within(hoy).queryByText(/1,050/)).toBeNull();
@@ -192,7 +205,7 @@ describe('BusinessHomeView: la comparacion con el periodo anterior', () => {
     mocks.api.qrPayments.getMerchantSummary.mockResolvedValue({ success: true, data: resumenAnalitica() });
     pintar(comercio({ plan: 'analitica' }));
 
-    const seccion = await screen.findByRole('region', { name: 'Ventas' });
+    const seccion = await seccionDeVentas();
     const hoy = within(seccion).getByRole('group', { name: 'Hoy' });
     expect(within(hoy).getByText('+25%')).toBeInTheDocument();
     // Ayer se corta a la misma hora: el rotulo lo dice, no es contra el dia entero.
@@ -214,7 +227,7 @@ describe('BusinessHomeView: la comparacion con el periodo anterior', () => {
     mocks.api.qrPayments.getMerchantSummary.mockResolvedValue({ success: true, data: resumenSinAntes() });
     pintar(comercio({ plan: 'analitica' }));
 
-    const seccion = await screen.findByRole('region', { name: 'Ventas' });
+    const seccion = await seccionDeVentas();
     expect(within(within(seccion).getByRole('group', { name: 'Hoy' })).getByText('Ayer a esta hora: sin cobros')).toBeInTheDocument();
     expect(within(within(seccion).getByRole('group', { name: '7 días' })).getByText('Los 7 días anteriores: sin cobros')).toBeInTheDocument();
     expect(within(within(seccion).getByRole('group', { name: 'Este mes' })).getByText('El mes anterior a esta fecha: sin cobros')).toBeInTheDocument();
@@ -228,7 +241,7 @@ describe('BusinessHomeView: la comparacion con el periodo anterior', () => {
     mocks.api.qrPayments.getMerchantSummary.mockResolvedValue({ success: true, data: resumenAnalitica() });
     pintar(comercio({ plan: 'analitica' }));
 
-    const seccion = await screen.findByRole('region', { name: 'Sales' });
+    const seccion = await seccionDeVentas('Sales');
     expect(within(within(seccion).getByRole('group', { name: 'Today' })).getByText('vs. yesterday at this time')).toBeInTheDocument();
     expect(within(within(seccion).getByRole('group', { name: 'This month' })).getByText('vs. last month up to this date')).toBeInTheDocument();
     const semana = within(seccion).getByRole('group', { name: '7 days' });
@@ -239,7 +252,7 @@ describe('BusinessHomeView: la comparacion con el periodo anterior', () => {
   it('sin el plan no hay comparacion, y el dueno sabe por que', async () => {
     pintar(comercio({ plan: 'base' }));
 
-    const seccion = await screen.findByRole('region', { name: 'Ventas' });
+    const seccion = await seccionDeVentas();
     expect(within(seccion).queryByText(/%/)).toBeNull();
     expect(within(seccion).getByText('La comparación con el período anterior es parte del plan Analítica.')).toBeInTheDocument();
   });
@@ -279,7 +292,7 @@ describe('BusinessHomeView: un cajero', () => {
     });
     pintar(comercio({ role: 'cashier' }));
 
-    const seccion = await screen.findByRole('region', { name: 'Ventas' });
+    const seccion = await seccionDeVentas();
     expect(within(seccion).getByRole('group', { name: 'Hoy' })).toBeInTheDocument();
     expect(within(seccion).queryByRole('group', { name: '7 días' })).toBeNull();
     expect(within(seccion).queryByRole('group', { name: 'Este mes' })).toBeNull();

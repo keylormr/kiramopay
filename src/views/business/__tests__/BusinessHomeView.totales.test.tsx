@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { BusinessHomeView } from '../BusinessHomeView';
 import type { QRMerchant, QRPayment, ResumenDelComercio, VentasPorMoneda } from '@/api/repositories/qrpayment.repository';
@@ -59,14 +59,24 @@ const pintar = (payments: QRPayment[] = [], paymentsFailed = false) =>
     </LanguageProvider>,
   );
 
-const grupoDeHoy = async () =>
-  within(await screen.findByRole('region', { name: 'Ventas' })).getByRole('group', { name: 'Hoy' });
+// La seccion existe desde el primer render y queda ocupada (aria-busy) mientras
+// llega el resumen: leer sus periodos antes de eso es una carrera contra la respuesta.
+const seccionDeVentas = async () => {
+  const seccion = await screen.findByRole('region', { name: 'Ventas' });
+  await waitFor(() => expect(seccion).toHaveAttribute('aria-busy', 'false'));
+  return seccion;
+};
+
+const grupoDeHoy = async () => within(await seccionDeVentas()).getByRole('group', { name: 'Hoy' });
+
+// La respuesta llega despues, como la de un servidor de verdad.
+const llegaDespues = <T,>(valor: T, ms = 25) => new Promise<T>((resolver) => setTimeout(() => resolver(valor), ms));
 
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   mocks.getMerchantSummary.mockReset();
-  mocks.getMerchantSummary.mockResolvedValue({ success: true, data: resumenDeHoy([venta('CRC', 1000, 1)]) });
+  mocks.getMerchantSummary.mockImplementation(() => llegaDespues({ success: true, data: resumenDeHoy([venta('CRC', 1000, 1)]) }));
 });
 
 describe('BusinessHomeView', () => {
