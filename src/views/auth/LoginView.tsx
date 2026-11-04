@@ -810,15 +810,19 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
 
       {/* Footer */}
       <footer className="relative px-6 pb-8 pt-6">
-        <div className="text-center">
-          <p className="text-[var(--color-text-muted-dark)] text-sm mb-1">{t('login_no_account')}</p>
-          <button
-            onClick={onRegister}
-            className="text-[var(--color-primary-300)] hover:text-[var(--color-primary-200)] font-bold text-lg transition-colors"
-          >
-            {t('create_account')}
-          </button>
-        </div>
+        {/* En la primera etapa ya esta el boton "Crear cuenta" bajo Continuar:
+            con este enlace la pantalla lo mostraba dos veces. */}
+        {showPasswordStage && (
+          <div className="text-center">
+            <p className="text-[var(--color-text-muted-dark)] text-sm mb-1">{t('login_no_account')}</p>
+            <button
+              onClick={onRegister}
+              className="text-[var(--color-primary-300)] hover:text-[var(--color-primary-200)] font-bold text-lg transition-colors"
+            >
+              {t('create_account')}
+            </button>
+          </div>
+        )}
 
         {SHOW_APK_DOWNLOAD && (
           <a

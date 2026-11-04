@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -36,20 +37,20 @@ var voseo = regexp.MustCompile(`(?i)(?:^|[^\p{L}])(` + strings.Join([]string{
 	`fuiste vos`, `fue vos`, `a vos`, `con vos`, `para vos`, `si vos`, `vos mismo`, `vos misma`, `vos quien`,
 	// El presente: "vos podes" en vez de "tu puedes".
 	`podés`, `tenés`, `querés`, `sabés`, `hacés`, `decís`, `venís`, `enviás`, `cambiás`, `considerás`,
-	`resolvás`, `ingresás`, `elegís`, `ponés`, `vivís`,
+	`resolvás`, `ingresás`, `elegís`, `ponés`, `vivís`, `recibís`,
 	// El imperativo con tilde final.
 	`ignorá`, `esperá`, `entrá`, `usá`, `volvé`, `restablecé`, `reactivá`, `abrí`, `cambiá`, `confirmá`,
 	`revisá`, `escaneá`, `agregá`, `tocá`, `elegí`, `escribí`, `mirá`, `probá`, `hacé`, `poné`, `decí`,
 	`tené`, `andá`, `pasá`, `seguí`, `ingresá`, `verificá`, `intentá`, `guardá`, `cargá`, `compartí`,
 	`iniciá`, `pedí`, `avisá`, `creá`, `apretá`, `cerrá`, `descargá`, `actualizá`, `conectá`, `registrá`,
 	`eliminá`, `borrá`, `enviá`, `mandá`, `pagá`, `cobrá`, `retirá`, `comprá`, `vendé`, `convertí`,
-	`cancelá`, `aprobá`, `rechazá`,
+	`cancelá`, `aprobá`, `rechazá`, `revocá`, `presentá`, `respondé`, `compará`, `deduplicá`, `tratá`,
 	// El imperativo con el pronombre pegado: en voseo va sin tilde ("envialo") y
 	// en tuteo la lleva ("envíalo"). Solo las que no se confunden con el ASCII.
 	`escribinos`, `avisanos`, `contanos`, `mandanos`, `llamanos`, `ayudanos`, `dejanos`, `decinos`,
 	`pedinos`, `contactanos`, `comunicate`, `pedile`, `pedila`, `pedilo`, `ponele`, `ponelo`, `decile`,
 	`decilo`, `mandale`, `mandalo`, `avisale`, `escribile`, `contale`, `mostrale`, `mostralo`, `pasale`,
-	`pasalo`, `revisalos?`, `revisalas?`, `imprimilos?`, `pegalos?`, `copialos?`, `guardalos?`, `usalos?`,
+	`pasalo`, `revisalos?`, `revisalas?`, `imprimilos?`, `pegalos?`, `copialos?`, `guardalos?`, `guardalas?`, `usalos?`,
 	`fijate`, `acordate`, `asegurate`, `registrate`, `cambiala`, `cambialo`, `envialo`, `envialas`,
 	`retiralo`, `retirala`, `gastalo`, `vendelas`, `cerralo`, `cancelalos`,
 	// Sin tilde, que no existen en tuteo: "puedes", "tienes", "quieres", "vuelve".
@@ -104,6 +105,31 @@ func TestLosTextosDelServidorTutean(t *testing.T) {
 	}
 }
 
+// La guia de integracion (backend/docs) la leen los comercios que se conectan
+// por API, y tenia el mismo voseo ("Revocá keys", "guardala", "probá contra tu
+// deploy"). Se revisa cada linea, bloques de codigo incluidos: los comentarios
+// de los ejemplos tambien los lee el comercio.
+func TestLaDocumentacionParaComerciosTutea(t *testing.T) {
+	guias, err := filepath.Glob(filepath.Join("..", "..", "docs", "*.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(guias) == 0 {
+		t.Fatal("no se encontro ninguna guia en backend/docs: la prueba no esta mirando nada")
+	}
+	for _, ruta := range guias {
+		contenido, err := os.ReadFile(ruta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, linea := range strings.Split(string(contenido), "\n") {
+			if m := voseo.FindStringSubmatch(linea); m != nil {
+				t.Errorf("%s:%d: voseo %q en %q", ruta, i+1, m[1], resumen(linea))
+			}
+		}
+	}
+}
+
 // La lista de formas tiene que reconocer el voseo que dice reconocer: sin esto,
 // un error de escritura en la lista deja pasar justo lo que debe atrapar.
 func TestElDetectorDeVoseoReconoceLoQueDebe(t *testing.T) {
@@ -117,6 +143,9 @@ func TestElDetectorDeVoseoReconoceLoQueDebe(t *testing.T) {
 		"indica cuanto queres pagar",
 		"cambiala cuanto antes",
 		"cerralo o esperá a que se liquide",
+		"Revocá keys con DELETE",
+		"guardala en tu gestor de secretos",
+		"cuando recibís el bien",
 	} {
 		if !voseo.MatchString(texto) {
 			t.Errorf("no reconoce el voseo de %q", texto)
@@ -133,6 +162,10 @@ func TestElDetectorDeVoseoReconoceLoQueDebe(t *testing.T) {
 		"Posez-moi vos questions sur votre solde",
 		"estás creando tu cuenta",
 		"pagalo desde Pagar con QR",
+		"Revoca keys con DELETE",
+		"guárdala en tu gestor de secretos",
+		"cuando recibes el bien",
+		"no recibí el artículo",
 	} {
 		if voseo.MatchString(texto) {
 			t.Errorf("marca como voseo %q, que esta bien", texto)
