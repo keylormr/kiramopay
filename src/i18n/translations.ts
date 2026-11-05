@@ -280,6 +280,11 @@ export type TranslationKeys = {
   payment_detected: string;
   camera_unavailable: string;
   enter_code_manually: string;
+  qr_pick_image: string;
+  qr_pick_image_hint: string;
+  qr_reading_image: string;
+  qr_image_no_qr: string;
+  qr_image_unreadable: string;
   qr_code: string;
   payment_done: string;
   amount_qr_hint: string;
