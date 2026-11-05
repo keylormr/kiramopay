@@ -23,7 +23,7 @@ import (
 //     como hace Bizum. Pix y UPI muestran el nombre completo; Bre-B y Nequi lo
 //     enmascaran. Reconocer a alguien no necesita el apellido entero.
 //   - Solo el nombre: nunca el id, la cedula, el telefono ni el correo.
-//   - Con limite por minuto y por hora en la ruta (cmd/api/main.go).
+//   - Con limite por minuto, por hora y por dia en la ruta (cmd/api/main.go).
 //   - Quien pidio eliminar su cuenta no aparece, igual que en el envio.
 //
 // El telefono se busca con el MISMO texto y la misma funcion que usa el envio:

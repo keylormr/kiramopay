@@ -48,7 +48,7 @@ func TestNombreParcial(t *testing.T) {
 		{"", "", ""},
 		// Los caracteres que no se ven no entran: con un U+202E (cambio de sentido
 		// de escritura) alguien podria invertir lo que se lee en pantalla.
-		{"Ana‮", "Pe​rez", "Ana P."},
+		{"Ana\u202e", "Pe\u200brez", "Ana P."},
 		{"A\u0000na", "Perez\n", "Ana P."},
 		// El apellido completo no sale nunca, ni aunque sea de una sola palabra.
 		{"Ana", "Perezoso", "Ana P."},

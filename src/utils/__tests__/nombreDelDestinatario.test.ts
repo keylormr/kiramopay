@@ -14,7 +14,7 @@ describe('coincideConElRegistrado', () => {
     ['dos nombres de pila', 'Maria Jose Gomez', 'Maria Jose G.', true],
     ['uno de los dos nombres de pila y el apellido', 'Maria Gomez', 'Maria Jose G.', true],
     ['espacios de mas', '  Keilor   Martinez ', 'Keilor M. R.', true],
-    ['caracteres invisibles en el QR', 'Kei​lor Martinez', 'Keilor M. R.', true],
+    ['caracteres invisibles en el QR', 'Kei\u200blor Martinez', 'Keilor M. R.', true],
     ['apellido compuesto dicho por su ultimo apellido', 'Ana Cruz', 'Ana D. L. C.', true],
     ['apellido compuesto completo', 'Ana de la Cruz', 'Ana D. L. C.', true],
     ['nombre de pila abreviado con punto en el QR', 'Ma. José García', 'Ma Jose G.', true],
