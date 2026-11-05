@@ -549,6 +549,10 @@ export type TranslationKeys = {
   contact_saved_in_contacts: string;
   contact_homonym_warning: string;
   contact_homonym_confirm: string;
+  dest_verificando: string;
+  dest_registrado: string;
+  dest_no_coincide: string;
+  dest_sin_cuenta: string;
   or_type_it: string;
   contact_name: string;
   bank_optional: string;

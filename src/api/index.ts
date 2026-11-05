@@ -130,7 +130,7 @@ export type { IMfaRepository, TotpEnrollResponse } from './repositories/mfa.repo
 export { MFA_REQUIRED } from './repositories/mfa.repository';
 export type { IAccountRepository } from './repositories/account.repository';
 export type { ITransactionRepository } from './repositories/transaction.repository';
-export type { ISinpeRepository, SendSinpeRequest } from './repositories/sinpe.repository';
+export type { ISinpeRepository, SendSinpeRequest, RecipientLookup } from './repositories/sinpe.repository';
 export type {
   ICryptoRepository,
   BuyCryptoRequest,

@@ -1,7 +1,7 @@
-import type { ISinpeRepository, SendSinpeRequest } from '../../repositories/sinpe.repository';
+import type { ISinpeRepository, RecipientLookup, SendSinpeRequest } from '../../repositories/sinpe.repository';
 import type { ApiResponse } from '../../types';
 import type { SinpeContact, SinpeTransaction } from '@/types';
-import { apiSuccess } from '../../types';
+import { apiError, apiSuccess } from '../../types';
 import { falla } from './falla';
 import { HttpClient } from './client';
 import { normalizarTelefonoCR } from '@/utils/telefono';
@@ -146,5 +146,20 @@ export class HttpSinpeRepository implements ISinpeRepository {
     };
 
     return apiSuccess(tx);
+  }
+
+  // El nombre registrado a un telefono, recortado por el servidor. POST y no GET:
+  // el numero no queda en la URL ni en los registros de acceso. El servidor lo
+  // exige como +506XXXXXXXX; un numero que no se puede llevar a ese formato no
+  // se manda (no hay nada que preguntar).
+  async lookupRecipient(phone: string): Promise<ApiResponse<RecipientLookup>> {
+    const telefono = normalizarTelefonoCR(phone);
+    if (!telefono) return apiError<RecipientLookup>('INVALID_PHONE', 'Invalid phone number');
+    const res = await this.client.post<{ registered: boolean; display_name?: string }>(
+      '/api/v1/sinpe/recipient',
+      { phone: telefono },
+    );
+    if (!res.success || !res.data) return falla(res, 'RECIPIENT_LOOKUP_FAILED');
+    return apiSuccess({ registered: res.data.registered === true, displayName: res.data.display_name || undefined });
   }
 }

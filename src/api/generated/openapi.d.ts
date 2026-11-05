@@ -1785,6 +1785,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sinpe/recipient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Look up the registered name of a phone number
+         * @description Tells whether a phone number belongs to a KiramoPay account and, if it does, the name registered to it, shortened to the first name(s) and the initial of each surname (e.g. "Keilor M. R."). It exists so that someone paying a contact QR received through chat can recognize the person before sending: the name in a QR is written by whoever created it and nobody checks it. Nothing else about the account is returned (no id, national id, phone or email). The phone is looked up exactly as POST /api/v1/sinpe/send does, so a registered=true answer means a transfer to that number finds the same person. An account that asked to be deleted is reported as not registered. It is a POST so the number does not end up in the URL or in access logs. Rate limited per user: 12 requests per minute and 40 per hour (429 RATE_LIMITED).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SinpeRecipientRequest"];
+                };
+            };
+            responses: {
+                /** @description The lookup result (also when the number has no account) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                            data: components["schemas"]["SinpeRecipient"];
+                        };
+                    };
+                };
+                /** @description VALIDATION_ERROR (phone format), INVALID_PHONE (not a Costa Rican mobile number), SELF_SEND (the number is the caller's own) or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RATE_LIMITED - too many lookups; try again later. */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description RECIPIENT_LOOKUP_FAILED - the database did not answer. It does NOT mean the number has no account; the detail is only logged. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sinpe/history": {
         parameters: {
             query?: never;
@@ -12298,6 +12371,22 @@ export interface components {
             name: string;
             phone: string;
             is_favorite?: boolean;
+        };
+        SinpeRecipientRequest: {
+            /**
+             * @description Costa Rican mobile number as +506 followed by its eight digits, with no spaces or dashes.
+             * @example +50688887777
+             */
+            phone: string;
+        };
+        SinpeRecipient: {
+            /** @description Whether the number belongs to a KiramoPay account. */
+            registered: boolean;
+            /**
+             * @description Registered name, shortened: first name(s) and the initial of each surname. Absent when the number has no account.
+             * @example Keilor M. R.
+             */
+            display_name?: string;
         };
         SinpeSendRequest: {
             /**
