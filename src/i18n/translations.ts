@@ -285,6 +285,12 @@ export type TranslationKeys = {
   qr_reading_image: string;
   qr_image_no_qr: string;
   qr_image_unreadable: string;
+  qr_compartir_imagen: string;
+  qr_imagen_descargada: string;
+  qr_imagen_error: string;
+  qr_imagen_solo_web: string;
+  qr_card_pie: string;
+  qr_card_pie_contacto: string;
   qr_code: string;
   payment_done: string;
   amount_qr_hint: string;
