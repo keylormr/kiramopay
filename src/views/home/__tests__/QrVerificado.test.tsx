@@ -28,16 +28,19 @@ const mocks = vi.hoisted(() => ({
   sinpeSend: vi.fn(),
   lookup: vi.fn(),
   contactos: [] as SinpeContact[],
+  sinQrPayments: false,
 }));
 
 vi.mock('@/api', () => ({
   MFA_REQUIRED: 'MFA_REQUIRED',
   getApiLayer: () => ({
-    qrPayments: {
-      getMyCode: mocks.getMyCode,
-      resolveQr: mocks.resolveQr,
-      scanAndPay: mocks.scanAndPay,
-    },
+    qrPayments: mocks.sinQrPayments
+      ? undefined
+      : {
+          getMyCode: mocks.getMyCode,
+          resolveQr: mocks.resolveQr,
+          scanAndPay: mocks.scanAndPay,
+        },
     sinpe: { send: mocks.sinpeSend, lookupRecipient: mocks.lookup },
     mfa: { totpVerify: vi.fn() },
   }),
@@ -158,6 +161,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   mocks.contactos.length = 0;
+  mocks.sinQrPayments = false;
   mocks.getMyCode.mockResolvedValue({ success: false, error: { code: 'X' } });
   // Por defecto la consulta del nombre registrado no contesta nada util: la
   // pantalla se queda como antes ("sin verificar"). Cada prueba de abajo la
@@ -292,18 +296,80 @@ describe('Pagar espera a saber a quien se le paga', () => {
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
   });
 
-  it('si no se pudo verificar (sin red) se dice y Pagar sigue disponible, con Reintentar', async () => {
-    // Decision que ya existia: una caida del servidor no impide pagar un codigo
-    // conocido. Lo que cambia es que ya no se confunde con "todavia verificando".
-    mocks.resolveQr.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+  it('si no se pudo verificar (sin red) se dice, Pagar espera y Reintentar lo habilita al saber a quien se paga', async () => {
+    // Decision del dueno (2026-11-05): sin saber a quien se le paga no se paga,
+    // tampoco cuando la verificacion falla por red. Antes el fallo dejaba Pagar
+    // disponible.
+    mocks.resolveQr
+      .mockResolvedValueOnce({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { kind: 'code', merchantName: 'Soda Tica', currency: 'CRC', amount: 0, qrCodeId: 'code-1' },
+      });
     const user = userEvent.setup();
     pintar();
 
     await escanear(user, 'simular-kp');
 
     expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pagar' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+    expect(mocks.scanAndPay).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    expect(await screen.findByText('Soda Tica')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Pagar' })).toBeEnabled());
+  });
+
+  it('Pagar apunta a su motivo y Reintentar es un blanco tactil de 44 px', async () => {
+    mocks.resolveQr.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+
+    const aviso = await screen.findByText('No pudimos verificar el código. Intenta de nuevo.');
+    const pagar = screen.getByRole('button', { name: 'Pagar' });
+    expect(pagar).toHaveAccessibleDescription('No pudimos verificar el código. Intenta de nuevo.');
+    expect(aviso.id).toBe(pagar.getAttribute('aria-describedby'));
+    expect(screen.getByRole('button', { name: 'Reintentar' }).className).toContain('min-h-11');
+  });
+
+  it('un reintento que vuelve a fallar deja Pagar bloqueado, con Reintentar a mano', async () => {
+    mocks.resolveQr.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+    await screen.findByText('No pudimos verificar el código. Intenta de nuevo.');
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    await waitFor(() => expect(mocks.resolveQr).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+  });
+
+  it('si la consulta lanza una excepcion se trata como no verificado: Pagar espera', async () => {
+    mocks.resolveQr.mockRejectedValue(new Error('boom'));
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+
+    expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+  });
+
+  it('sin la capa de pagos por QR tampoco se paga a ciegas', async () => {
+    // getApiLayer() sin qrPayments: no hay como verificar, y por tanto no se paga.
+    mocks.sinQrPayments = true;
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+
+    expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
   });
 });
 
