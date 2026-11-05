@@ -15,6 +15,7 @@ import { SinpeContact, SinpeTransaction } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
+import { avisoDeHomonimo, evaluarContactoEscaneado } from '@/utils/contactoEscaneado';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLocalesCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
 import { mensajeDelRechazoDelCobro } from '@/utils/erroresQr';
@@ -112,6 +113,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [contactSheetMode, setContactSheetMode] = useState<'form' | 'scan'>('form');
   const [contactScanError, setContactScanError] = useState('');
   const [contactPrefilled, setContactPrefilled] = useState(false);
+  // La persona confirmo que el numero escaneado es el de quien dice ser.
+  const [homonimoConfirmado, setHomonimoConfirmado] = useState(false);
   // El dueño pidió que agregar un contacto (escaneando o a mano) avise ANTES
   // de guardar cuando el número ya está en la lista, en vez de dejar que el
   // upsert lo pise en silencio. `duplicateContact` reemplaza el contenido de
@@ -393,6 +396,19 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const esMiPropioNumero = (telefono: string): boolean =>
     !!state.user?.phone && mismoTelefonoCR(telefono, state.user.phone);
 
+  // Un contacto ESCANEADO cuyo nombre repite el de uno guardado con OTRO
+  // numero: el nombre de un QR lo escribe quien lo creo, asi que asi se hace
+  // pasar alguien por "Mama". Solo aplica a lo escaneado: lo tecleado a mano es
+  // un acto de la propia persona. Se mira el nombre ACTUAL del formulario, de
+  // modo que cambiarlo tambien resuelve el aviso.
+  const homonimoDelEscaneado = contactPrefilled
+    ? evaluarContactoEscaneado(
+        { name: newContactName, phone: normalizarTelefonoCR(newContactPhone) ?? newContactPhone },
+        state.sinpeContacts,
+      ).homonimo
+    : undefined;
+  const bloqueadoPorHomonimo = !!homonimoDelEscaneado && !homonimoConfirmado;
+
   // Deja la hoja como recién abierta. Se usa al cerrarla y después de guardar.
   const resetContactForm = () => {
     setNewContactName('');
@@ -402,6 +418,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setContactSheetMode('form');
     setContactScanError('');
     setContactPrefilled(false);
+    setHomonimoConfirmado(false);
     setDuplicateContact(null);
     setContactAddError('');
   };
@@ -443,12 +460,13 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setNewContactBank(contact.bank && BANKS.includes(contact.bank) ? contact.bank : 'Desconocido');
     setContactScanError('');
     setContactPrefilled(true);
+    setHomonimoConfirmado(false);
     setContactSheetMode('form');
     return true;
   };
 
   const handleAddContact = () => {
-    if (!newContactName || !newContactPhone) return;
+    if (!newContactName || !newContactPhone || bloqueadoPorHomonimo) return;
 
     const telefono = normalizarTelefonoCR(newContactPhone);
     // El botón ya exige 8 dígitos (disabled más abajo), así que esto no
@@ -982,6 +1000,26 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             </p>
           )}
 
+          {homonimoDelEscaneado && (
+            <div role="alert" className="flex gap-3 rounded-2xl bg-[var(--color-warning-soft)] p-4 text-left">
+              <Icons.AlertCircle size={20} className="mt-0.5 shrink-0 text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]" aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="text-sm font-bold uv-text-primary">
+                  {avisoDeHomonimo(t('contact_homonym_warning'), homonimoDelEscaneado)}
+                </p>
+                {!homonimoConfirmado && (
+                  <button
+                    type="button"
+                    onClick={() => setHomonimoConfirmado(true)}
+                    className="mt-2 text-sm font-bold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                  >
+                    {t('contact_homonym_confirm')}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Nombre */}
           <div>
             <label className="text-sm text-gray-500 font-medium mb-2 block">
@@ -1054,7 +1092,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           {/* Boton guardar */}
           <button
             onClick={handleAddContact}
-            disabled={!newContactName || newContactPhone.length < 8}
+            disabled={!newContactName || newContactPhone.length < 8 || bloqueadoPorHomonimo}
             className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
           >
             <Icons.Plus size={20} />
