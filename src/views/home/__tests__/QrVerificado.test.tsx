@@ -307,6 +307,45 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Pagar' })).toBeEnabled());
   });
 
+  it('Pagar apunta a su motivo y Reintentar es un blanco tactil de 44 px', async () => {
+    mocks.resolveQr.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+
+    const aviso = await screen.findByText('No pudimos verificar el código. Intenta de nuevo.');
+    const pagar = screen.getByRole('button', { name: 'Pagar' });
+    expect(pagar).toHaveAccessibleDescription('No pudimos verificar el código. Intenta de nuevo.');
+    expect(aviso.id).toBe(pagar.getAttribute('aria-describedby'));
+    expect(screen.getByRole('button', { name: 'Reintentar' }).className).toContain('min-h-11');
+  });
+
+  it('un reintento que vuelve a fallar deja Pagar bloqueado, con Reintentar a mano', async () => {
+    mocks.resolveQr.mockResolvedValue({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+    await screen.findByText('No pudimos verificar el código. Intenta de nuevo.');
+    await user.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    await waitFor(() => expect(mocks.resolveQr).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+  });
+
+  it('si la consulta lanza una excepcion se trata como no verificado: Pagar espera', async () => {
+    mocks.resolveQr.mockRejectedValue(new Error('boom'));
+    const user = userEvent.setup();
+    pintar();
+
+    await escanear(user, 'simular-kp');
+
+    expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+  });
+
   it('sin la capa de pagos por QR tampoco se paga a ciegas', async () => {
     // getApiLayer() sin qrPayments: no hay como verificar, y por tanto no se paga.
     mocks.sinQrPayments = true;

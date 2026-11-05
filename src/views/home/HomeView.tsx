@@ -384,7 +384,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Antes de ofrecer un boton de pagar, preguntar A QUIEN se le paga. El monto
   // se pinta al instante desde la cadena (parsearQrKiramo se conserva justo
   // para eso); el nombre llega cuando contesta el servidor, y si el servidor no
-  // contesta el pago sigue siendo posible.
+  // contesta Pagar espera: se ofrece Reintentar.
   //
   // Un rechazo del codigo (no existe, fue retirado) se dice con su motivo.
   // Cualquier otra respuesta es que no se pudo verificar: el servidor responde
@@ -1202,11 +1202,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     <p className="text-sm uv-text-muted">{t('qr_verificando')}</p>
                   ) : resolverFallo ? (
                     <div className="mt-1 flex flex-col items-center gap-1.5" aria-live="polite">
-                      <p className="text-sm text-[var(--color-danger)]">{t('qr_err_no_se_pudo_verificar')}</p>
+                      <p id="pago-sin-verificar" className="text-sm text-[var(--color-danger)]">{t('qr_err_no_se_pudo_verificar')}</p>
                       <button
                         type="button"
                         onClick={() => setIntentoResolver((n) => n + 1)}
-                        className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                        className="inline-flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
                       >
                         <Icons.RefreshCw size={14} aria-hidden="true" />
                         {t('error_retry')}
@@ -1285,6 +1285,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     <button
                       onClick={handleScannedPayment}
                       disabled={payLoading || sinSaberAQuienSePaga || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
+                      aria-describedby={resolverFallo ? 'pago-sin-verificar' : undefined}
                       className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
