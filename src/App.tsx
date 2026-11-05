@@ -504,7 +504,7 @@ const Layout = () => {
           // Role may have changed under a persisted tab; fall back to home.
           return canSeeReports
             ? <BusinessReportsView merchant={activeMerchant} />
-            : <BusinessHomeView merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
+            : <BusinessHomeView key={activeMerchant.id} merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
         case 'movements':
           return <BusinessMovementsView key={activeMerchant.id} merchant={activeMerchant} />;
         case 'settings':
@@ -517,7 +517,9 @@ const Layout = () => {
             />
           );
         default:
-          return <BusinessHomeView merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
+          // key por comercio: el rotulo, el cobro, la sede y el saldo en pantalla
+          // son del comercio anterior hasta que llega la respuesta del nuevo.
+          return <BusinessHomeView key={activeMerchant.id} merchant={activeMerchant} payments={bizPayments} paymentsFailed={bizPaymentsFailed} onReload={reloadBiz} />;
       }
     }
     switch (activeTab) {

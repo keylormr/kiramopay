@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { BottomSheet } from '@/components/BottomSheet';
+import { BotonCompartirQr } from '@/components/BotonCompartirQr';
 import { CampoMonto } from '@/components/CampoMonto';
 import { QRCodeSVG } from 'qrcode.react';
 import { getApiLayer } from '@/api';
@@ -63,6 +64,11 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   // que no cambia jamas. Antes cada toque de "Generar QR" creaba una identidad
   // nueva, permanente y pagable para siempre.
   const [code, setCode] = useState<QRPaymentCode | null>(null);
+  // La sede a la que pertenece el codigo que se ve: cambiar la sede en la lista
+  // no cambia el QR hasta que llega el nuevo, y la imagen debe decir la del QR.
+  const [sedeDelRotulo, setSedeDelRotulo] = useState('');
+  // El <svg> del QR en pantalla: de ahi sale la imagen que se comparte.
+  const qrRef = useRef<HTMLDivElement>(null);
   // El cobro de la venta en curso, con su propio QR.
   const [cobro, setCobro] = useState<QRCharge | null>(null);
   const [error, setError] = useState('');
@@ -164,8 +170,10 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
       if (!api) return;
       const res = await api.getMerchantCode(merchant.id, { locationId: locationId || undefined, currency: ccy });
       if (cancelled) return;
-      if (res.success && res.data) setCode(res.data);
-      else setError(mensajeDelRechazoDelCobro(t, res.error, 'merchant_qr_error'));
+      if (res.success && res.data) {
+        setCode(res.data);
+        setSedeDelRotulo(locationId);
+      } else setError(mensajeDelRechazoDelCobro(t, res.error, 'merchant_qr_error'));
     })();
     return () => { cancelled = true; };
   }, [showCharge, merchant.id, locationId, ccy, t]);
@@ -504,7 +512,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-primary)]">
               {cobro ? t('qr_cobrando').replace('{amount}', money(cobro.amount, cobro.currency)) : t('qr_rotulo_mostrador')}
             </span>
-            <div className="bg-white p-4 rounded-2xl border border-gray-200">
+            <div ref={qrRef} className="bg-white p-4 rounded-2xl border border-gray-200">
               {code || cobro ? (
                 <QRCodeSVG value={(cobro ?? code)!.qrData} size={200} />
               ) : (
@@ -525,6 +533,21 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
               </p>
             ) : (
               <p className="text-sm uv-text-muted text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
+            )}
+
+            {/* La imagen lleva el QR que se ve, con el nombre del COMERCIO (el que
+                ven los clientes; no la razon social ni el del dueno). El rotulo
+                fijo dice el comercio y la sede; un cobro, el monto grande y el
+                comercio debajo. Solo se ofrece un QR que todavia sirve. */}
+            {(cobro ? cobro.status === 'pending' : !!code) && (
+              <BotonCompartirQr
+                key={(cobro ?? code)!.qrData}
+                contenedor={qrRef}
+                titulo={cobro ? money(cobro.amount, cobro.currency) : merchant.name}
+                subtitulo={cobro ? merchant.name : locations.find((l) => l.id === sedeDelRotulo)?.name}
+                pie={t('qr_card_pie')}
+                nombreArchivo={cobro ? 'kiramopay-cobro.png' : 'kiramopay-comercio.png'}
+              />
             )}
           </div>
 
