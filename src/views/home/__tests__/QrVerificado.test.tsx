@@ -143,6 +143,15 @@ async function escanear(user: ReturnType<typeof userEvent.setup>, boton: string)
   await user.click(await screen.findByRole('button', { name: boton }));
 }
 
+// Cierra la hoja del envio. No se busca "el" boton Cerrar de la pantalla: al
+// escanear, la hoja del escaner sigue montada unos 300 ms mientras se va (su
+// animacion de salida) y trae su propio "Cerrar"; segun lo lento que corra la
+// prueba habia uno o dos y fallaba por tiempo, no por la pantalla.
+async function cerrarElEnvio(user: ReturnType<typeof userEvent.setup>) {
+  const hoja = await screen.findByRole('dialog', { name: 'Enviar dinero' });
+  await user.click(within(hoja).getByRole('button', { name: 'Cerrar' }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   Element.prototype.scrollIntoView = vi.fn();
@@ -360,7 +369,7 @@ describe('Un QR de contacto no verifica el nombre que trae', () => {
     mocks.contactos.push(contacto('Mamá', '+506 7000-1111'));
     const user = await abrirContacto('simular-homonimo');
     await user.click(screen.getByRole('button', { name: 'El número es correcto' }));
-    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
+    await cerrarElEnvio(user);
 
     await escanear(user, 'simular-homonimo');
     await screen.findByPlaceholderText('0');
@@ -416,7 +425,7 @@ describe('El nombre registrado en KiramoPay a un QR de contacto', () => {
     mocks.lookup.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Carlos P.' } });
     const user = await abrirDesconocido();
     await user.click(await screen.findByRole('button', { name: 'El número es correcto' }));
-    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
+    await cerrarElEnvio(user);
 
     await escanear(user, 'simular-desconocido');
     await screen.findByPlaceholderText('0');
