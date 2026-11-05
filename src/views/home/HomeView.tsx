@@ -180,11 +180,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // trae. Un codigo de monto abierto no tiene estado de cobro: decide el
   // servidor al pagar.
   const cobroCerrado = resuelto?.chargeId ? codigoDeCobroCerrado(resuelto.status) : '';
-  // Todavia no se sabe a quien se le paga: ni lo contesto el servidor, ni fallo,
-  // ni lo rechazo. Es DERIVADO y no un useState porque la consulta arranca en un
+  // Todavia no se sabe a quien se le paga: el servidor no ha contestado, o no se
+  // pudo preguntarle (sin red). Sin saberlo no se paga; con el fallo se ofrece
+  // Reintentar. Es DERIVADO y no un useState porque la consulta arranca en un
   // efecto, despues del primer pintado: un estado guardado dejaba un cuadro con
-  // Pagar vivo antes de saber el destinatario.
-  const verificandoElCodigo = !!scannedQrData && !resuelto && !resolverFallo && !codigoRechazado;
+  // Pagar vivo antes de saber el destinatario. Un codigo rechazado tiene su
+  // propia salida (solo Cerrar).
+  const sinSaberAQuienSePaga = !!scannedQrData && !resuelto && !codigoRechazado;
   // Lo que llego en un QR no verifica el nombre que trae (ver contactoEscaneado).
   const evaluacionContacto = scannedContact
     ? evaluarContactoEscaneado(scannedContact, state.sinpeContacts)
@@ -430,7 +432,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
   // el ledger). Generar el código no movía dinero; esto sí.
   const handleScannedPayment = async () => {
-    if (!scannedQrData || cobroCerrado || codigoRechazado || verificandoElCodigo) return;
+    if (!scannedQrData || cobroCerrado || codigoRechazado || sinSaberAQuienSePaga) return;
     const amt = parseFloat(paymentAmount);
     const montoAbierto = !resuelto?.chargeId;
     // El nonce se acuna al TOCAR PAGAR, no antes, y solo para el monto abierto:
@@ -1282,7 +1284,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     </button>
                     <button
                       onClick={handleScannedPayment}
-                      disabled={payLoading || verificandoElCodigo || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
+                      disabled={payLoading || sinSaberAQuienSePaga || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
                       className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
