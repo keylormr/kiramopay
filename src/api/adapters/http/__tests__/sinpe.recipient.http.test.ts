@@ -30,6 +30,17 @@ describe('HttpSinpeRepository.lookupRecipient', () => {
     expect(res.data).toEqual({ registered: false, displayName: undefined });
   });
 
+  it('un 200 que no dice si esta registrado NO se toma por "sin cuenta"', async () => {
+    for (const data of [{}, { display_name: 'Ana S.' }, { registered: 'true' }, { registered: null }]) {
+      const { repositorio } = repo({ success: true, data });
+
+      const res = await repositorio.lookupRecipient('88880000');
+
+      expect(res.success, JSON.stringify(data)).toBe(false);
+      expect(res.error?.code).toBe('RECIPIENT_LOOKUP_FAILED');
+    }
+  });
+
   it('conserva el codigo del servidor en un rechazo (limite, numero propio, base caida)', async () => {
     const { repositorio } = repo({ success: false, error: { code: 'RATE_LIMITED', message: 'x' } });
 

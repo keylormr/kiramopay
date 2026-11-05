@@ -385,7 +385,7 @@ describe('El nombre registrado en KiramoPay a un QR de contacto', () => {
     mocks.lookup.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Ana S.' } });
     const user = await abrirDesconocido();
 
-    expect(await screen.findByText('Registrado en KiramoPay como Ana S.')).toBeInTheDocument();
+    expect(await screen.findByText('En su perfil de KiramoPay: Ana S.')).toBeInTheDocument();
     expect(screen.queryByText('Nombre escrito en el QR, sin verificar')).not.toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(mocks.lookup).toHaveBeenCalledWith('+506 8888-7777');
@@ -399,7 +399,7 @@ describe('El nombre registrado en KiramoPay a un QR de contacto', () => {
     mocks.contactos.push(contacto('Ana Solís', '+506 7000-1111'));
     mocks.lookup.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Carlos P.' } });
     const user = await abrirDesconocido();
-    await screen.findByText('Registrado en KiramoPay como Carlos P.');
+    await screen.findByText('En su perfil de KiramoPay: Carlos P.');
     await user.type(screen.getByPlaceholderText('0'), '1000');
     const avisos = screen.getAllByRole('alert');
     expect(avisos).toHaveLength(2);
@@ -420,26 +420,54 @@ describe('El nombre registrado en KiramoPay a un QR de contacto', () => {
 
     await escanear(user, 'simular-desconocido');
     await screen.findByPlaceholderText('0');
-    await screen.findByText('Registrado en KiramoPay como Carlos P.');
+    await screen.findByText('En su perfil de KiramoPay: Carlos P.');
     await user.type(screen.getByPlaceholderText('0'), '1000');
 
     expect(screen.getByRole('button', { name: 'Enviar dinero' })).toBeDisabled();
+  });
+
+  it('mientras consulta no se envia ni se guarda, y al terminar se habilitan', async () => {
+    let responder: (v: unknown) => void = () => {};
+    mocks.lookup.mockReturnValue(new Promise((r) => { responder = r; }));
+    const user = await abrirDesconocido();
+    await user.type(screen.getByPlaceholderText('0'), '1000');
+
+    expect(screen.getByRole('button', { name: 'Enviar dinero' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Agregar contacto' })).toBeDisabled();
+
+    responder({ success: true, data: { registered: true, displayName: 'Ana S.' } });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar dinero' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Agregar contacto' })).toBeEnabled();
+  });
+
+  it('si la consulta termina en fallo se habilita: un fallo no es un aviso', async () => {
+    let responder: (v: unknown) => void = () => {};
+    mocks.lookup.mockReturnValue(new Promise((r) => { responder = r; }));
+    const user = await abrirDesconocido();
+    await user.type(screen.getByPlaceholderText('0'), '1000');
+    expect(screen.getByRole('button', { name: 'Enviar dinero' })).toBeDisabled();
+
+    responder({ success: false, error: { code: 'NETWORK_ERROR', message: 'sin red' } });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Enviar dinero' })).toBeEnabled());
+    expect(screen.getByText('Nombre escrito en el QR, sin verificar')).toBeInTheDocument();
   });
 
   it('mientras consulta lo dice', async () => {
     mocks.lookup.mockReturnValue(new Promise(() => {}));
     await abrirDesconocido();
 
-    expect(await screen.findByText('Verificando el nombre registrado…')).toBeInTheDocument();
+    expect(await screen.findByText('Verificando el nombre del perfil…')).toBeInTheDocument();
   });
 
   it('si el QR dice otro nombre que el registrado avisa y no deja enviar hasta confirmar', async () => {
     mocks.lookup.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Carlos P.' } });
     const user = await abrirDesconocido();
 
-    expect(await screen.findByText('Registrado en KiramoPay como Carlos P.')).toBeInTheDocument();
+    expect(await screen.findByText('En su perfil de KiramoPay: Carlos P.')).toBeInTheDocument();
     const aviso = screen.getByRole('alert');
-    expect(aviso).toHaveTextContent('El nombre del QR no coincide con el registrado a este número.');
+    expect(aviso).toHaveTextContent('El nombre del QR no coincide con el del perfil de este número.');
     await user.type(screen.getByPlaceholderText('0'), '1000');
     expect(screen.getByRole('button', { name: 'Enviar dinero' })).toBeDisabled();
 
@@ -488,7 +516,7 @@ describe('El nombre registrado en KiramoPay a un QR de contacto', () => {
     mocks.lookup.mockResolvedValue({ success: true, data: { registered: true, displayName: "Tienda $& $' {nombre} P." } });
     await abrirDesconocido();
 
-    expect(await screen.findByText("Registrado en KiramoPay como Tienda $& $' {nombre} P.")).toBeInTheDocument();
+    expect(await screen.findByText("En su perfil de KiramoPay: Tienda $& $' {nombre} P.")).toBeInTheDocument();
   });
 
   it('con un QR de pago (no de contacto) no se consulta ningun nombre', async () => {

@@ -58,7 +58,13 @@ func limpiarNombre(s string) string {
 
 // nombreParcial es el nombre completo y la inicial de cada apellido.
 func nombreParcial(nombre, apellidos string) string {
+	// Un nombre de pila abreviado ("Ma.", "Ma. Jose") sale sin el punto: el punto
+	// queda para las iniciales de los apellidos, y el cliente se apoya en eso para
+	// distinguir unos de otras.
 	partes := strings.Fields(limpiarNombre(nombre))
+	for i, p := range partes {
+		partes[i] = strings.TrimRight(p, ".")
+	}
 	for _, a := range strings.Fields(limpiarNombre(apellidos)) {
 		inicial, _ := utf8.DecodeRuneInString(a)
 		partes = append(partes, string(unicode.ToUpper(inicial))+".")

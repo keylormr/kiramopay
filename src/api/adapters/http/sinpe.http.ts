@@ -159,6 +159,9 @@ export class HttpSinpeRepository implements ISinpeRepository {
       { phone: telefono },
     );
     if (!res.success || !res.data) return falla(res, 'RECIPIENT_LOOKUP_FAILED');
-    return apiSuccess({ registered: res.data.registered === true, displayName: res.data.display_name || undefined });
+    // Un 200 sin `registered` (un proxy, un servidor viejo) no es "sin cuenta":
+    // decirlo bloquearia un envio por algo que nadie afirmo.
+    if (typeof res.data.registered !== 'boolean') return falla(res, 'RECIPIENT_LOOKUP_FAILED');
+    return apiSuccess({ registered: res.data.registered, displayName: res.data.display_name || undefined });
   }
 }

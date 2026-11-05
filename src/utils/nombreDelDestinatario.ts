@@ -11,11 +11,19 @@ import { nombreComparable } from '@/utils/contactoEscaneado';
  *
  * Reglas: el primer nombre de pila tiene que ser el mismo y primero; lo demas
  * son otros nombres de pila registrados o apellidos cuya inicial va en el orden
- * del registro. El QR puede dejar apellidos sin decir, no inventar uno.
+ * del registro. El QR puede dejar apellidos sin decir (y saltarse iniciales: un
+ * apellido compuesto "de la Cruz" llega como "D. L. C." y el QR dice "Cruz"),
+ * no inventar uno. Es una comparacion de letras iniciales: reconoce a la misma
+ * persona dicha de otra forma, no prueba quien es (el nombre del perfil lo
+ * escribe cada persona).
  */
 export function coincideConElRegistrado(nombreDelQr: string, registrado: string): boolean {
+  // El punto solo marca las iniciales de apellido del registro; en el QR un
+  // "Ma." abreviado se lee como "Ma".
+  const palabras = (nombre: string) =>
+    nombreComparable(nombre).split(' ').map((p) => p.replace(/\.+$/, '')).filter(Boolean);
   const reg = nombreComparable(registrado).split(' ').filter(Boolean);
-  const qr = nombreComparable(nombreDelQr).split(' ').filter(Boolean);
+  const qr = palabras(nombreDelQr);
   if (reg.length === 0 || qr.length === 0) return false;
 
   const dados: string[] = [];
@@ -31,11 +39,12 @@ export function coincideConElRegistrado(nombreDelQr: string, registrado: string)
   for (const palabra of qr.slice(1)) {
     if (siguienteDado < dados.length && palabra === dados[siguienteDado]) {
       siguienteDado++;
-    } else if (siguienteInicial < iniciales.length && palabra[0] === iniciales[siguienteInicial]) {
-      siguienteInicial++;
-    } else {
-      return false;
+      continue;
     }
+    // La inicial de esta palabra, en el registro, a partir de la ultima usada.
+    const i = iniciales.indexOf(palabra[0], siguienteInicial);
+    if (i === -1) return false;
+    siguienteInicial = i + 1;
   }
   return true;
 }

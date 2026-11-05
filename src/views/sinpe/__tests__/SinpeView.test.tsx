@@ -696,9 +696,48 @@ describe('SinpeView — el nombre registrado de un contacto escaneado', () => {
 
     const hoja = await escanear(user, 'Ana Solís');
 
-    expect(await hoja.findByText('Registrado en KiramoPay como Ana S.')).toBeInTheDocument();
+    expect(await hoja.findByText('En su perfil de KiramoPay: Ana S.')).toBeInTheDocument();
     expect(mocks.api.sinpe.lookupRecipient).toHaveBeenCalledWith('+506 8888-7777');
     expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+  });
+
+  it('si el nombre del QR no coincide con el del perfil avisa, y se puede guardar igual', async () => {
+    mocks.api.sinpe.lookupRecipient.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Carlos P.' } });
+    const user = userEvent.setup();
+    setup();
+
+    const hoja = await escanear(user, 'Ana Solís');
+
+    expect(await hoja.findByText('En su perfil de KiramoPay: Carlos P.')).toBeInTheDocument();
+    expect(await hoja.findByRole('alert')).toHaveTextContent('El nombre del QR no coincide con el del perfil de este número.');
+    // Guardar un contacto no mueve dinero: informa, no bloquea ni pide confirmar.
+    expect(hoja.queryByRole('button', { name: 'El número es correcto' })).not.toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+  });
+
+  it('el aviso compara con el nombre del QR, no con el que la persona escribe despues', async () => {
+    mocks.api.sinpe.lookupRecipient.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Carlos P.' } });
+    const user = userEvent.setup();
+    setup();
+    const hoja = await escanear(user, 'Ana Solís');
+    await hoja.findByRole('alert');
+
+    const nombre = hoja.getByPlaceholderText('Ej: Juan Pérez');
+    await user.clear(nombre);
+    await user.type(nombre, 'Carlos');
+
+    expect(hoja.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('si coincide no hay aviso', async () => {
+    mocks.api.sinpe.lookupRecipient.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Ana S.' } });
+    const user = userEvent.setup();
+    setup();
+
+    const hoja = await escanear(user, 'Ana Solís');
+
+    expect(await hoja.findByText('En su perfil de KiramoPay: Ana S.')).toBeInTheDocument();
+    expect(hoja.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('mientras consulta lo dice', async () => {
@@ -708,7 +747,7 @@ describe('SinpeView — el nombre registrado de un contacto escaneado', () => {
 
     const hoja = await escanear(user, 'Ana Solís');
 
-    expect(await hoja.findByText('Verificando el nombre registrado…')).toBeInTheDocument();
+    expect(await hoja.findByText('Verificando el nombre del perfil…')).toBeInTheDocument();
   });
 
   it('un numero sin cuenta de KiramoPay se avisa, pero el contacto se puede guardar', async () => {
@@ -729,7 +768,7 @@ describe('SinpeView — el nombre registrado de un contacto escaneado', () => {
     const hoja = await escanear(user, 'Ana Solís');
 
     await waitFor(() => expect(mocks.api.sinpe.lookupRecipient).toHaveBeenCalled());
-    expect(hoja.queryByText(/Registrado en KiramoPay/)).not.toBeInTheDocument();
+    expect(hoja.queryByText(/En su perfil de KiramoPay/)).not.toBeInTheDocument();
     expect(hoja.queryByText(/no tiene cuenta de KiramoPay/)).not.toBeInTheDocument();
     expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
   });
@@ -751,7 +790,7 @@ describe('SinpeView — el nombre registrado de un contacto escaneado', () => {
     const user = userEvent.setup();
     setup();
     const hoja = await escanear(user, 'Ana Solís');
-    await hoja.findByText('Registrado en KiramoPay como Ana S.');
+    await hoja.findByText('En su perfil de KiramoPay: Ana S.');
     await user.click(hoja.getByRole('button', { name: 'Cerrar' }));
 
     await user.click(screen.getAllByRole('button', { name: 'Agregar contacto' })[0]);
@@ -759,7 +798,7 @@ describe('SinpeView — el nombre registrado de un contacto escaneado', () => {
     await user.type(dialog.getByPlaceholderText('Ej: Juan Pérez'), 'Ana Solís');
     await user.type(dialog.getByPlaceholderText('8888-0000'), '88887777');
 
-    expect(dialog.queryByText(/Registrado en KiramoPay/)).not.toBeInTheDocument();
+    expect(dialog.queryByText(/En su perfil de KiramoPay/)).not.toBeInTheDocument();
     expect(mocks.api.sinpe.lookupRecipient).toHaveBeenCalledTimes(1);
   });
 
@@ -768,14 +807,14 @@ describe('SinpeView — el nombre registrado de un contacto escaneado', () => {
     const user = userEvent.setup();
     setup();
     const hoja = await escanear(user, 'Ana Solís');
-    await hoja.findByText('Registrado en KiramoPay como Ana S.');
+    await hoja.findByText('En su perfil de KiramoPay: Ana S.');
 
     const telefono = hoja.getByPlaceholderText('8888-0000');
     await user.clear(telefono);
     await user.type(telefono, '88886666');
 
     expect(mocks.api.sinpe.lookupRecipient).toHaveBeenCalledTimes(1);
-    expect(hoja.queryByText('Registrado en KiramoPay como Ana S.')).not.toBeInTheDocument();
+    expect(hoja.queryByText('En su perfil de KiramoPay: Ana S.')).not.toBeInTheDocument();
   });
 });
 

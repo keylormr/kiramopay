@@ -203,9 +203,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const sinCuentaDelContacto = destinatario.fase === 'sin_cuenta';
   const nombreNoCoincide =
     destinatario.fase === 'registrado' && !!scannedContact && !coincideConElRegistrado(scannedContact.name, destinatario.nombre);
-  // Hay un aviso de identidad sin confirmar (homonimo o nombre que no coincide).
+  // Hay un aviso de identidad sin confirmar (homonimo o nombre que no coincide),
+  // o todavia no se sabe: mientras la consulta esta en curso ni se envia ni se
+  // guarda (igual que Pagar espera a saber a quien se le paga). Si la consulta
+  // falla se desbloquea sola: un fallo no es un aviso.
   const bloqueadoPorHomonimo =
-    (!!evaluacionContacto?.homonimo && !homonimoConfirmado) || (nombreNoCoincide && !nombreConfirmado);
+    (!!evaluacionContacto?.homonimo && !homonimoConfirmado) ||
+    (nombreNoCoincide && !nombreConfirmado) ||
+    destinatario.fase === 'consultando';
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {

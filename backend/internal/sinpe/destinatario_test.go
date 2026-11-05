@@ -52,6 +52,10 @@ func TestNombreParcial(t *testing.T) {
 		{"A\u0000na", "Perez\n", "Ana P."},
 		// El apellido completo no sale nunca, ni aunque sea de una sola palabra.
 		{"Ana", "Perezoso", "Ana P."},
+		// Un nombre de pila abreviado pierde el punto: el punto es de las iniciales.
+		{"Ma. Jose", "Garcia", "Ma Jose G."},
+		// Una inicial que no se ve (ancho cero al empezar el apellido) no cuenta.
+		{"Ana", "\u200bPerez", "Ana P."},
 	}
 	for _, c := range casos {
 		if got := nombreParcial(c.nombre, c.apellidos); got != c.quiere {

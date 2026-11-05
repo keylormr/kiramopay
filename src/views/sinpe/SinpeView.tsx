@@ -18,6 +18,7 @@ import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 import { avisoDeHomonimo, evaluarContactoEscaneado } from '@/utils/contactoEscaneado';
 import { useDestinatarioRegistrado } from '@/hooks/useDestinatarioRegistrado';
+import { coincideConElRegistrado } from '@/utils/nombreDelDestinatario';
 import { AvisoDelDestinatario, LineaDelDestinatario } from '@/components/DestinatarioRegistrado';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLocalesCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
@@ -122,6 +123,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // El telefono que trajo el QR, tal cual: lo unico por lo que se consulta el
   // nombre registrado. El del formulario se puede editar y eso no lanza consultas.
   const [telefonoEscaneado, setTelefonoEscaneado] = useState<string | null>(null);
+  // El nombre que trajo el QR (el del formulario se puede editar): es el que se
+  // compara con el del perfil.
+  const [nombreEscaneado, setNombreEscaneado] = useState('');
   // La persona confirmo que el numero escaneado es el de quien dice ser.
   const [homonimoConfirmado, setHomonimoConfirmado] = useState(false);
   // El dueño pidió que agregar un contacto (escaneando o a mano) avise ANTES
@@ -437,6 +441,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setContactScanError('');
     setContactPrefilled(false);
     setTelefonoEscaneado(null);
+    setNombreEscaneado('');
     setHomonimoConfirmado(false);
     setDuplicateContact(null);
     setContactAddError('');
@@ -480,6 +485,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setContactScanError('');
     setContactPrefilled(true);
     setTelefonoEscaneado(contact.phone);
+    setNombreEscaneado(contact.name);
     setHomonimoConfirmado(false);
     setContactSheetMode('form');
     return true;
@@ -1025,6 +1031,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               Es informativo: guardar un contacto no mueve dinero. */}
           {(destinatario.fase === 'registrado' || destinatario.fase === 'consultando') && (
             <LineaDelDestinatario estado={destinatario} porDefecto={null} className="text-sm uv-text-secondary -mt-2" />
+          )}
+          {destinatario.fase === 'registrado' && !coincideConElRegistrado(nombreEscaneado, destinatario.nombre) && (
+            <AvisoDelDestinatario tipo="no_coincide" />
           )}
           {destinatario.fase === 'sin_cuenta' && <AvisoDelDestinatario tipo="sin_cuenta" />}
 
