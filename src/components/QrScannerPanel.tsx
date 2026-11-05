@@ -54,8 +54,13 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
   // una hoja de pago que nadie pidió.
   const montado = useRef(true);
   const activo = useRef(active);
+  // El callback del consumidor cambia de identidad en cada render, y el que
+  // cuenta es el de CUANDO TERMINA la lectura, no el de cuando se eligio la
+  // imagen: lee estado de su vista (contactos, el propio numero).
+  const onDecodeActual = useRef(onDecode);
   useEffect(() => {
     activo.current = active;
+    onDecodeActual.current = onDecode;
   });
   useEffect(() => {
     montado.current = true;
@@ -68,7 +73,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
   // aviso de la última imagen que falló: ya no describe lo que pasa.
   const entregar = (raw: string): boolean | void => {
     setErrorDeImagen('');
-    return onDecode(raw);
+    return onDecodeActual.current(raw);
   };
 
   const { videoRef, isScanning, cameraFailed } = useQrScanner(active, entregar);
@@ -137,19 +142,22 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
 
       {/* Estado */}
       <div className="text-center mb-4 px-4">
+        {/* Region viva fuera de pantalla, SIEMPRE montada: un lector de pantalla
+            solo anuncia el cambio de una region que ya estaba, y esta es la unica
+            forma de enterarse de que la imagen se esta leyendo. */}
+        <p className="sr-only" role="status">{leyendo ? t('qr_reading_image') : ''}</p>
         {leyendo ? (
-          <p className="uv-text-muted" role="status">{t('qr_reading_image')}</p>
+          <p className="uv-text-muted" aria-hidden="true">{t('qr_reading_image')}</p>
         ) : cameraFailed ? (
           <p className="text-[var(--color-danger)] text-sm">{t('camera_unavailable')}</p>
         ) : (
           <p className="uv-text-muted">{isScanning ? t('scanning') : t('point_camera')}</p>
         )}
         {hint && <p className="text-xs uv-text-muted mt-2">{hint}</p>}
-        {aviso && (
-          <p className="text-[var(--color-danger)] text-sm mt-2" aria-live="polite">
-            {aviso}
-          </p>
-        )}
+        {/* Tambien siempre montada: el aviso entra y sale de adentro. */}
+        <div data-testid="qr-aviso" aria-live="polite">
+          {aviso && <p className="text-[var(--color-danger)] text-sm mt-2">{aviso}</p>}
+        </div>
       </div>
 
       {/* Imagen de la galería o de los archivos: el QR que llegó por chat. Sin

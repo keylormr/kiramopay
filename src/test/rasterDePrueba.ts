@@ -111,6 +111,12 @@ export function decodificarPng(bytes: Uint8Array): PngDecodificado {
   return { width: ancho, height: alto, data: rgba };
 }
 
+/** Los pixeles de una de las imagenes de prueba, ya decodificados. */
+export function pixelesDePrueba(nombre: string): PngDecodificado {
+  const ruta = path.resolve(__dirname, '../utils/__tests__/fixtures/qr', nombre);
+  return decodificarPng(new Uint8Array(fs.readFileSync(ruta)));
+}
+
 /** Lee un archivo de las imagenes de prueba como File, igual que lo entrega un <input type="file">. */
 export function imagenDePrueba(nombre: string, tipo = 'image/png'): File {
   const ruta = path.resolve(__dirname, '../utils/__tests__/fixtures/qr', nombre);
@@ -139,6 +145,8 @@ export interface RegistroDeRaster {
   lecturas: { ancho: number; alto: number }[];
   /** Bitmaps abiertos y aun sin cerrar: tiene que quedar en 0. */
   bitmapsAbiertos: () => number;
+  /** Canvas que se crearon y no se encogieron a 0 x 0 al terminar: tiene que quedar en 0. */
+  lienzosSinLiberar: () => number;
   /**
    * Detiene la apertura de la imagen hasta que se llame a lo que devuelve. Para
    * cerrar una hoja EN MEDIO de una lectura sin depender de cuanto tarde: bajo
@@ -147,6 +155,13 @@ export interface RegistroDeRaster {
    */
   retener: () => () => void;
   restaurar: () => void;
+}
+
+function colorDe(css: string): [number, number, number] {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(css.trim());
+  if (!m) throw new Error('rasterDePrueba solo entiende colores #rgb o #rrggbb, no ' + css);
+  const h = m[1].length === 3 ? m[1].replace(/./g, (c) => c + c) : m[1];
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
 function pintar(
@@ -192,6 +207,7 @@ function pintar(
 export function instalarRasterDePrueba(): RegistroDeRaster {
   const lecturas: RegistroDeRaster['lecturas'] = [];
   let abiertos = 0;
+  const lienzos = new Set<HTMLCanvasElement>();
 
   const originalBitmap = (globalThis as { createImageBitmap?: unknown }).createImageBitmap;
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
@@ -232,15 +248,20 @@ export function instalarRasterDePrueba(): RegistroDeRaster {
     return e;
   };
 
-  const contextoDe = (lienzo: HTMLCanvasElement) =>
-    ({
+  const contextoDe = (lienzo: HTMLCanvasElement) => {
+    const ctx = {
       imageSmoothingEnabled: true,
       imageSmoothingQuality: 'low',
       fillStyle: '#000',
       fillRect() {
-        // Solo se usa para pintar el fondo blanco antes de dibujar.
+        // Solo se usa para pintar el fondo de un color liso antes de dibujar, y
+        // honra fillStyle (#rgb o #rrggbb): si el lector pintara el fondo de otro
+        // color, la prueba del PNG transparente tiene que notarlo.
         const e = asegurar(lienzo);
-        e.px.fill(255);
+        const [r, g, b] = colorDe(ctx.fillStyle);
+        for (let i = 0; i < e.px.length; i += 4) {
+          e.px[i] = r; e.px[i + 1] = g; e.px[i + 2] = b; e.px[i + 3] = 255;
+        }
       },
       drawImage(fuente: BitmapDePrueba, dx: number, dy: number, dw: number, dh: number) {
         pintar(asegurar(lienzo), fuente, dx, dy, dw, dh);
@@ -251,15 +272,20 @@ export function instalarRasterDePrueba(): RegistroDeRaster {
         // Se entrega una copia, como un ImageData de verdad.
         return { data: new Uint8ClampedArray(e.px), width: sw, height: sh, colorSpace: 'srgb' };
       },
-    }) as unknown as CanvasRenderingContext2D;
+    };
+    return ctx as unknown as CanvasRenderingContext2D;
+  };
 
   HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, tipo: string) {
-    return tipo === '2d' ? contextoDe(this) : null;
+    if (tipo !== '2d') return null;
+    lienzos.add(this);
+    return contextoDe(this);
   } as typeof HTMLCanvasElement.prototype.getContext;
 
   return {
     lecturas,
     bitmapsAbiertos: () => abiertos,
+    lienzosSinLiberar: () => [...lienzos].filter((l) => l.width > 0 || l.height > 0).length,
     retener: () => {
       let soltar: () => void = () => {};
       compuerta = new Promise<void>((resolver) => {

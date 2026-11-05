@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { leerQrDeImagen, LADO_MAXIMO_DE_LA_PRIMERA_PASADA, LADO_MAXIMO_DE_LA_SEGUNDA_PASADA } from '../qrDesdeImagen';
-import { imagenDePrueba, instalarRasterDePrueba, type RegistroDeRaster } from '@/test/rasterDePrueba';
+import {
+  leerQrDeImagen,
+  PIXELES_MAXIMOS_DE_LA_PRIMERA_PASADA,
+  PIXELES_MAXIMOS_DE_LA_SEGUNDA_PASADA,
+} from '../qrDesdeImagen';
+import { imagenDePrueba, instalarRasterDePrueba, pixelesDePrueba, type RegistroDeRaster } from '@/test/rasterDePrueba';
 
 // Lector de QR desde una imagen. Las imagenes son QR REALES (codificados con el
 // mismo qrcode.react que usa la app y dibujados por Chrome) y los lee jsQR de
@@ -75,10 +79,16 @@ describe('leerQrDeImagen — archivo que no se puede leer', () => {
   });
 
   it('un archivo desmesurado se descarta sin abrirlo', async () => {
-    const enorme = { size: 80 * 1024 * 1024, type: 'image/png' } as unknown as Blob;
-    const r = await leerQrDeImagen(enorme);
+    // Una imagen valida y legible que solo DECLARA pesar 80 MB: sin la guarda se
+    // abriria y se leeria. (Con un Blob falso la prueba pasaba igual sin ella,
+    // porque el navegador de prueba rechaza el Blob falso por otra razon.)
+    const imagen = imagenDePrueba('qr-kiramo.png');
+    Object.defineProperty(imagen, 'size', { value: 80 * 1024 * 1024 });
+
+    const r = await leerQrDeImagen(imagen);
+
     expect(r).toEqual({ ok: false, motivo: 'ilegible' });
-    expect(raster.bitmapsAbiertos()).toBe(0);
+    expect(raster.lecturas).toHaveLength(0);
   });
 });
 
@@ -90,7 +100,8 @@ describe('leerQrDeImagen — imagen grande', () => {
     const r = await leerQrDeImagen(imagenDePrueba('foto-grande.png'));
 
     expect(r).toEqual({ ok: true, texto: KP });
-    expect(ladoMaximo()).toBeLessThanOrEqual(LADO_MAXIMO_DE_LA_PRIMERA_PASADA);
+    // El redondeo de cada lado puede pasarse un poco del presupuesto.
+    expect(pixelesMaximos()).toBeLessThanOrEqual(PIXELES_MAXIMOS_DE_LA_PRIMERA_PASADA * 1.01);
     expect(pixelesMaximos()).toBeLessThan(4000 * 3000 * 0.25);
   });
 
@@ -100,22 +111,30 @@ describe('leerQrDeImagen — imagen grande', () => {
     expect(r).toEqual({ ok: true, texto: KP });
   });
 
-  it('un QR diminuto en una foto de 12 MP (3 % del ancho) se lee con la segunda pasada', async () => {
-    // A 1600 px de lado cada modulo queda en menos de 2 px y se pierde: la
+  it('un QR diminuto en una foto de 12 MP (4 % del ancho) se lee con la segunda pasada', async () => {
+    // En la primera pasada cada modulo queda en menos de 1,5 px y se pierde: la
     // primera pasada no lo ve. Sin la segunda, una foto asi diria "sin QR" con
     // un QR a la vista.
     const r = await leerQrDeImagen(imagenDePrueba('foto-grande-qr-diminuto.png'));
 
     expect(r).toEqual({ ok: true, texto: KP });
     expect(raster.lecturas).toHaveLength(2);
-    expect(ladoMaximo()).toBeLessThanOrEqual(LADO_MAXIMO_DE_LA_SEGUNDA_PASADA);
+    expect(pixelesMaximos()).toBeLessThanOrEqual(PIXELES_MAXIMOS_DE_LA_SEGUNDA_PASADA * 1.01);
   });
 
-  it('una foto de 12 MP sin QR dice sin_qr y nunca arma una lectura mayor que la segunda pasada', async () => {
+  it('una foto de 12 MP sin QR dice sin_qr y nunca arma una lectura mayor que el presupuesto de la segunda pasada', async () => {
     const r = await leerQrDeImagen(imagenDePrueba('foto-grande-sin-qr.png'));
     expect(r).toEqual({ ok: false, motivo: 'sin_qr' });
-    expect(ladoMaximo()).toBeLessThanOrEqual(LADO_MAXIMO_DE_LA_SEGUNDA_PASADA);
+    expect(raster.lecturas).toHaveLength(2);
+    expect(pixelesMaximos()).toBeLessThanOrEqual(PIXELES_MAXIMOS_DE_LA_SEGUNDA_PASADA * 1.01);
     expect(pixelesMaximos()).toBeLessThan(4000 * 3000 * 0.55);
+  });
+
+  it('un QR de 320 px en una captura larga de 1170 x 15000 se lee', async () => {
+    // Reducir por el lado mayor dejaba el ANCHO en 94 px: el QR quedaba de ~30 px
+    // y se decia "sin QR" con el codigo a la vista.
+    const r = await leerQrDeImagen(imagenDePrueba('captura-larga.png'));
+    expect(r).toEqual({ ok: true, texto: KP });
   });
 
   it('una imagen que ya es chica no se amplia', async () => {
@@ -129,5 +148,69 @@ describe('leerQrDeImagen — no deja nada abierto', () => {
     await leerQrDeImagen(imagenDePrueba('qr-kiramo.png'));
     await leerQrDeImagen(imagenDePrueba('sin-qr.png'));
     expect(raster.bitmapsAbiertos()).toBe(0);
+  });
+
+  it('encoge el canvas de cada lectura para soltar su memoria', async () => {
+    await leerQrDeImagen(imagenDePrueba('foto-grande-sin-qr.png'));
+    expect(raster.lecturas.length).toBeGreaterThan(0);
+    expect(raster.lienzosSinLiberar()).toBe(0);
+  });
+});
+
+describe('leerQrDeImagen — WebView sin createImageBitmap', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('abre la imagen con <img> y suelta la URL temporal al terminar', async () => {
+    const png = pixelesDePrueba('captura-chat.png');
+    const urls = new Set<string>();
+    vi.stubGlobal('createImageBitmap', undefined);
+    URL.createObjectURL = vi.fn(() => {
+      urls.add('blob:prueba');
+      return 'blob:prueba';
+    });
+    URL.revokeObjectURL = vi.fn((u: string) => {
+      urls.delete(u);
+    });
+    // Un <img> de prueba: carga los pixeles del PNG real y los ofrece al canvas.
+    class ImagenDePrueba {
+      src = '';
+      naturalWidth = png.width;
+      naturalHeight = png.height;
+      width = png.width;
+      height = png.height;
+      data = png.data;
+      decode = () => Promise.resolve();
+    }
+    vi.stubGlobal('Image', ImagenDePrueba);
+
+    const r = await leerQrDeImagen(imagenDePrueba('captura-chat.png'));
+
+    expect(r).toEqual({ ok: true, texto: KP });
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(urls.size).toBe(0);
+  });
+
+  it('si el <img> no se puede decodificar dice ilegible y tambien suelta la URL', async () => {
+    const urls = new Set<string>();
+    vi.stubGlobal('createImageBitmap', undefined);
+    URL.createObjectURL = vi.fn(() => {
+      urls.add('blob:prueba');
+      return 'blob:prueba';
+    });
+    URL.revokeObjectURL = vi.fn((u: string) => {
+      urls.delete(u);
+    });
+    class ImagenRota {
+      src = '';
+      decode = () => Promise.reject(new DOMException('rota', 'EncodingError'));
+    }
+    vi.stubGlobal('Image', ImagenRota);
+
+    const r = await leerQrDeImagen(imagenDePrueba('qr-kiramo.png'));
+
+    expect(r).toEqual({ ok: false, motivo: 'ilegible' });
+    expect(urls.size).toBe(0);
   });
 });

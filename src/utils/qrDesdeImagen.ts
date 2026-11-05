@@ -8,10 +8,18 @@
  * es del flujo que lo recibe. Este modulo no juzga el contenido.
  *
  * Una imagen de 12 megapixeles son 48 MB de pixeles: pasarsela completa al
- * decodificador congela el telefono. Se reduce antes, y solo si esa lectura no
- * encuentra nada se vuelve a intentar con mas resolucion (un QR que ocupa poco
- * de una captura grande pierde modulos al reducirla). Cada intento arma una
- * sola copia de pixeles, nunca mas grande que LADO_MAXIMO_DE_LA_SEGUNDA_PASADA.
+ * decodificador congela el telefono. Se reduce antes, a un PRESUPUESTO DE
+ * PIXELES y no a un lado maximo: una captura larga de 1170 x 15000 reducida por
+ * su lado mayor quedaba de 94 px de ancho y el QR de 30 px. Solo si esa lectura
+ * no encuentra nada se vuelve a intentar con mas resolucion (un QR que ocupa
+ * poco de una captura grande pierde modulos al reducirla). Cada intento arma
+ * una sola copia de pixeles, nunca mayor que PIXELES_MAXIMOS_DE_LA_SEGUNDA_PASADA.
+ *
+ * Limite conocido: el bitmap de la imagen se abre completo (createImageBitmap
+ * sin tamano) y solo despues se reduce. Una foto de decenas de megapixeles
+ * ocupa cientos de MB mientras esta abierta. Reducirla al abrirla exige saber
+ * sus dimensiones antes (leer la cabecera de cada formato); la defensa gruesa es
+ * el tope de PESO_MAXIMO_EN_BYTES.
  */
 
 export type MotivoDeFalloDeImagen =
@@ -24,10 +32,12 @@ export type LecturaDeImagen =
   | { ok: true; texto: string }
   | { ok: false; motivo: MotivoDeFalloDeImagen };
 
-/** Lado mayor, en pixeles, de la primera lectura: alcanza para un QR de captura de pantalla. */
-export const LADO_MAXIMO_DE_LA_PRIMERA_PASADA = 1600;
-/** Lado mayor de la segunda, solo si la primera no encontro nada y la imagen era mas grande. */
-export const LADO_MAXIMO_DE_LA_SEGUNDA_PASADA = 2800;
+/** Pixeles de la primera lectura (~1400 x 1400): alcanza para un QR de captura de pantalla. */
+export const PIXELES_MAXIMOS_DE_LA_PRIMERA_PASADA = 2_000_000;
+/** Pixeles de la segunda (~2800 x 2100), solo si la primera no encontro nada y la imagen era mayor. */
+export const PIXELES_MAXIMOS_DE_LA_SEGUNDA_PASADA = 6_000_000;
+/** Ningun lado pasa de esto, aunque el presupuesto de pixeles lo permita (100000 x 10 px): el canvas tiene su propio limite. */
+const LADO_MAXIMO_ABSOLUTO = 8192;
 /** Mas pesado que esto no se intenta abrir: no es una foto ni una captura. */
 const PESO_MAXIMO_EN_BYTES = 30 * 1024 * 1024;
 
@@ -69,6 +79,15 @@ async function abrirImagen(archivo: Blob): Promise<ImagenAbierta> {
   }
 }
 
+// Cuanto reducir para caber en el presupuesto; nunca amplia.
+function escalaPara(ancho: number, alto: number, maxPixeles: number): number {
+  return Math.min(
+    1,
+    Math.sqrt(maxPixeles / (ancho * alto)),
+    LADO_MAXIMO_ABSOLUTO / Math.max(ancho, alto),
+  );
+}
+
 function rasterizar(fuente: CanvasImageSource, ancho: number, alto: number): ImageData | null {
   const lienzo = document.createElement('canvas');
   lienzo.width = ancho;
@@ -83,7 +102,12 @@ function rasterizar(fuente: CanvasImageSource, ancho: number, alto: number): Ima
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(fuente, 0, 0, ancho, alto);
-  return ctx.getImageData(0, 0, ancho, alto);
+  const pixeles = ctx.getImageData(0, 0, ancho, alto);
+  // El canvas ya cumplio: se encoge para soltar su memoria sin esperar al
+  // recolector (Safari de iOS retiene la de los canvas grandes y se queda corto).
+  lienzo.width = 0;
+  lienzo.height = 0;
+  return pixeles;
 }
 
 // Los pixeles ya no hacen falta tal como estaban: se invierten sobre la misma
@@ -119,15 +143,16 @@ export async function leerQrDeImagen(archivo: Blob): Promise<LecturaDeImagen> {
     // la camara.
     const jsQR = (await import('jsqr')).default;
 
-    const lado = Math.max(ancho, alto);
-    const pasadas = [Math.min(lado, LADO_MAXIMO_DE_LA_PRIMERA_PASADA)];
-    if (lado > LADO_MAXIMO_DE_LA_PRIMERA_PASADA) {
-      pasadas.push(Math.min(lado, LADO_MAXIMO_DE_LA_SEGUNDA_PASADA));
+    const primera = escalaPara(ancho, alto, PIXELES_MAXIMOS_DE_LA_PRIMERA_PASADA);
+    const escalas = [primera];
+    if (primera < 1) {
+      const segunda = escalaPara(ancho, alto, PIXELES_MAXIMOS_DE_LA_SEGUNDA_PASADA);
+      if (segunda > primera) escalas.push(segunda);
     }
 
-    for (let i = 0; i < pasadas.length; i++) {
+    for (let i = 0; i < escalas.length; i++) {
       if (i > 0) await cederElTurno();
-      const escala = pasadas[i] / lado;
+      const escala = escalas[i];
       const w = Math.max(1, Math.round(ancho * escala));
       const h = Math.max(1, Math.round(alto * escala));
       const pixeles = rasterizar(abierta.fuente, w, h);

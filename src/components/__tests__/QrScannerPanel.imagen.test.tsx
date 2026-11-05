@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { configure, render, screen, waitFor } from '@testing-library/react';
+import { configure, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { QrScannerPanel } from '../QrScannerPanel';
@@ -157,6 +157,11 @@ describe('QrScannerPanel — elegir una imagen', () => {
     expect(screen.queryByText('Ese es tu propio código.')).not.toBeInTheDocument();
   });
 
+  // La lectura ya empezo cuando la region de estado dice que se esta leyendo.
+  async function esperarQueEmpieceLaLectura() {
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Leyendo la imagen...'));
+  }
+
   // Una lectura tarda y la hoja se puede cerrar mientras tanto. Entregar el
   // resultado despues abriria una hoja de pago que nadie pidio. La lectura se
   // RETIENE con una compuerta hasta que la hoja ya se cerro: sin ella, el
@@ -175,7 +180,7 @@ describe('QrScannerPanel — elegir una imagen', () => {
     const { unmount } = pintar(onDecode);
 
     const subida = user.upload(entrada(), imagenDePrueba('qr-kiramo.png'));
-    await screen.findByText('Leyendo la imagen...');
+    await esperarQueEmpieceLaLectura();
     unmount();
     soltar();
     await subida;
@@ -191,7 +196,7 @@ describe('QrScannerPanel — elegir una imagen', () => {
     const { rerender } = pintar(onDecode);
 
     const subida = user.upload(entrada(), imagenDePrueba('qr-kiramo.png'));
-    await screen.findByText('Leyendo la imagen...');
+    await esperarQueEmpieceLaLectura();
     rerender(
       <LanguageProvider>
         <QrScannerPanel active={false} onDecode={onDecode} />
@@ -204,5 +209,49 @@ describe('QrScannerPanel — elegir una imagen', () => {
     expect(onDecode).not.toHaveBeenCalled();
     // Y el panel no se queda pegado en "leyendo".
     await waitFor(() => expect(screen.queryByText('Leyendo la imagen...')).not.toBeInTheDocument());
+  });
+
+  it('tras una lectura larga entrega al onDecode MAS RECIENTE, no al del momento de elegir', async () => {
+    // El flujo que recibe el codigo lee estado de su vista (contactos, el propio
+    // numero). Si el panel se quedara con el callback viejo, validaria con datos
+    // de hace varios segundos.
+    const user = userEvent.setup();
+    const viejo = vi.fn();
+    const nuevo = vi.fn();
+    const soltar = raster.retener();
+    const { rerender } = pintar(viejo);
+
+    const subida = user.upload(entrada(), imagenDePrueba('qr-kiramo.png'));
+    await esperarQueEmpieceLaLectura();
+    rerender(
+      <LanguageProvider>
+        <QrScannerPanel active onDecode={nuevo} />
+      </LanguageProvider>,
+    );
+    soltar();
+    await subida;
+
+    await waitFor(() => expect(nuevo).toHaveBeenCalledWith(KP));
+    expect(viejo).not.toHaveBeenCalled();
+  });
+
+  // Un lector de pantalla solo anuncia un cambio en una region que YA estaba:
+  // una region que nace con el texto adentro suele quedar muda.
+  it('el aviso de error y el de lectura viven en regiones que existen desde antes', async () => {
+    const user = userEvent.setup();
+    const soltar = raster.retener();
+    pintar();
+    const avisos = screen.getByTestId('qr-aviso');
+    const lectura = screen.getByRole('status');
+    expect(avisos).toHaveAttribute('aria-live', 'polite');
+    expect(lectura).toBeEmptyDOMElement();
+
+    const subida = user.upload(entrada(), imagenDePrueba('sin-qr.png'));
+    await waitFor(() => expect(lectura).toHaveTextContent('Leyendo la imagen...'));
+    soltar();
+    await subida;
+
+    await waitFor(() => expect(within(avisos).getByText(/No encontramos un código QR/)).toBeInTheDocument());
+    expect(lectura).toBeEmptyDOMElement();
   });
 });
