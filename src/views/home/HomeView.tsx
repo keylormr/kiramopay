@@ -4,6 +4,7 @@ import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { Bandera } from '../../components/Bandera';
 import { BottomSheet } from '../../components/BottomSheet';
+import { BotonCompartirQr } from '../../components/BotonCompartirQr';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { HelpButton } from '../../components/HelpSheet';
@@ -148,6 +149,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // adaptador: el cliente reintenta la peticion entera tras un refresh
   // silencioso de 401, y ese reintento tiene que llevar el mismo nonce.
   const idemPagoRef = useRef('');
+  // El recuadro del QR de cobrar: de ahi sale la imagen que se comparte.
+  const qrCobrarRef = useRef<HTMLDivElement>(null);
   const [cobrarLoading, setCobrarLoading] = useState(false);
   const [cobrarError, setCobrarError] = useState('');
 
@@ -181,6 +184,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
   // Never let an empty accounts store crash the view (e.g. cleared browser data
   // or a store migration): fall back to a zero-balance placeholder account.
+  const nombreDeQuienCobra = [state.user?.firstName, state.user?.lastName].filter(Boolean).join(' ') || t('app_name');
   const baseAccount = state.accounts.find(a => a.ccy === state.baseCurrency)
     || state.accounts[0]
     || {
@@ -921,7 +925,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
             </div>
           ) : (
             <div className="flex flex-col items-center space-y-4">
-              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
+              <div ref={qrCobrarRef} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm">
                 <QRCodeSVG value={(cobrarCharge ?? cobrarCode).qrData} size={200} />
               </div>
 
@@ -970,6 +974,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   {cobrarLoading ? t('loading') : cobrarCharge ? t('qr_cambiar_monto') : t('qr_cobrar_monto')}
                 </button>
               </div>
+
+              {/* La imagen lleva el QR que se ve: el codigo fijo con el nombre, o
+                  el cobro con su monto. */}
+              <BotonCompartirQr
+                key={(cobrarCharge ?? cobrarCode).qrData}
+                contenedor={qrCobrarRef}
+                titulo={cobrarCharge ? formatCurrency(cobrarCharge.amount, cobrarCharge.currency as QRCurrency) : nombreDeQuienCobra}
+                subtitulo={cobrarCharge ? nombreDeQuienCobra : undefined}
+                pie={t('qr_card_pie')}
+                nombreArchivo={cobrarCharge ? 'kiramopay-cobro.png' : 'kiramopay-qr.png'}
+              />
 
               {cobrarCharge && (
                 <button

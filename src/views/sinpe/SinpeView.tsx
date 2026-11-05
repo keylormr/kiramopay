@@ -3,6 +3,7 @@ import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
+import { BotonCompartirQr } from '../../components/BotonCompartirQr';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
 import { CampoMonto } from '../../components/CampoMonto';
@@ -86,6 +87,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // toque Enviar: gritarle mientras todavia teclea el cuarto digito no ayuda.
   const [telefonoTocado, setTelefonoTocado] = useState(false);
   const campoTelefono = useRef<HTMLInputElement>(null);
+  // Los recuadros de los dos QR propios: de ahi sale la imagen que se comparte.
+  const qrContactoRef = useRef<HTMLDivElement>(null);
+  const qrSolicitudRef = useRef<HTMLDivElement>(null);
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1071,7 +1075,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         title={t('contact_qr_button')}
       >
         <div className="flex flex-col items-center space-y-4 py-2">
-          <div className="bg-white p-4 rounded-2xl">
+          <div ref={qrContactoRef} className="bg-white p-4 rounded-2xl">
             <QRCodeSVG value={myContactQr} size={220} level="M" />
           </div>
           <div className="text-center">
@@ -1082,6 +1086,13 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               como contacto es lo que hace descubrible la funcion. */}
           <p className="text-sm uv-text-secondary text-center px-4">{t('contact_qr_desc')}</p>
           <p className="text-xs uv-text-muted text-center px-4">{t('share_number_message')}</p>
+          <BotonCompartirQr
+            contenedor={qrContactoRef}
+            titulo={userName}
+            subtitulo={userPhoneLegible}
+            pie={t('qr_card_pie_contacto')}
+            nombreArchivo="kiramopay-contacto.png"
+          />
           <button
             onClick={() => handleShare(t('app_name'), `${userName} · ${userPhoneLegible}`)}
             className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] py-3 rounded-xl font-semibold uv-text-primary flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
@@ -1265,7 +1276,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           /* QR generado: el que paga solo lo escanea. El numero de telefono
              sobra en este riel — el QR ya identifica a quien cobra. */
           <div className="space-y-6 text-center">
-            <div className="bg-white rounded-2xl p-6 inline-block mx-auto">
+            <div ref={qrSolicitudRef} className="bg-white rounded-2xl p-6 inline-block mx-auto">
               <QRCodeSVG value={requestQr.qrData} size={200} level="M" />
             </div>
             <div>
@@ -1277,6 +1288,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               )}
               <p className="text-xs uv-text-muted mt-2">{t('charge_qr_help')}</p>
             </div>
+            <BotonCompartirQr
+              key={requestQr.qrData}
+              contenedor={qrSolicitudRef}
+              titulo={formatCurrency(requestQr.amount)}
+              subtitulo={requestQr.note || userName}
+              pie={t('qr_card_pie')}
+              nombreArchivo="kiramopay-cobro.png"
+            />
             <div className="flex gap-3">
               <button
                 onClick={handleShareRequest}
