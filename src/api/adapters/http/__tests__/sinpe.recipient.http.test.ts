@@ -39,12 +39,12 @@ describe('HttpSinpeRepository.lookupRecipient', () => {
     expect(res.error?.code).toBe('RATE_LIMITED');
   });
 
-  it('un numero que no es de Costa Rica ni se manda: no hay nada que preguntar', async () => {
-    const { repositorio, post } = repo({ success: true, data: { registered: true } });
+  it('un numero que no se puede normalizar se manda tal cual y llega el rechazo del servidor', async () => {
+    const { repositorio, post } = repo({ success: false, error: { code: 'INVALID_PHONE', message: 'x' } });
 
     const res = await repositorio.lookupRecipient('123');
 
-    expect(post).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledWith('/api/v1/sinpe/recipient', { phone: '123' });
     expect(res.success).toBe(false);
     expect(res.error?.code).toBe('INVALID_PHONE');
   });
