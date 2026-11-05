@@ -41,6 +41,9 @@ import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
 import { esCodigoDeKiramoPay, parsearQrKiramo } from '@/utils/qrKiramo';
 import { avisoDeHomonimo, evaluarContactoEscaneado } from '@/utils/contactoEscaneado';
+import { coincideConElRegistrado } from '@/utils/nombreDelDestinatario';
+import { useDestinatarioRegistrado } from '@/hooks/useDestinatarioRegistrado';
+import { AvisoDelDestinatario, LineaDelDestinatario } from '@/components/DestinatarioRegistrado';
 import { BannerInicio } from '@/components/home/BannerInicio';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
 import { useGastoDelMes } from './useGastoDelMes';
@@ -109,6 +112,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // El nombre de ese contacto repite el de uno guardado con OTRO numero y la
   // persona ya confirmo que el numero es el correcto. Se suelta con cada QR nuevo.
   const [homonimoConfirmado, setHomonimoConfirmado] = useState(false);
+  // Confirmacion APARTE del homonimo: confirmar uno no aprueba el otro aviso.
+  const [nombreConfirmado, setNombreConfirmado] = useState(false);
   // Aviso del escaner cuando el codigo leido no sirve para este flujo (p. ej.
   // el propio QR del usuario): el escaner sigue encendido, igual que en SINPE.
   const [scanError, setScanError] = useState('');
@@ -191,7 +196,23 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const evaluacionContacto = scannedContact
     ? evaluarContactoEscaneado(scannedContact, state.sinpeContacts)
     : null;
-  const bloqueadoPorHomonimo = !!evaluacionContacto?.homonimo && !homonimoConfirmado;
+  // Como se llama, REGISTRADA en KiramoPay, la persona de ese telefono. Solo se
+  // pregunta por un contacto que la persona no tenia guardado: el nombre de un
+  // contacto guardado lo puso ella.
+  const destinatario = useDestinatarioRegistrado(
+    scannedContact && evaluacionContacto?.nombreSinVerificar ? scannedContact.phone : null,
+  );
+  const sinCuentaDelContacto = destinatario.fase === 'sin_cuenta';
+  const nombreNoCoincide =
+    destinatario.fase === 'registrado' && !!scannedContact && !coincideConElRegistrado(scannedContact.name, destinatario.nombre);
+  // Hay un aviso de identidad sin confirmar (homonimo o nombre que no coincide),
+  // o todavia no se sabe: mientras la consulta esta en curso ni se envia ni se
+  // guarda (igual que Pagar espera a saber a quien se le paga). Si la consulta
+  // falla se desbloquea sola: un fallo no es un aviso.
+  const bloqueadoPorHomonimo =
+    (!!evaluacionContacto?.homonimo && !homonimoConfirmado) ||
+    (nombreNoCoincide && !nombreConfirmado) ||
+    destinatario.fase === 'consultando';
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
@@ -263,6 +284,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       setScanError('');
       setScannedContact(contact);
       setHomonimoConfirmado(false);
+      setNombreConfirmado(false);
       setEnvioMonto('');
       setEnvioNota('');
       setEnvioError('');
@@ -329,7 +351,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
   // Transferencia real por el riel SINPE al usuario escaneado.
   const handleEnviarAEscaneado = async () => {
-    if (!scannedContact || enviando || bloqueadoPorHomonimo) return;
+    if (!scannedContact || enviando || bloqueadoPorHomonimo || sinCuentaDelContacto) return;
     const monto = parseFloat(envioMonto);
     if (!(monto > 0)) return;
     const telefono = normalizarTelefonoCR(scannedContact.phone);
@@ -1319,9 +1341,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 {/* El nombre de un QR lo escribe quien lo creo: o es el que la
                     persona ya guardo bajo ese numero, o se dice que no esta
                     verificado. */}
-                <p className="text-xs uv-text-muted mt-0.5">
-                  {evaluacionContacto?.nombreSinVerificar ? t('contact_name_unverified') : t('contact_saved_in_contacts')}
-                </p>
+                <LineaDelDestinatario
+                  estado={destinatario}
+                  porDefecto={evaluacionContacto?.nombreSinVerificar ? t('contact_name_unverified') : t('contact_saved_in_contacts')}
+                />
               </div>
             </div>
 
@@ -1371,6 +1394,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   </div>
                 )}
 
+                {/* El QR dice un nombre y el numero esta registrado a otro, o el
+                    numero no tiene cuenta de KiramoPay. */}
+                {nombreNoCoincide && (
+                  <AvisoDelDestinatario
+                    tipo="no_coincide"
+                    confirmado={nombreConfirmado}
+                    onConfirmar={() => setNombreConfirmado(true)}
+                  />
+                )}
+                {sinCuentaDelContacto && <AvisoDelDestinatario tipo="sin_cuenta" />}
+
                 {/* Monto: el unico campo obligatorio, grande y con foco */}
                 <div className="text-center py-2">
                   <div className="flex items-center justify-center gap-1">
@@ -1405,7 +1439,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
                 <button
                   onClick={handleEnviarAEscaneado}
-                  disabled={enviando || bloqueadoPorHomonimo || !(parseFloat(envioMonto) > 0)}
+                  disabled={enviando || bloqueadoPorHomonimo || sinCuentaDelContacto || !(parseFloat(envioMonto) > 0)}
                   className="w-full py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {enviando ? (

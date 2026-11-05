@@ -1,4 +1,4 @@
-import type { ISinpeRepository, SendSinpeRequest } from '../../repositories/sinpe.repository';
+import type { ISinpeRepository, RecipientLookup, SendSinpeRequest } from '../../repositories/sinpe.repository';
 import type { ApiResponse } from '../../types';
 import type { SinpeContact, SinpeTransaction } from '@/types';
 import { apiSuccess } from '../../types';
@@ -146,5 +146,22 @@ export class HttpSinpeRepository implements ISinpeRepository {
     };
 
     return apiSuccess(tx);
+  }
+
+  // El nombre registrado a un telefono, recortado por el servidor. POST y no GET:
+  // el numero no queda en la URL ni en los registros de acceso. El servidor lo
+  // exige como +506XXXXXXXX; si no se puede normalizar se manda tal cual y el
+  // servidor lo rechaza con su codigo (igual que addContact).
+  async lookupRecipient(phone: string): Promise<ApiResponse<RecipientLookup>> {
+    const telefono = normalizarTelefonoCR(phone) || phone;
+    const res = await this.client.post<{ registered: boolean; display_name?: string }>(
+      '/api/v1/sinpe/recipient',
+      { phone: telefono },
+    );
+    if (!res.success || !res.data) return falla(res, 'RECIPIENT_LOOKUP_FAILED');
+    // Un 200 sin `registered` (un proxy, un servidor viejo) no es "sin cuenta":
+    // decirlo bloquearia un envio por algo que nadie afirmo.
+    if (typeof res.data.registered !== 'boolean') return falla(res, 'RECIPIENT_LOOKUP_FAILED');
+    return apiSuccess({ registered: res.data.registered, displayName: res.data.display_name || undefined });
   }
 }

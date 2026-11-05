@@ -25,12 +25,16 @@ type Notifier interface {
 }
 
 type Service struct {
-	repo        *Repository
-	txService   *transaction.Service
-	walletRepo  *wallet.Repository
-	userRepo    *user.Repository
-	auditLogger *audit.Logger
-	notifier    Notifier
+	repo       *Repository
+	txService  *transaction.Service
+	walletRepo *wallet.Repository
+	userRepo   *user.Repository
+	// destinatarios resuelve un telefono a su titular para la consulta del
+	// nombre (destinatario.go). Es el mismo repositorio de usuarios; se guarda
+	// como interfaz para poder probar la consulta sin base.
+	destinatarios buscadorPorTelefono
+	auditLogger   *audit.Logger
+	notifier      Notifier
 }
 
 // Options bundles optional collaborators.
@@ -49,13 +53,18 @@ func NewService(
 	if opts == nil {
 		opts = &Options{}
 	}
+	var destinatarios buscadorPorTelefono
+	if userRepo != nil {
+		destinatarios = userRepo
+	}
 	return &Service{
-		repo:        repo,
-		txService:   txService,
-		walletRepo:  walletRepo,
-		userRepo:    userRepo,
-		auditLogger: opts.AuditLogger,
-		notifier:    opts.Notifier,
+		destinatarios: destinatarios,
+		repo:          repo,
+		txService:     txService,
+		walletRepo:    walletRepo,
+		userRepo:      userRepo,
+		auditLogger:   opts.AuditLogger,
+		notifier:      opts.Notifier,
 	}
 }
 

@@ -17,6 +17,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
 import { encodeContactQr, tryParseContactQr } from '@/utils/contactQr';
 import { avisoDeHomonimo, evaluarContactoEscaneado } from '@/utils/contactoEscaneado';
+import { useDestinatarioRegistrado } from '@/hooks/useDestinatarioRegistrado';
+import { coincideConElRegistrado } from '@/utils/nombreDelDestinatario';
+import { AvisoDelDestinatario, LineaDelDestinatario } from '@/components/DestinatarioRegistrado';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR, digitosLocalesCR } from '@/utils/telefono';
 import type { QRPaymentCode, QRCharge } from '@/api/repositories/qrpayment.repository';
 import { mensajeDelRechazoDelCobro } from '@/utils/erroresQr';
@@ -117,6 +120,12 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const [contactSheetMode, setContactSheetMode] = useState<'form' | 'scan'>('form');
   const [contactScanError, setContactScanError] = useState('');
   const [contactPrefilled, setContactPrefilled] = useState(false);
+  // El telefono que trajo el QR, tal cual: lo unico por lo que se consulta el
+  // nombre registrado. El del formulario se puede editar y eso no lanza consultas.
+  const [telefonoEscaneado, setTelefonoEscaneado] = useState<string | null>(null);
+  // El nombre que trajo el QR (el del formulario se puede editar): es el que se
+  // compara con el del perfil.
+  const [nombreEscaneado, setNombreEscaneado] = useState('');
   // La persona confirmo que el numero escaneado es el de quien dice ser.
   const [homonimoConfirmado, setHomonimoConfirmado] = useState(false);
   // El dueño pidió que agregar un contacto (escaneando o a mano) avise ANTES
@@ -413,6 +422,15 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     : undefined;
   const bloqueadoPorHomonimo = !!homonimoDelEscaneado && !homonimoConfirmado;
 
+  // Como se llama, REGISTRADA en KiramoPay, la persona del numero escaneado. Se
+  // dice mientras el telefono del formulario siga siendo el del QR: si la
+  // persona lo cambia a mano, ese nombre ya no es de ese numero.
+  const destinatarioEscaneado = useDestinatarioRegistrado(telefonoEscaneado);
+  const destinatario =
+    telefonoEscaneado && mismoTelefonoCR(newContactPhone, telefonoEscaneado)
+      ? destinatarioEscaneado
+      : ({ fase: 'no_aplica' } as const);
+
   // Deja la hoja como recién abierta. Se usa al cerrarla y después de guardar.
   const resetContactForm = () => {
     setNewContactName('');
@@ -422,6 +440,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setContactSheetMode('form');
     setContactScanError('');
     setContactPrefilled(false);
+    setTelefonoEscaneado(null);
+    setNombreEscaneado('');
     setHomonimoConfirmado(false);
     setDuplicateContact(null);
     setContactAddError('');
@@ -464,6 +484,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
     setNewContactBank(contact.bank && BANKS.includes(contact.bank) ? contact.bank : 'Desconocido');
     setContactScanError('');
     setContactPrefilled(true);
+    setTelefonoEscaneado(contact.phone);
+    setNombreEscaneado(contact.name);
     setHomonimoConfirmado(false);
     setContactSheetMode('form');
     return true;
@@ -1003,6 +1025,17 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               {t('scan_contact_prefilled')}
             </p>
           )}
+
+          {/* El nombre con el que ese numero esta registrado en KiramoPay, para
+              compararlo con el que trajo el QR; o que el numero no tiene cuenta.
+              Es informativo: guardar un contacto no mueve dinero. */}
+          {(destinatario.fase === 'registrado' || destinatario.fase === 'consultando') && (
+            <LineaDelDestinatario estado={destinatario} porDefecto={null} className="text-sm uv-text-secondary -mt-2" />
+          )}
+          {destinatario.fase === 'registrado' && !coincideConElRegistrado(nombreEscaneado, destinatario.nombre) && (
+            <AvisoDelDestinatario tipo="no_coincide" />
+          )}
+          {destinatario.fase === 'sin_cuenta' && <AvisoDelDestinatario tipo="sin_cuenta" />}
 
           {homonimoDelEscaneado && (
             <div role="alert" className="flex gap-3 rounded-2xl bg-[var(--color-warning-soft)] p-4 text-left">

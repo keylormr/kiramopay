@@ -1,6 +1,6 @@
-import type { ISinpeRepository, SendSinpeRequest } from '../../repositories/sinpe.repository';
+import type { ISinpeRepository, RecipientLookup, SendSinpeRequest } from '../../repositories/sinpe.repository';
 import type { ApiResponse } from '../../types';
-import { apiSuccess } from '../../types';
+import { apiError, apiSuccess } from '../../types';
 import type { SinpeContact, SinpeTransaction } from '@/types';
 import { initialSinpeContacts, initialSinpeHistory } from './mock-data';
 
@@ -38,6 +38,12 @@ export class MockSinpeRepository implements ISinpeRepository {
   async getHistory(): Promise<ApiResponse<SinpeTransaction[]>> {
     const state = getState();
     return apiSuccess(state?.sinpeHistory ?? initialSinpeHistory());
+  }
+
+  // Modo demostracion: no hay un registro de personas que consultar, asi que no
+  // se afirma nada (la pantalla se queda en "sin verificar").
+  async lookupRecipient(): Promise<ApiResponse<RecipientLookup>> {
+    return apiError<RecipientLookup>('LOOKUP_UNAVAILABLE', 'Not available in demo mode');
   }
 
   async send(request: SendSinpeRequest): Promise<ApiResponse<SinpeTransaction>> {
