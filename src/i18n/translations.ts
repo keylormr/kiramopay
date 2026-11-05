@@ -538,6 +538,11 @@ export type TranslationKeys = {
   contact_already_exists: string;
   contact_duplicate_send: string;
   contact_own_number: string;
+  qr_no_es_de_kiramopay: string;
+  contact_name_unverified: string;
+  contact_saved_in_contacts: string;
+  contact_homonym_warning: string;
+  contact_homonym_confirm: string;
   or_type_it: string;
   contact_name: string;
   bank_optional: string;

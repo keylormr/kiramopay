@@ -312,7 +312,10 @@ describe('HomeView — escaneo de contacto: duplicado y numero propio', () => {
     // convivir un instante mientras una se desvanece; la ultima es la vigente.
     const dialogs = await screen.findAllByRole('dialog');
     const sendDialog = within(dialogs[dialogs.length - 1]);
-    expect(sendDialog.getByText('Diego (alias)')).toBeInTheDocument();
+    // Se muestra el nombre que la persona guardo para ese numero: el que trae
+    // el QR lo escribe quien lo creo y nadie lo comprueba.
+    expect(sendDialog.getByText('Diego Mora')).toBeInTheDocument();
+    expect(sendDialog.queryByText('Diego (alias)')).not.toBeInTheDocument();
 
     // El boton ya refleja que esta guardado, sin necesidad de tocarlo.
     const boton = sendDialog.getByRole('button', { name: 'Contacto guardado' });

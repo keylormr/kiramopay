@@ -562,6 +562,111 @@ describe('SinpeView — contacto duplicado o número propio', () => {
   });
 });
 
+// El nombre de un QR de contacto lo escribe quien lo creo: un QR llamado "Mamá"
+// con el numero de otra persona llega por chat igual que el de verdad. Si el
+// nombre repite el de un contacto guardado con OTRO numero, se avisa y no se
+// guarda hasta que la persona confirme (o cambie el nombre).
+describe('SinpeView — contacto escaneado con el nombre de otro guardado', () => {
+  const mama = { id: 'c1', name: 'Mamá', phone: '+50670001111', bank: 'BAC' };
+
+  async function escanear(user: ReturnType<typeof userEvent.setup>, nombre: string) {
+    await user.click(screen.getByRole('button', { name: 'Escanear QR' }));
+    const d = within(await screen.findByRole('dialog'));
+    fireEvent.change(d.getByPlaceholderText('Código QR'), {
+      target: { value: encodeContactQr({ name: nombre, phone: '+506 8888-7777' }) },
+    });
+    fireEvent.click(d.getByRole('button', { name: 'Continuar' }));
+    await screen.findByText(/Datos tomados del QR/);
+    return within(screen.getByRole('dialog'));
+  }
+
+  it('avisa, no deja guardar hasta confirmar el numero y entonces guarda', async () => {
+    mocks.state.sinpeContacts = [mama];
+    const user = userEvent.setup();
+    setup();
+
+    const hoja = await escanear(user, 'Mamá');
+
+    expect(hoja.getByRole('alert')).toHaveTextContent(
+      'Ya tienes un contacto llamado «Mamá» con otro número (+506 7000-1111).',
+    );
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeDisabled();
+    await user.click(hoja.getByRole('button', { name: /Guardar contacto/ }));
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+
+    await user.click(hoja.getByRole('button', { name: 'El número es correcto' }));
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+    await user.click(hoja.getByRole('button', { name: /Guardar contacto/ }));
+
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'ADD_SINPE_CONTACT',
+      payload: expect.objectContaining({ name: 'Mamá', phone: '+50688887777' }),
+    });
+  });
+
+  it('cambiar el nombre quita el aviso: ya no se hace pasar por el contacto guardado', async () => {
+    mocks.state.sinpeContacts = [mama];
+    const user = userEvent.setup();
+    setup();
+    const hoja = await escanear(user, 'Mamá');
+    // Antes de cambiar el nombre el aviso esta y bloquea el guardado.
+    expect(hoja.getByRole('alert')).toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeDisabled();
+
+    const nombre = hoja.getByPlaceholderText('Ej: Juan Pérez');
+    await user.clear(nombre);
+    await user.type(nombre, 'Mamá de Ana');
+
+    expect(hoja.queryByRole('alert')).not.toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+  });
+
+  it('escanear otro QR despues no hereda la confirmacion del anterior', async () => {
+    mocks.state.sinpeContacts = [mama];
+    const user = userEvent.setup();
+    setup();
+    const hoja = await escanear(user, 'Mamá');
+    await user.click(hoja.getByRole('button', { name: 'El número es correcto' }));
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+
+    // Desde el mismo formulario se escanea otro QR con el mismo nombre y OTRO numero.
+    await user.click(hoja.getByRole('button', { name: /Escanear código QR/ }));
+    fireEvent.change(hoja.getByPlaceholderText('Código QR'), {
+      target: { value: encodeContactQr({ name: 'Mamá', phone: '+506 8888-6666' }) },
+    });
+    fireEvent.click(hoja.getByRole('button', { name: 'Continuar' }));
+    await screen.findByText(/Datos tomados del QR/);
+
+    expect(hoja.getByRole('alert')).toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeDisabled();
+  });
+
+  it('un nombre que no esta guardado no avisa de nada', async () => {
+    mocks.state.sinpeContacts = [mama];
+    const user = userEvent.setup();
+    setup();
+
+    const hoja = await escanear(user, 'Ana Solís');
+
+    expect(hoja.queryByRole('alert')).not.toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+  });
+
+  it('un nombre repetido tecleado a mano no avisa: ahi nadie se hace pasar por nadie', async () => {
+    mocks.state.sinpeContacts = [mama];
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: 'Agregar contacto' })[0]);
+    const dialog = within(await screen.findByRole('dialog'));
+    await user.type(dialog.getByPlaceholderText('Ej: Juan Pérez'), 'Mamá');
+    await user.type(dialog.getByPlaceholderText('8888-0000'), '88887777');
+
+    expect(dialog.queryByRole('alert')).not.toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: /Guardar contacto/ })).toBeEnabled();
+  });
+});
+
 // El nombre de la contraparte compartía línea con el prefijo "Recibido
 // de"/"Enviado a", que se comía buena parte del ancho frente al monto de la
 // derecha y cortaba nombres relativamente cortos ("Emmanuel C...").

@@ -38,7 +38,8 @@ import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
 import { normalizarTelefonoCR, formatearTelefonoCR, mismoTelefonoCR } from '@/utils/telefono';
-import { parsearQrKiramo } from '@/utils/qrKiramo';
+import { esCodigoDeKiramoPay, parsearQrKiramo } from '@/utils/qrKiramo';
+import { avisoDeHomonimo, evaluarContactoEscaneado } from '@/utils/contactoEscaneado';
 import { BannerInicio } from '@/components/home/BannerInicio';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
 import { useGastoDelMes } from './useGastoDelMes';
@@ -104,6 +105,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   // A scanned QR may be a contact (added to the list) instead of a payment.
   const [scannedContact, setScannedContact] = useState<ContactQrPayload | null>(null);
+  // El nombre de ese contacto repite el de uno guardado con OTRO numero y la
+  // persona ya confirmo que el numero es el correcto. Se suelta con cada QR nuevo.
+  const [homonimoConfirmado, setHomonimoConfirmado] = useState(false);
   // Aviso del escaner cuando el codigo leido no sirve para este flujo (p. ej.
   // el propio QR del usuario): el escaner sigue encendido, igual que en SINPE.
   const [scanError, setScanError] = useState('');
@@ -143,6 +147,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // codigo malo, y la hoja ofrece volver a preguntar. Cada toque de Reintentar
   // sube el contador y vuelve a correr la consulta.
   const [resolverFallo, setResolverFallo] = useState(false);
+  // El servidor contesto que ese codigo no se puede pagar (no existe, fue
+  // retirado): la hoja dice el motivo y no ofrece pagar.
+  const [codigoRechazado, setCodigoRechazado] = useState(false);
   const [intentoResolver, setIntentoResolver] = useState(0);
   // Nonce del pago de MONTO ABIERTO. Vive en un ref y NO se acuna dentro del
   // adaptador: el cliente reintenta la peticion entera tras un refresh
@@ -170,6 +177,16 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // trae. Un codigo de monto abierto no tiene estado de cobro: decide el
   // servidor al pagar.
   const cobroCerrado = resuelto?.chargeId ? codigoDeCobroCerrado(resuelto.status) : '';
+  // Todavia no se sabe a quien se le paga: ni lo contesto el servidor, ni fallo,
+  // ni lo rechazo. Es DERIVADO y no un useState porque la consulta arranca en un
+  // efecto, despues del primer pintado: un estado guardado dejaba un cuadro con
+  // Pagar vivo antes de saber el destinatario.
+  const verificandoElCodigo = !!scannedQrData && !resuelto && !resolverFallo && !codigoRechazado;
+  // Lo que llego en un QR no verifica el nombre que trae (ver contactoEscaneado).
+  const evaluacionContacto = scannedContact
+    ? evaluarContactoEscaneado(scannedContact, state.sinpeContacts)
+    : null;
+  const bloqueadoPorHomonimo = !!evaluacionContacto?.homonimo && !homonimoConfirmado;
 
   const formatCurrency = (amount: number, ccy: string) => {
     try {
@@ -239,6 +256,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       // nuevo es el caso comun-; lo que se bloquea es volver a "agregarlo".
       setScanError('');
       setScannedContact(contact);
+      setHomonimoConfirmado(false);
       setEnvioMonto('');
       setEnvioNota('');
       setEnvioError('');
@@ -248,8 +266,19 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       setActiveSheet('enviarA'); // cerrar la hoja apaga la cámara
       return;
     }
+    // Ni un contacto ni la forma de un codigo de KiramoPay (una URL, un QR de
+    // otra app): se rechaza AQUI, con el escaner encendido, en vez de abrir
+    // "Pago detectado" para que el servidor lo rechace despues. Una imagen que
+    // llego por chat lo vuelve el caso comun.
+    // Recortado: un QR leido de una imagen puede traer un espacio o un salto al
+    // final, y el servidor compara el texto exacto.
+    const codigo = raw.trim();
+    if (!esCodigoDeKiramoPay(codigo)) {
+      setScanError(t('qr_no_es_de_kiramopay'));
+      return false;
+    }
     setScanError('');
-    setScannedQrData(raw);
+    setScannedQrData(codigo);
     setPaymentAmount('');
     setPayError('');
     setPayResult(null);
@@ -257,7 +286,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   };
 
   const handleAddScannedContact = () => {
-    if (!scannedContact || contactoGuardado) return;
+    if (!scannedContact || contactoGuardado || bloqueadoPorHomonimo) return;
     if (esMiPropioNumero(scannedContact.phone)) {
       setEnvioError(t('contact_own_number'));
       return;
@@ -294,7 +323,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
   // Transferencia real por el riel SINPE al usuario escaneado.
   const handleEnviarAEscaneado = async () => {
-    if (!scannedContact || enviando) return;
+    if (!scannedContact || enviando || bloqueadoPorHomonimo) return;
     const monto = parseFloat(envioMonto);
     if (!(monto > 0)) return;
     const telefono = normalizarTelefonoCR(scannedContact.phone);
@@ -360,15 +389,20 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     if (!scannedQrData) {
       setResuelto(null);
       setResolverFallo(false);
+      setCodigoRechazado(false);
       return;
     }
     let cancelado = false;
     (async () => {
       setResolviendo(true);
       setResolverFallo(false);
+      setCodigoRechazado(false);
       try {
         const api = getApiLayer();
-        if (!api.qrPayments) return;
+        if (!api.qrPayments) {
+          if (!cancelado) setResolverFallo(true);
+          return;
+        }
         const res = await api.qrPayments.resolveQr(scannedQrData);
         if (cancelado) return;
         if (res.success && res.data) {
@@ -376,8 +410,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           return;
         }
         const motivo = mensajeDeCobro(t, res.error?.code);
-        if (motivo) setPayError(motivo);
-        else setResolverFallo(true);
+        if (motivo) {
+          setPayError(motivo);
+          setCodigoRechazado(true);
+        } else setResolverFallo(true);
       } catch {
         if (!cancelado) setResolverFallo(true);
       } finally {
@@ -390,7 +426,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // Pago real: paga el QR escaneado por el riel QR del backend (mueve dinero en
   // el ledger). Generar el código no movía dinero; esto sí.
   const handleScannedPayment = async () => {
-    if (!scannedQrData || cobroCerrado) return;
+    if (!scannedQrData || cobroCerrado || codigoRechazado || verificandoElCodigo) return;
     const amt = parseFloat(paymentAmount);
     const montoAbierto = !resuelto?.chargeId;
     // El nonce se acuna al TOCAR PAGAR, no antes, y solo para el monto abierto:
@@ -1135,6 +1171,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 {/* A quien se le paga va PRIMERO. Un codigo pegado en un
                     mostrador se puede tapar con el de otro, y hasta ahora la
                     hoja de pago no mostraba nunca quien recibe. */}
+                {!codigoRechazado && (
                 <div className="text-center pt-2">
                   <p className="text-xs uv-text-muted uppercase tracking-wider">{t('qr_le_pagas_a')}</p>
                   {cobrador ? (
@@ -1162,7 +1199,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     <p className="text-sm uv-text-muted">—</p>
                   )}
                 </div>
+                )}
 
+                {/* Un codigo rechazado no se paga: ni monto que teclear ni boton. */}
+                {!codigoRechazado && (
                 <div className="text-center py-2">
                   {montoFijo !== null ? (
                     <>
@@ -1192,6 +1232,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     </div>
                   )}
                 </div>
+                )}
 
                 {cobroCerrado ? (
                   // El cobro ya no se puede pagar: se dice de entrada y no se
@@ -1209,7 +1250,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   <ErrorALaVista mensaje={payError} className="text-[var(--color-danger)] text-sm text-center" />
                 ) : null}
 
-                {cobroCerrado ? (
+                {cobroCerrado || codigoRechazado ? (
                   <button
                     onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
                     className="w-full py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
@@ -1226,7 +1267,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     </button>
                     <button
                       onClick={handleScannedPayment}
-                      disabled={payLoading || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
+                      disabled={payLoading || verificandoElCodigo || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
                       className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
@@ -1252,11 +1293,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           <div className="space-y-5">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 uv-gradient-brand rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0">
-                {scannedContact.name.charAt(0)}
+                {(evaluacionContacto?.nombre ?? scannedContact.name).charAt(0)}
               </div>
               <div className="min-w-0">
-                <p className="text-base font-bold uv-text-primary truncate">{scannedContact.name}</p>
+                <p className="text-base font-bold uv-text-primary truncate">{evaluacionContacto?.nombre ?? scannedContact.name}</p>
                 <p className="text-sm uv-text-muted tabular-nums">{formatearTelefonoCR(scannedContact.phone)}</p>
+                {/* El nombre de un QR lo escribe quien lo creo: o es el que la
+                    persona ya guardo bajo ese numero, o se dice que no esta
+                    verificado. */}
+                <p className="text-xs uv-text-muted mt-0.5">
+                  {evaluacionContacto?.nombreSinVerificar ? t('contact_name_unverified') : t('contact_saved_in_contacts')}
+                </p>
               </div>
             </div>
 
@@ -1283,6 +1330,29 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               </div>
             ) : (
               <>
+                {/* Mismo nombre que un contacto guardado, OTRO numero: el trueque
+                    que hace un QR de chat para hacerse pasar por alguien conocido.
+                    No se envia hasta que la persona confirme el numero. */}
+                {evaluacionContacto?.homonimo && (
+                  <div role="alert" className="flex gap-3 rounded-2xl bg-[var(--color-warning-soft)] p-4 text-left">
+                    <Icons.AlertCircle size={20} className="mt-0.5 shrink-0 text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold uv-text-primary">
+                        {avisoDeHomonimo(t('contact_homonym_warning'), evaluacionContacto.homonimo)}
+                      </p>
+                      {!homonimoConfirmado && (
+                        <button
+                          type="button"
+                          onClick={() => setHomonimoConfirmado(true)}
+                          className="mt-2 text-sm font-bold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                        >
+                          {t('contact_homonym_confirm')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Monto: el unico campo obligatorio, grande y con foco */}
                 <div className="text-center py-2">
                   <div className="flex items-center justify-center gap-1">
@@ -1317,7 +1387,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
                 <button
                   onClick={handleEnviarAEscaneado}
-                  disabled={enviando || !(parseFloat(envioMonto) > 0)}
+                  disabled={enviando || bloqueadoPorHomonimo || !(parseFloat(envioMonto) > 0)}
                   className="w-full py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {enviando ? (
@@ -1334,8 +1404,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
                 <button
                   onClick={handleAddScannedContact}
-                  disabled={contactoGuardado || (!!scannedContact && !!buscarContactoPorTelefono(scannedContact.phone))}
-                  className="w-full py-2.5 text-sm font-semibold text-[var(--color-primary)] disabled:uv-text-muted"
+                  disabled={contactoGuardado || bloqueadoPorHomonimo || (!!scannedContact && !!buscarContactoPorTelefono(scannedContact.phone))}
+                  className="w-full py-2.5 text-sm font-semibold text-[var(--color-primary)] disabled:opacity-50"
                 >
                   {contactoGuardado || (scannedContact && buscarContactoPorTelefono(scannedContact.phone))
                     ? t('sinpe_contact_saved')

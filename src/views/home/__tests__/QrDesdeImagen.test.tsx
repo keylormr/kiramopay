@@ -20,7 +20,6 @@ vi.setConfig({ testTimeout: 30_000 });
 configure({ asyncUtilTimeout: 15_000 });
 
 const KP = 'KP:merchant_dynamic:abcd1234:550000:CRC:i0123456789abcdef01234567';
-const AJENO = 'https://example.com/promo?ref=chat-2026';
 
 const mocks = vi.hoisted(() => ({
   resolveQr: vi.fn(),
@@ -175,18 +174,21 @@ describe('Pagar un QR elegido desde una imagen', () => {
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
   });
 
-  it('un QR de otra cosa recibe el mismo rechazo que con la camara y no se paga', async () => {
-    mocks.resolveQr.mockResolvedValue({ success: false, error: { code: 'QR_INVALIDO', message: 'x' } });
+  it('un QR de otra cosa se rechaza en el escaner, igual que con la camara, y no se paga', async () => {
     const user = userEvent.setup();
     pintar();
     const entrada = await abrirEscaner(user);
 
     await user.upload(entrada, imagenDePrueba('qr-ajeno.png'));
 
-    await waitFor(() => expect(mocks.resolveQr).toHaveBeenCalledWith(AJENO));
-    // El mensaje que el flujo ya tenia para un codigo que no es de KiramoPay.
-    expect(await screen.findByText('Ese código no existe o ya no es válido.')).toBeInTheDocument();
+    // Ya no se abre "Pago detectado" para preguntarle al servidor por algo que
+    // no tiene la forma de un codigo de KiramoPay: se dice ahi mismo.
+    expect(await screen.findByText(/Ese QR no es de KiramoPay/)).toBeInTheDocument();
+    expect(screen.queryByText('Le pagas a')).not.toBeInTheDocument();
+    expect(mocks.resolveQr).not.toHaveBeenCalled();
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
+    // El escaner sigue ahi para intentar con otra imagen.
+    expect(screen.getByRole('button', { name: 'Elegir una imagen' })).toBeInTheDocument();
   });
 
   it('una imagen sin QR lo dice en la hoja del escaner y no abre ningun pago', async () => {
