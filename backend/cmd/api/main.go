@@ -1135,6 +1135,15 @@ func main() {
 			r.Post("/sinpe/contacts", sinpeHandler.AddContact)
 			r.Get("/sinpe/history", sinpeHandler.GetHistory)
 			r.Post("/sinpe/send", sinpeHandler.Send)
+			// Nombre registrado de un telefono (para reconocer a quien se le paga con un
+			// QR de contacto). Es un dato personal y la ruta deja preguntar por cualquier
+			// numero: tope propio por minuto y por hora, ademas del general del grupo.
+			// El tope va en la clave del contador (12 y 40 no los usa ninguna otra ruta);
+			// con el mismo numero que otra ruta compartirian el presupuesto.
+			r.With(
+				middleware.UserRateLimit(redisClient, 12, time.Minute),
+				middleware.UserRateLimit(redisClient, 40, time.Hour),
+			).Post("/sinpe/recipient", sinpeHandler.LookupRecipient)
 
 			// Services & Payments
 			r.Post("/services/pay-bill", paymentHandler.PayBill)

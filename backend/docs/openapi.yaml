@@ -1235,6 +1235,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/sinpe/recipient:
+    post:
+      tags: [SINPE]
+      summary: Look up the registered name of a phone number
+      description: >-
+        Tells whether a phone number belongs to a KiramoPay account and, if it
+        does, the name registered to it, shortened to the first name(s) and the
+        initial of each surname (e.g. "Keilor M. R."). It exists so that someone
+        paying a contact QR received through chat can recognize the person
+        before sending: the name in a QR is written by whoever created it and
+        nobody checks it. Nothing else about the account is returned (no id,
+        national id, phone or email). The phone is looked up exactly as
+        POST /api/v1/sinpe/send does, so a registered=true answer means a
+        transfer to that number finds the same person. An account that asked
+        to be deleted is reported as not registered. It is a POST so the number
+        does not end up in the URL or in access logs. Rate limited per user:
+        12 requests per minute and 40 per hour (429 RATE_LIMITED).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SinpeRecipientRequest'
+      responses:
+        '200':
+          description: The lookup result (also when the number has no account)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: '#/components/schemas/SinpeRecipient'
+        '400':
+          description: >-
+            VALIDATION_ERROR (phone format), INVALID_PHONE (not a Costa Rican
+            mobile number), SELF_SEND (the number is the caller's own) or
+            INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: RATE_LIMITED - too many lookups; try again later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: >-
+            RECIPIENT_LOOKUP_FAILED - the database did not answer. It does NOT
+            mean the number has no account; the detail is only logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/sinpe/history:
     get:
       tags: [SINPE]
@@ -8096,6 +8157,30 @@ components:
           type: string
         is_favorite:
           type: boolean
+
+    SinpeRecipientRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          description: Costa Rican mobile number as +506 followed by its eight digits, with no spaces or dashes.
+          pattern: '^\+506[0-9]{8}$'
+          example: '+50688887777'
+
+    SinpeRecipient:
+      type: object
+      required: [registered]
+      properties:
+        registered:
+          type: boolean
+          description: Whether the number belongs to a KiramoPay account.
+        display_name:
+          type: string
+          description: >-
+            Registered name, shortened: first name(s) and the initial of each
+            surname. Absent when the number has no account.
+          example: Keilor M. R.
 
     SinpeSendRequest:
       type: object

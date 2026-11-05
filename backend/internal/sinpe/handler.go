@@ -191,3 +191,43 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, result)
 }
+
+// LookupRecipient dice si un telefono tiene cuenta de KiramoPay y, si la tiene,
+// el nombre registrado recortado (nombre e iniciales de los apellidos). Es POST
+// y no GET para que el telefono no quede en la URL ni en los registros de
+// acceso. Ver el comentario de destinatario.go sobre por que se acota.
+func (h *Handler) LookupRecipient(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		response.Error(w, http.StatusUnauthorized, "UNAUTHORIZED", "user not authenticated")
+		return
+	}
+
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
+		return
+	}
+	if err := validator.ValidatePhone(req.Phone); err != nil {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Message)
+		return
+	}
+
+	destinatario, err := h.service.ConsultarDestinatario(r.Context(), userID, req.Phone)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidPhone):
+			response.Error(w, http.StatusBadRequest, "INVALID_PHONE", ErrInvalidPhone.Error())
+		case errors.Is(err, ErrSelfSend):
+			response.Error(w, http.StatusBadRequest, "SELF_SEND", ErrSelfSend.Error())
+		default:
+			// Un 5xx no deja salir el detalle (response.Error): queda en el log.
+			response.Error(w, http.StatusInternalServerError, "RECIPIENT_LOOKUP_FAILED", err.Error())
+		}
+		return
+	}
+
+	response.JSON(w, http.StatusOK, destinatario)
+}
