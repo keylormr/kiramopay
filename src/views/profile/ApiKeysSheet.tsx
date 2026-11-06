@@ -140,7 +140,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
           <>
             <p className="uv-text-secondary text-sm">{t('apikeys_desc')}</p>
             {error && (
-              <p role="alert" className="text-[var(--color-danger)] text-sm">
+              <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">
                 {error}
               </p>
             )}
@@ -148,7 +148,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
 
             {!loading && errorLista && (
               <div className="flex flex-col items-center gap-3 py-4 text-center">
-                <p role="alert" className="text-[var(--color-danger)] text-sm">
+                <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">
                   {mensajeDeRechazo(errorLista, {}, 'apikeys_err_load', t)}
                 </p>
                 <button
@@ -215,7 +215,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
 
             <button
               onClick={() => { setError(''); setStep('create'); }}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               <Icons.Plus size={18} />
               {t('apikeys_new')}
@@ -252,7 +252,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
                     <span
                       className={`w-5 h-5 rounded-md flex items-center justify-center ${
                         scopes.includes(s)
-                          ? 'bg-[var(--color-primary)] text-white'
+                          ? 'bg-[var(--color-primary-fill)] text-white'
                           : 'border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
                       }`}
                     >
@@ -263,7 +263,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
               </div>
             </div>
             {error && (
-              <p role="alert" className="text-[var(--color-danger)] text-sm">
+              <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">
                 {error}
               </p>
             )}
@@ -277,7 +277,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
               <button
                 onClick={create}
                 disabled={loading || !name.trim() || scopes.length === 0}
-                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
               >
                 {loading ? t('loading') : t('apikeys_create_btn')}
               </button>
@@ -310,7 +310,7 @@ export const ApiKeysSheet: React.FC<ApiKeysSheetProps> = ({ isOpen, onClose }) =
                 setStep('list');
                 load();
               }}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all"
             >
               {t('apikeys_done')}
             </button>

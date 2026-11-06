@@ -396,7 +396,7 @@ export function HojaAlertasDePrecio({ isOpen, onClose, alertas, activos, activoI
         type="button"
         onClick={abrirNueva}
         disabled={lleno || conAlertas.length === 0}
-        className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors uv-focus-ring"
+        className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors uv-focus-ring"
       >
         <Icons.Plus size={18} aria-hidden="true" /> {t('crypto_alert_new')}
       </button>
@@ -426,7 +426,7 @@ export function HojaAlertasDePrecio({ isOpen, onClose, alertas, activos, activoI
           alertas.cargando ? esqueleto : null
         ) : activas.length === 0 ? (
           <div className="uv-surface-2 rounded-2xl px-5 py-6 text-center">
-            <div className="w-12 h-12 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-3">
+            <div className="w-12 h-12 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex items-center justify-center mx-auto mb-3">
               <Icons.Bell size={22} aria-hidden="true" />
             </div>
             <p className="font-bold uv-text-primary">{t('crypto_alerts_empty_title')}</p>
@@ -466,7 +466,7 @@ export function HojaAlertasDePrecio({ isOpen, onClose, alertas, activos, activoI
       <button
         type="button"
         onClick={() => setVista('lista')}
-        className="flex items-center gap-1 text-sm font-bold text-[var(--color-primary)] -mt-1 min-h-11 uv-focus-ring rounded-lg"
+        className="flex items-center gap-1 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] -mt-1 min-h-11 uv-focus-ring rounded-lg"
       >
         <Icons.ChevronLeft size={16} aria-hidden="true" />
         {t('crypto_alerts_see_all')}
@@ -522,7 +522,7 @@ export function HojaAlertasDePrecio({ isOpen, onClose, alertas, activos, activoI
                 <Flecha
                   size={16}
                   aria-hidden="true"
-                  className={elegida ? (d === 'above' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]') : ''}
+                  className={elegida ? (d === 'above' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]') : ''}
                 />
                 {t(d === 'above' ? 'crypto_alert_above' : 'crypto_alert_below')}
               </button>
@@ -617,7 +617,7 @@ export function HojaAlertasDePrecio({ isOpen, onClose, alertas, activos, activoI
         type="button"
         onClick={crear}
         disabled={!puedeCrear}
-        className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors uv-focus-ring"
+        className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-colors uv-focus-ring"
       >
         {enviando ? (
           t('processing')

@@ -35,7 +35,7 @@ export const ESTILO_DE_MOVIMIENTO: Readonly<
   },
   retiro: {
     icono: 'ArrowUpRight',
-    tono: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]',
+    tono: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)]',
     etiqueta: 'business_move_type_withdrawal',
     detalle: 'business_detail_withdrawal',
   },

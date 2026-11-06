@@ -204,7 +204,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
             aria-pressed={days === r}
             className={`flex-1 h-9 rounded-xl text-sm font-bold transition-colors ${
               days === r
-                ? 'bg-[var(--color-primary)] text-white'
+                ? 'bg-[var(--color-primary-fill)] text-white'
                 : 'uv-surface-1 uv-text-muted border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
             }`}
           >
@@ -221,7 +221,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
 
       {fallo ? (
         <div className="uv-surface-1 rounded-3xl p-6 uv-shadow-soft flex flex-col items-center text-center">
-          <Icons.AlertCircle size={24} className="mb-2 text-[var(--color-danger)]" aria-hidden="true" />
+          <Icons.AlertCircle size={24} className="mb-2 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-hidden="true" />
           <p role="alert" className="text-sm font-semibold uv-text-primary">
             {mensajeDeRechazo(error ?? undefined, {}, 'business_report_err_load', t)}
           </p>
@@ -302,7 +302,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
               {aviso && (
                 <p
                   role={aviso.tono === 'ok' ? 'status' : 'alert'}
-                  className={`mt-2 text-sm ${aviso.tono === 'ok' ? 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]' : 'text-[var(--color-danger)]'}`}
+                  className={`mt-2 text-sm ${aviso.tono === 'ok' ? 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]' : 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]'}`}
                 >
                   {t(aviso.clave)}
                 </p>
@@ -364,14 +364,14 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
               className={`mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl min-h-12 px-4 py-3 text-sm font-bold transition-colors uv-focus-ring disabled:cursor-default ${
                 interes === 'anotado'
                   ? 'uv-chip-success'
-                  : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
+                  : 'border border-[var(--color-primary)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
               }`}
             >
               {interes === 'anotado' ? <Icons.Check size={17} aria-hidden="true" /> : <Icons.Bell size={16} aria-hidden="true" />}
               {t(interes === 'anotado' ? 'plans_cta_registered' : interes === 'enviando' ? 'plans_cta_sending' : 'plans_cta_interested')}
             </button>
             {interes === 'error' && (
-              <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">{t('plans_cta_error')}</p>
+              <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('plans_cta_error')}</p>
             )}
           </section>
         )}

@@ -21,13 +21,13 @@ const SIZE_CLASSES: Record<Size, string> = {
 
 const VARIANT_CLASSES: Record<Variant, string> = {
   primary:
-    'bg-[var(--color-primary)] text-white shadow-[var(--shadow-primary)] hover:bg-[var(--color-primary-hover)] active:scale-[0.98] disabled:bg-[var(--color-primary-300)] disabled:shadow-none',
+    'bg-[var(--color-primary-fill)] text-white shadow-[var(--shadow-primary)] hover:bg-[var(--color-primary-hover)] active:scale-[0.98] disabled:bg-[var(--color-primary-300)] disabled:shadow-none',
   secondary:
     'bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] hover:bg-[var(--color-surface-3)] active:scale-[0.98] dark:bg-[var(--color-surface-2-dark)] dark:text-[var(--color-text-primary-dark)] dark:border-[var(--color-border-dark)] dark:hover:bg-[var(--color-surface-3-dark)]',
   ghost:
     'bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] active:scale-[0.98] dark:text-[var(--color-text-secondary-dark)] dark:hover:bg-[var(--color-surface-muted-dark)]',
   danger:
-    'bg-[var(--color-danger)] text-white hover:opacity-90 active:scale-[0.98]',
+    'bg-[var(--color-danger-fill)] text-white hover:opacity-90 active:scale-[0.98]',
 };
 
 export function Button({

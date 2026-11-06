@@ -24,7 +24,9 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      darkMode: false,
+      // Oscuro por defecto: el rediseno de 2026-11 es oscuro y premium. El claro
+      // sigue disponible en Perfil para quien lo elija.
+      darkMode: true,
       offlineMode: false,
       isLocked: false,
       // Opt-in: la biometria la elige el usuario (la ofrece la app al primer
@@ -50,11 +52,17 @@ export const useSettingsStore = create<SettingsState>()(
       // v1: biometricEnabled paso de true-por-defecto a opt-in. Los estados
       // persistidos con el true que nadie eligio se resetean UNA vez; quien
       // lo active de aqui en adelante persiste su eleccion normalmente.
-      version: 1,
+      // v2: el tema oscuro pasa a ser el de la app. El false guardado era el
+      // valor por defecto de antes y no se distingue de una eleccion, asi que
+      // pasa a oscuro UNA vez; quien vuelva al claro despues lo conserva.
+      version: 2,
       migrate: (persisted, version) => {
-        const s = persisted as Partial<SettingsState>;
+        let s = persisted as Partial<SettingsState>;
         if (version < 1) {
-          return { ...s, biometricEnabled: false };
+          s = { ...s, biometricEnabled: false };
+        }
+        if (version < 2) {
+          s = { ...s, darkMode: true };
         }
         return s;
       },

@@ -463,13 +463,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             {(state.user?.kycLevel || 0) >= 1 ? (
               <Icons.CheckCircle size={18} className="text-green-600" />
             ) : (
-              <span className="text-xs font-bold text-[var(--color-primary)]">
+              <span className="text-xs font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
                 {verifyingId ? t('processing') : t('kyc_verify_cta')}
               </span>
             )}
           </button>
           {idVerifyMsg && (
-            <p className={`px-4 pb-2 text-xs ${idVerifyMsg.ok ? 'text-green-600' : 'text-[var(--color-danger)]'}`} aria-live="polite">
+            <p className={`px-4 pb-2 text-xs ${idVerifyMsg.ok ? 'text-green-600' : 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]'}`} aria-live="polite">
               {idVerifyMsg.text}
             </p>
           )}
@@ -542,7 +542,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
               >
                 <div className="w-10 h-10 bg-[var(--color-primary-soft)] rounded-xl flex items-center justify-center mr-3 shrink-0">
-                  <Icons.Calendar size={18} className="text-[var(--color-primary)]" />
+                  <Icons.Calendar size={18} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-semibold uv-text-primary text-sm">{t('recurring_title')}</p>
@@ -711,7 +711,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 </div>
               </button>
               {avisoBiometria && (
-                <p role="status" className="pl-[4.25rem] pr-4 pb-3 -mt-1.5 text-xs text-[var(--color-danger)]">
+                <p role="status" className="pl-[4.25rem] pr-4 pb-3 -mt-1.5 text-xs text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
                   {avisoBiometria}
                 </p>
               )}
@@ -780,7 +780,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
                 <Icons.Trash size={18} className="text-red-600" />
               </div>
               <div className="flex-1 text-left">
-                <p className="font-semibold text-[var(--color-danger)] text-sm">{t('delete_account')}</p>
+                <p className="font-semibold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{t('delete_account')}</p>
                 <p className="text-xs uv-text-muted mt-0.5">{t('delete_account_desc')}</p>
               </div>
               <Icons.ChevronRight size={18} className="uv-text-muted" />
@@ -1084,7 +1084,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       <button
         onClick={() => dispatch({ type: 'LOGOUT' })}
         aria-label={t('logout')}
-        className="w-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] p-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-[var(--color-danger)] hover:text-white active:scale-[0.98] transition-all"
+        className="w-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] p-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-[var(--color-danger)] hover:text-white active:scale-[0.98] transition-all"
       >
         <Icons.LogOut size={18} />
         {t('logout')}
@@ -1196,7 +1196,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           <button
             onClick={handleChangePassword}
             disabled={!isPasswordValid || newPassword !== confirmPassword || !currentPassword || isChangingPassword}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed uv-shadow-primary active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed uv-shadow-primary active:scale-[0.98] transition-all flex items-center justify-center gap-2"
           >
             {isChangingPassword ? (
               <>
@@ -1275,7 +1275,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <button
               type="button"
               onClick={handleConfirmDisableBiometric}
-              className="w-full min-h-12 px-4 py-3 rounded-xl font-bold bg-[var(--color-danger)] text-white"
+              className="w-full min-h-12 px-4 py-3 rounded-xl font-bold bg-[var(--color-danger-fill)] text-white"
             >
               {t('disable_biometrics')}
             </button>
@@ -1331,7 +1331,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             <button
               type="button"
               onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
-              className="mt-2 text-sm font-semibold text-[var(--color-primary)] hover:underline"
+              className="mt-2 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline"
             >
               {t('privacy_policy')}
             </button>

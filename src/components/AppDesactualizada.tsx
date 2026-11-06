@@ -79,7 +79,7 @@ export const AppDesactualizada: React.FC<Props> = ({ version }) => {
       <button
         type="button"
         onClick={() => void recargarSaltandoCaches()}
-        className="w-full max-w-xs bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-95 transition-all"
+        className="w-full max-w-xs bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-95 transition-all"
       >
         {t('update_required_now')}
       </button>

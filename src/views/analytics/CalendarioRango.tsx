@@ -97,7 +97,7 @@ export const CalendarioRango: React.FC<{ rango: Rango; hoy: FechaCivil; idioma: 
         type="button"
         onClick={() => onElegir(elegido)}
         disabled={seleccion.hasta === null}
-        className="mt-3 w-full h-12 rounded-xl bg-[var(--color-primary)] text-white font-bold hover:bg-[var(--color-primary-hover)] active:scale-[0.99] transition uv-focus-ring disabled:opacity-40 disabled:pointer-events-none"
+        className="mt-3 w-full h-12 rounded-xl bg-[var(--color-primary-fill)] text-white font-bold hover:bg-[var(--color-primary-hover)] active:scale-[0.99] transition uv-focus-ring disabled:opacity-40 disabled:pointer-events-none"
       >
         {t('analytics_range_apply')}
       </button>

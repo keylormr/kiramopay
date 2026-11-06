@@ -3,6 +3,21 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Letra: Geist, alojada en el repo (OFL 1.1, ver assets/fonts/geist/OFL.txt).
+   Un solo archivo variable cubre todos los pesos (100-900). Geist no trae el
+   glifo del colon (U+20A1): ese caracter lo dibuja la siguiente fuente de la
+   pila (Roboto en Android, SF en iOS, Segoe UI en Windows).
+   ═══════════════════════════════════════════════════════════════════════════ */
+@font-face {
+  font-family: "Geist";
+  src: url("./assets/fonts/geist/Geist-Variable.woff2") format("woff2-variations"),
+       url("./assets/fonts/geist/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    KiramoPay Unified Vision — design tokens
    ───────────────────────────────────────────────────────────────────────────
    Color philosophy:
@@ -13,7 +28,17 @@
 @theme {
   /* ── Brand: electric blue (primary action color) ─────────────────────── */
   --color-primary: #2D7BFF;
-  --color-primary-hover: #1F6BEF;
+  /* Relleno de los botones con letra blanca. El blanco sobre #2D7BFF da 3,90:1
+     y no llega a AA (4,5:1) en letra de boton; #1F6BEF da 4,76:1 y su hover
+     #1858CC, 6,35:1. #2D7BFF sigue siendo el azul de marca para iconos,
+     seleccion, anillos de foco y bordes. */
+  --color-primary-fill: #1F6BEF;
+  --color-primary-hover: #1858CC;
+  /* Azul claro: el color de accion como TEXTO en el tema oscuro. #2D7BFF como
+     letra sobre #111D38 da 4,29:1; #7DAAFF da 7,21:1. */
+  --color-primary-light: #7DAAFF;
+  /* Azul suave: iconos y etiquetas sobre fondos de accion. */
+  --color-primary-tint: #C9DAFF;
   --color-primary-soft: rgba(45, 123, 255, 0.12);
   --color-primary-50: #EEF4FF;
   --color-primary-100: #DBE8FF;
@@ -39,7 +64,8 @@
   --color-navy-900: #0A152B;
   --color-navy-950: #060E1F;
 
-  /* ── Accent: warm orange for highlights (cashback, rewards) ─────────── */
+  /* ── Accent: el naranja de la K. Solo en el filo de la tarjeta de saldo, las
+     recompensas y los avisos sin leer; nunca como color de accion. ────────── */
   --color-accent: #FF8A2B;
   --color-accent-hover: #F07A1B;
   --color-accent-soft: rgba(255, 138, 43, 0.12);
@@ -50,6 +76,9 @@
   --color-warning: #F5A524;
   --color-warning-soft: rgba(245, 165, 36, 0.12);
   --color-danger: #EF4444;
+  /* Relleno de botones de peligro con letra blanca: #EF4444 da 3,76:1,
+     #D92D20 da 4,83:1. */
+  --color-danger-fill: #D92D20;
   --color-danger-soft: rgba(239, 68, 68, 0.12);
   --color-info: #2D7BFF;
 
@@ -61,10 +90,12 @@
   --color-warning-strong: #9A5B00;
   --color-danger-strong:  #B42318;
   --color-info-strong:    #1858CC;
-  --color-success-strong-dark: #4ADE80;
+  /* Estados en el tema oscuro (rediseno 2026-11): sobre su tinte al 14 % encima
+     de #121E38 dan exito 7,11:1, aviso 7,39:1, peligro 5,77:1, info 5,50:1. */
+  --color-success-strong-dark: #4ADE9B;
   --color-warning-strong-dark: #FBBF24;
-  --color-danger-strong-dark:  #F87171;
-  --color-info-strong-dark:    #82B0FF;
+  --color-danger-strong-dark:  #FF8A80;
+  --color-info-strong-dark:    #7DAAFF;
 
   /* ── Surface elevation (the heart of Unified Vision) ─────────────────
      Light mode: white → subtle off-white → cool gray
@@ -75,15 +106,18 @@
   --color-surface-3: #EEF2F8;        /* top elevation (modals) */
   --color-surface-muted: #E4EAF3;    /* dividers, chip bg */
 
-  --color-surface-dark: #121E3A;
-  --color-surface-1-dark: #121E3A;
-  --color-surface-2-dark: #1B294A;
-  --color-surface-3-dark: #283A60;
-  --color-surface-muted-dark: #1F2F52;
+  /* Tema oscuro premium (concepto aprobado el 2026-11-06): el fondo lleva tinte
+     azul, nunca gris ni negro puro. Cada escalon sube poco: la profundidad la
+     dan los bordes de 1 px, no el brillo de la superficie. */
+  --color-surface-dark: #0A1428;
+  --color-surface-1-dark: #0A1428;   /* tarjetas y secciones */
+  --color-surface-2-dark: #111D38;   /* campos, hojas, avatar */
+  --color-surface-3-dark: #121E38;   /* mosaicos de icono, lo mas alto */
+  --color-surface-muted-dark: #16223D;
 
   /* ── Page background ─────────────────────────────────────────────────── */
   --color-background: #F2F5FA;       /* light: subtle blue-tinted gray */
-  --color-background-dark: #060E1F;  /* dark: deepest navy */
+  --color-background-dark: #050B18;  /* dark: medianoche con tinte azul */
 
   /* ── Text ─────────────────────────────────────────────────────────────── */
   --color-text-primary: #0A152B;
@@ -91,15 +125,20 @@
   --color-text-muted: #5E73A0;
   --color-text-on-primary: #FFFFFF;
 
-  --color-text-primary-dark: #F2F5FA;
-  --color-text-secondary-dark: #B8C5DB;
-  --color-text-muted-dark: #8FA3C2;
+  /* Oscuro, contraste AA medido contra los cuatro fondos (el peor es #121E38):
+     primario 14,73:1, secundario 7,91:1, tenue 4,95:1. */
+  --color-text-primary-dark: #EEF2F8;
+  --color-text-secondary-dark: #A7B4CB;
+  --color-text-muted-dark: #7F8DA8;
 
   /* ── Border ──────────────────────────────────────────────────────────── */
   --color-border: #E4EAF3;
   --color-border-strong: #C7D2E2;
-  --color-border-dark: #283A60;
-  --color-border-strong-dark: #3A4E78;
+  --color-border-dark: #16223D;
+  --color-border-strong-dark: #1E2B48;
+  /* El borde de un campo de texto si identifica al control (WCAG 1.4.11):
+     necesita 3:1. #5B6D90 da 3,18:1 sobre #121E38 y 3,78:1 sobre #050B18. */
+  --color-border-control-dark: #5B6D90;
 
   /* ── Radii: deliberately generous; modern mobile aesthetic ──────────── */
   --radius-sm: 0.5rem;       /* 8px  — chips, badges */
@@ -117,8 +156,45 @@
   --shadow-primary:  0 8px 20px rgba(45, 123, 255, 0.32);
 
   /* ── Font stack ──────────────────────────────────────────────────────── */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+
+  /* ── Movimiento: una sola curva para todo lo que responde a un gesto ──── */
+  --ease-kp: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-kp-hoja: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── Clases de tamano de ventana de Material 3 ─────────────────────────
+     compacta < 600 px: barra inferior; mediana 600-839 px: riel lateral;
+     expandida >= 840 px: menu lateral fijo. Uso: `medio:` y `expandido:`. */
+  --breakpoint-medio: 37.5rem;
+  --breakpoint-expandido: 52.5rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tokens de movimiento
+   ───────────────────────────────────────────────────────────────────────────
+   toque 120 ms (escala a 0,97 y vuelve), estado 200 ms (reemplazo en su
+   lugar), hoja 320 ms (entra una hoja o una capa), cifra 450 ms (un saldo
+   que cambia). Con movimiento reducido valen 0 y lo que queda son fundidos.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --kp-curva: cubic-bezier(0.16, 1, 0.3, 1);
+  --kp-curva-hoja: cubic-bezier(0.32, 0.72, 0, 1);
+  --kp-mov-toque: 120ms;
+  --kp-mov-estado: 200ms;
+  --kp-mov-hoja: 320ms;
+  --kp-mov-cifra: 450ms;
+  /* Ancho del riel o del menu lateral; las capas a pantalla completa empiezan
+     despues de el. Lo fija `.kp-marco` (App.tsx) segun el tamano de ventana. */
+  --kp-nav-ancho: 0px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --kp-mov-toque: 0ms;
+    --kp-mov-estado: 0ms;
+    --kp-mov-hoja: 0ms;
+    --kp-mov-cifra: 0ms;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -137,6 +213,85 @@ body {
 .dark body {
   background-color: var(--color-background-dark);
   color: var(--color-text-primary-dark);
+}
+.dark {
+  color-scheme: dark;
+}
+
+/* Montos: cifras de ancho fijo para que una columna de dinero no baile. Geist
+   trae cifras proporcionales por defecto; `tnum` las iguala. */
+.kp-num,
+input[inputmode='decimal'],
+input[inputmode='numeric'] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Respuesta al toque: escala a 0,97 en 120 ms y vuelve con la misma curva. */
+.kp-toque {
+  transition:
+    transform var(--kp-mov-toque) var(--kp-curva),
+    background-color var(--kp-mov-estado) var(--kp-curva),
+    color var(--kp-mov-estado) var(--kp-curva);
+}
+.kp-toque:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kp-toque:active {
+    transform: none;
+  }
+}
+
+/* Foco visible con el azul claro, igual en los dos temas. */
+.kp-foco:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+/* Capas a pantalla completa (vistas que se abren sobre una pestana): en riel o
+   menu lateral empiezan despues de la navegacion, que sigue visible. Va fuera
+   de las capas de Tailwind a proposito: tiene que ganarle a `inset-0`. */
+.kp-capa {
+  left: var(--kp-nav-ancho);
+}
+
+/* Entrada de una pantalla completa desde la derecha. Las vistas ya pedian
+   `animate-in slide-in-from-right` (clases de un plugin que este proyecto no
+   instala), asi que entraban de golpe. Con movimiento reducido no corre. */
+@keyframes kp-capa-entra {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+.slide-in-from-right {
+  animation: kp-capa-entra var(--kp-mov-hoja) var(--kp-curva) both;
+}
+
+/* Marco de la app autenticada: fija el ancho de la navegacion lateral. */
+.kp-marco {
+  --kp-nav-ancho: 0px;
+}
+@media (min-width: 37.5rem) {
+  .kp-marco {
+    --kp-nav-ancho: calc(88px + env(safe-area-inset-left, 0px));
+  }
+}
+@media (min-width: 52.5rem) {
+  .kp-marco {
+    --kp-nav-ancho: calc(256px + env(safe-area-inset-left, 0px));
+  }
+}
+
+/* Plegables: mejora progresiva con la API de segmentos del viewport (Chrome,
+   Edge y Samsung Internet). Si la pantalla llega partida en dos segmentos uno
+   al lado del otro (plegable a medio abrir, en postura de libro), el contenido
+   se queda en el segmento derecho para que el pliegue no corte un monto. Donde
+   la API no existe, la regla no aplica y no cambia nada. */
+@media (horizontal-viewport-segments: 2) {
+  .kp-contenido-segmentado {
+    margin-left: max(0px, calc(env(viewport-segment-left 1 0, 0px) - var(--kp-nav-ancho)));
+    max-width: env(viewport-segment-width 1 0, 100%);
+  }
 }
 
 /* Hide scrollbar (preserved from previous design) */
@@ -235,6 +390,15 @@ input[type='number']::-webkit-inner-spin-button {
 .uv-gradient-brand {
   background-image: linear-gradient(135deg, #1B294A 0%, #2D7BFF 100%);
 }
+/* En oscuro, el degradado de marca es "metal": medianoche con un brillo de
+   accion en la esquina. La letra blanca queda sobre azul profundo (mas de
+   12:1), no sobre el #2D7BFF del degradado claro (3,90:1 en su extremo). */
+.dark .uv-gradient-brand {
+  background-image:
+    radial-gradient(120% 90% at 100% 0%, rgba(45, 123, 255, 0.34) 0%, rgba(45, 123, 255, 0) 58%),
+    linear-gradient(155deg, #18294F 0%, #0D1833 45%, #070F22 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(125, 170, 255, 0.10);
+}
 .uv-gradient-brand-soft {
   background-image: linear-gradient(135deg, rgba(27, 41, 74, 0.95) 0%, rgba(45, 123, 255, 0.85) 100%);
 }
@@ -243,6 +407,9 @@ input[type='number']::-webkit-inner-spin-button {
 .uv-focus-ring:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--color-primary-soft), 0 0 0 1px var(--color-primary);
+}
+.dark .uv-focus-ring:focus-visible {
+  box-shadow: 0 0 0 3px rgba(125, 170, 255, 0.28), 0 0 0 1px var(--color-primary-light);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -260,25 +427,33 @@ input[type='number']::-webkit-inner-spin-button {
 }
 .animate-stagger {
   opacity: 0;
-  animation: stagger-in 0.4s ease-out forwards;
+  animation: stagger-in var(--kp-mov-hoja) var(--kp-curva) forwards;
 }
 
 @keyframes bar-grow {
   from { width: 0%; }
 }
-.animate-bar-grow { animation: bar-grow 0.7s ease-out forwards; }
+.animate-bar-grow { animation: bar-grow var(--kp-mov-cifra) var(--kp-curva) forwards; }
 
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-slide-up { animation: slide-up 0.5s ease-out forwards; }
+.animate-slide-up { animation: slide-up var(--kp-mov-hoja) var(--kp-curva) forwards; }
 
 @keyframes fade-in-scale {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
 }
-.animate-fade-in-scale { animation: fade-in-scale 0.3s ease-out forwards; }
+.animate-fade-in-scale { animation: fade-in-scale var(--kp-mov-estado) var(--kp-curva) forwards; }
+
+/* Fundido simple (lo usan OverlayShell y otras capas; antes no estaba definido
+   y la capa aparecia de golpe). */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in { animation: fade-in var(--kp-mov-estado) var(--kp-curva) both; }
 
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(45, 123, 255, 0.22); }
@@ -299,17 +474,17 @@ input[type='number']::-webkit-inner-spin-button {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-count-up { animation: count-up 0.6s ease-out forwards; }
+.animate-count-up { animation: count-up var(--kp-mov-cifra) var(--kp-curva) forwards; }
 
 @keyframes onboard-slide-in {
   from { opacity: 0; transform: translateX(40px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-.animate-onboard-slide { animation: onboard-slide-in 0.5s ease-out forwards; }
+.animate-onboard-slide { animation: onboard-slide-in var(--kp-mov-hoja) var(--kp-curva) forwards; }
 
 /* Interactive card press feedback */
 .card-interactive {
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: transform var(--kp-mov-toque) var(--kp-curva), box-shadow var(--kp-mov-estado) var(--kp-curva);
 }
 .card-interactive:active {
   transform: scale(0.97);
@@ -335,7 +510,9 @@ input[type='number']::-webkit-inner-spin-button {
 /* ═══════════════════════════════════════════════════════════════════════════
    Reduced motion — honor the OS/user preference. Neutralize every keyframe
    (the token system ships 12+), and fully stop the infinite ambient loops
-   (scan, pulse-glow) that are hardest on vestibular-sensitive users.
+   (scan, pulse-glow) that are hardest on vestibular-sensitive users. Los
+   tokens --kp-mov-* valen 0 en este modo (ver arriba), asi que lo que use la
+   curva de la app tampoco se mueve.
    ═══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -222,7 +222,7 @@ export const BusinessMovementsView: React.FC<Props> = ({ merchant, conTitulo = t
             aria-pressed={periodo === p.id}
             className={`h-10 rounded-xl px-1 text-[13px] font-bold leading-tight transition-colors ${
               periodo === p.id
-                ? 'bg-[var(--color-primary)] text-white'
+                ? 'bg-[var(--color-primary-fill)] text-white'
                 : 'uv-surface-1 uv-text-muted border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
             }`}
           >
@@ -249,7 +249,7 @@ export const BusinessMovementsView: React.FC<Props> = ({ merchant, conTitulo = t
         </div>
       ) : falloCobros ? (
         <div className="uv-surface-1 rounded-2xl p-8 text-center uv-shadow-soft">
-          <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] opacity-70 mb-3" aria-hidden="true" />
+          <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] opacity-70 mb-3" aria-hidden="true" />
           <p className="uv-text-muted text-sm">{t('business_sales_load_failed')}</p>
           <div className="mt-4">
             <Button variant="secondary" size="md" onClick={() => setIntento((n) => n + 1)}>
@@ -275,7 +275,7 @@ export const BusinessMovementsView: React.FC<Props> = ({ merchant, conTitulo = t
           {hayMas && (
             <div className="space-y-2">
               {falloMas && (
-                <p role="alert" className="text-sm text-center text-[var(--color-danger)]">{t('business_move_more_failed')}</p>
+                <p role="alert" className="text-sm text-center text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('business_move_more_failed')}</p>
               )}
               <Button variant="secondary" size="md" fullWidth loading={cargandoMas} onClick={pedirMas}>
                 {t('business_move_more')}

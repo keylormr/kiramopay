@@ -8,13 +8,15 @@ import { join } from 'node:path';
 // 0,9 de opacidad en el navegador; esta prueba corre antes, sin navegador.)
 //
 // jsdom no resuelve las clases de Tailwind, asi que se lee la declaracion de la
-// barra en App.tsx.
+// barra en su componente. Desde el rediseno de 2026-11 la barra vive en
+// navegacion/NavegacionAdaptable.tsx (solo en telefono; en pantallas anchas va
+// el riel o el menu lateral) y App.tsx solo la monta.
 
-const fuente = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8');
-const clasesDeLaBarra = (/<nav\b[^>]*\bclassName="([^"]+)"/.exec(fuente)?.[1] ?? '').split(/\s+/).filter(Boolean);
+const fuente = readFileSync(join(process.cwd(), 'src/navegacion/NavegacionAdaptable.tsx'), 'utf8');
+const clasesDeLaBarra = (/<nav\b[^>]*data-navegacion="barra"[^>]*\bclassName="([^"]+)"/.exec(fuente)?.[1] ?? '').split(/\s+/).filter(Boolean);
 
 describe('la barra inferior de navegacion', () => {
-  it('se encontro la barra en App.tsx (si no, esta prueba ya no vigila nada)', () => {
+  it('se encontro la barra (si no, esta prueba ya no vigila nada)', () => {
     expect(clasesDeLaBarra).toContain('fixed');
     expect(clasesDeLaBarra).toContain('bottom-0');
   });

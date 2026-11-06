@@ -112,7 +112,7 @@ export const MfaChallengeSheet: React.FC<MfaChallengeSheetProps> = ({
         <button
           onClick={verify}
           disabled={loading || code.length < 6}
-          className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
+          className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
         >
           {loading ? t('loading') : confirmLabel || t('mfa_verify_and_continue')}
         </button>

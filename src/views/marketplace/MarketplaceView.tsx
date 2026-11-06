@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { Icons } from '../../components/Icons';
+import { Icons, IconosLinea } from '../../components/Icons';
+import type { LucideIcon } from 'lucide-react';
 import { BottomSheet } from '../../components/BottomSheet';
 import { getApiLayer } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
@@ -10,11 +11,13 @@ import type { RideRequest, FoodOrder, Transaction } from '@/types';
 const hasBackend = !!import.meta.env.VITE_API_URL;
 
 // Live food-order tracker steps (status -> step index).
+// Cada paso lleva un icono de linea (no un emoji: cambian de dibujo en cada
+// sistema y no siguen el color del tema).
 const FOOD_STEPS = [
-  { key: 'preparing', labelKey: 'market_food_step_preparing', icon: '👨‍🍳' },
-  { key: 'ready', labelKey: 'market_food_step_ready', icon: '🍽️' },
-  { key: 'on_the_way', labelKey: 'market_food_step_on_the_way', icon: '🛵' },
-  { key: 'delivered', labelKey: 'market_food_step_delivered', icon: '🎉' },
+  { key: 'preparing', labelKey: 'market_food_step_preparing', Icono: IconosLinea.Cocinando },
+  { key: 'ready', labelKey: 'market_food_step_ready', Icono: IconosLinea.PedidoListo },
+  { key: 'on_the_way', labelKey: 'market_food_step_on_the_way', Icono: IconosLinea.Moto },
+  { key: 'delivered', labelKey: 'market_food_step_delivered', Icono: IconosLinea.Entregado },
 ] as const;
 const FOOD_STATUS_INDEX: Record<string, number> = {
   preparing: 0,
@@ -26,11 +29,32 @@ const FOOD_STATUS_INDEX: Record<string, number> = {
 
 // Live ride tracker steps (status -> step index).
 const RIDE_STEPS = [
-  { key: 'confirmed', labelKey: 'market_ride_step_confirmed', icon: '✅' },
-  { key: 'arriving', labelKey: 'market_ride_step_arriving', icon: '🚗' },
-  { key: 'in_progress', labelKey: 'market_ride_step_in_progress', icon: '🛣️' },
-  { key: 'completed', labelKey: 'market_ride_step_completed', icon: '🎉' },
+  { key: 'confirmed', labelKey: 'market_ride_step_confirmed', Icono: IconosLinea.Confirmado },
+  { key: 'arriving', labelKey: 'market_ride_step_arriving', Icono: IconosLinea.Transporte },
+  { key: 'in_progress', labelKey: 'market_ride_step_in_progress', Icono: IconosLinea.Ruta },
+  { key: 'completed', labelKey: 'market_ride_step_completed', Icono: IconosLinea.Llegada },
 ] as const;
+
+// Los socios y restaurantes no llevan logo propio (las marcas de terceros no
+// se dibujan sin licencia): su mosaico muestra el icono de linea de su
+// categoria y el nombre va al lado.
+type CategoriaDelMercado = 'transport' | 'food' | 'supermarket' | 'entertainment';
+const ICONO_DE_CATEGORIA: Record<CategoriaDelMercado | 'all', LucideIcon> = {
+  all: IconosLinea.Todo,
+  transport: IconosLinea.Transporte,
+  food: IconosLinea.Comida,
+  supermarket: IconosLinea.Super,
+  entertainment: IconosLinea.Ocio,
+};
+
+const MosaicoDeCategoria: React.FC<{ categoria: CategoriaDelMercado; className: string; tamano: number }> = ({ categoria, className, tamano }) => {
+  const Icono = ICONO_DE_CATEGORIA[categoria];
+  return (
+    <div className={`flex items-center justify-center bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:bg-[var(--color-surface-3-dark)] dark:text-[var(--color-primary-tint)] ${className}`}>
+      <Icono size={tamano} aria-hidden="true" />
+    </div>
+  );
+};
 const RIDE_STATUS_INDEX: Record<string, number> = {
   confirmed: 0,
   arriving: 1,
@@ -47,7 +71,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'uber',
       name: 'Uber',
-      logo: '🚗',
       color: 'from-black to-gray-800',
       descriptionKey: 'market_desc_uber',
       category: 'transport' as const,
@@ -55,7 +78,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'didi',
       name: 'DiDi',
-      logo: '🟠',
       color: 'from-orange-500 to-orange-600',
       descriptionKey: 'market_desc_didi',
       category: 'transport' as const,
@@ -63,7 +85,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'indriver',
       name: 'InDriver',
-      logo: '🟢',
       color: 'from-green-500 to-green-600',
       descriptionKey: 'market_desc_indriver',
       category: 'transport' as const,
@@ -73,7 +94,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'ubereats',
       name: 'Uber Eats',
-      logo: '🍔',
       color: 'from-green-600 to-green-700',
       descriptionKey: 'market_desc_ubereats',
       category: 'food' as const,
@@ -81,7 +101,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'pedidosya',
       name: 'PedidosYa',
-      logo: '🛵',
       color: 'from-red-500 to-red-600',
       descriptionKey: 'market_desc_pedidosya',
       category: 'food' as const,
@@ -89,7 +108,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'rappi',
       name: 'Rappi',
-      logo: '📦',
       color: 'from-orange-500 to-red-500',
       descriptionKey: 'market_desc_rappi',
       category: 'food' as const,
@@ -99,7 +117,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'automercado',
       name: 'Auto Mercado',
-      logo: '🛒',
       color: 'from-red-600 to-red-700',
       descriptionKey: 'market_desc_automercado',
       category: 'supermarket' as const,
@@ -107,7 +124,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'walmart',
       name: 'Walmart',
-      logo: '🏪',
       color: 'from-blue-600 to-blue-700',
       descriptionKey: 'market_desc_walmart',
       category: 'supermarket' as const,
@@ -115,7 +131,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'masxmenos',
       name: 'Mas x Menos',
-      logo: '🛍️',
       color: 'from-yellow-500 to-yellow-600',
       descriptionKey: 'market_desc_masxmenos',
       category: 'supermarket' as const,
@@ -123,7 +138,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'pricesmart',
       name: 'PriceSmart',
-      logo: '📦',
       color: 'from-blue-700 to-blue-800',
       descriptionKey: 'market_desc_pricesmart',
       category: 'supermarket' as const,
@@ -133,7 +147,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'cinemark',
       name: 'Cinemark',
-      logo: '🎬',
       color: 'from-purple-600 to-purple-700',
       descriptionKey: 'market_desc_cinemark',
       category: 'entertainment' as const,
@@ -141,7 +154,6 @@ const MARKETPLACE_PARTNERS = {
     {
       id: 'novacinemas',
       name: 'Nova Cinemas',
-      logo: '🍿',
       color: 'from-red-600 to-pink-600',
       descriptionKey: 'market_desc_novacinemas',
       category: 'entertainment' as const,
@@ -154,12 +166,12 @@ const MARKETPLACE_PARTNERS = {
 // El rango de minutos va sin unidad: la pantalla le pone "min" en el idioma de
 // la app (market_minutes).
 const DEMO_RESTAURANTS = [
-  { id: '1', name: 'McDonalds', logo: '🍟', rating: 4.5, minutes: '15-25' },
-  { id: '2', name: 'Taco Bell', logo: '🌮', rating: 4.3, minutes: '20-30' },
-  { id: '3', name: 'Pizza Hut', logo: '🍕', rating: 4.4, minutes: '25-35' },
-  { id: '4', name: 'KFC', logo: '🍗', rating: 4.2, minutes: '20-30' },
-  { id: '5', name: 'Subway', logo: '🥪', rating: 4.6, minutes: '15-20' },
-  { id: '6', name: 'Sushi Express', logo: '🍱', rating: 4.7, minutes: '30-40' },
+  { id: '1', name: 'McDonalds', rating: 4.5, minutes: '15-25' },
+  { id: '2', name: 'Taco Bell', rating: 4.3, minutes: '20-30' },
+  { id: '3', name: 'Pizza Hut', rating: 4.4, minutes: '25-35' },
+  { id: '4', name: 'KFC', rating: 4.2, minutes: '20-30' },
+  { id: '5', name: 'Subway', rating: 4.6, minutes: '15-20' },
+  { id: '6', name: 'Sushi Express', rating: 4.7, minutes: '30-40' },
 ];
 
 // Menu de demostracion. Los combos son nombres propios del restaurante y se
@@ -187,7 +199,7 @@ const AvisoHoja: React.FC<{ aviso: Aviso | null }> = ({ aviso }) => {
       {aviso.texto}
     </div>
   ) : (
-    <p role="alert" className="text-[var(--color-danger)] text-sm text-center">
+    <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center">
       {aviso.texto}
     </p>
   );
@@ -203,7 +215,6 @@ export const MarketplaceView: React.FC = () => {
   const [selectedPartner, setSelectedPartner] = useState<{
     id: string;
     name: string;
-    logo: string;
     color: string;
     descriptionKey: string;
     category: 'transport' | 'food' | 'supermarket' | 'entertainment';
@@ -452,7 +463,6 @@ export const MarketplaceView: React.FC = () => {
   const allPartners: Array<{
     id: string;
     name: string;
-    logo: string;
     color: string;
     descriptionKey: string;
     category: 'transport' | 'food' | 'supermarket' | 'entertainment';
@@ -468,11 +478,11 @@ export const MarketplaceView: React.FC = () => {
     : allPartners.filter(p => p.category === activeCategory);
 
   const categories = [
-    { id: 'all', label: t('market_cat_all'), icon: '🏠' },
-    { id: 'transport', label: t('market_cat_transport'), icon: '🚗' },
-    { id: 'food', label: t('market_cat_food'), icon: '🍔' },
-    { id: 'supermarket', label: t('market_cat_supermarket'), icon: '🛒' },
-    { id: 'entertainment', label: t('market_cat_entertainment'), icon: '🎬' },
+    { id: 'all', label: t('market_cat_all'), Icono: ICONO_DE_CATEGORIA.all },
+    { id: 'transport', label: t('market_cat_transport'), Icono: ICONO_DE_CATEGORIA.transport },
+    { id: 'food', label: t('market_cat_food'), Icono: ICONO_DE_CATEGORIA.food },
+    { id: 'supermarket', label: t('market_cat_supermarket'), Icono: ICONO_DE_CATEGORIA.supermarket },
+    { id: 'entertainment', label: t('market_cat_entertainment'), Icono: ICONO_DE_CATEGORIA.entertainment },
   ];
 
   // El nombre que se muestra es el mismo que va al carrito y al pedido, ya en
@@ -504,11 +514,11 @@ export const MarketplaceView: React.FC = () => {
             onClick={() => setActiveCategory(cat.id as typeof activeCategory)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
               activeCategory === cat.id
-                ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
                 : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
             }`}
           >
-            <span>{cat.icon}</span>
+            <cat.Icono size={18} aria-hidden="true" />
             {cat.label}
           </button>
         ))}
@@ -530,9 +540,7 @@ export const MarketplaceView: React.FC = () => {
                   onClick={() => handleSelectPartner(partner)}
                   className="flex flex-col items-center gap-2"
                 >
-                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${partner.color} flex items-center justify-center text-3xl shadow-lg`}>
-                    {partner.logo}
-                  </div>
+                  <MosaicoDeCategoria categoria={partner.category} className="w-16 h-16 rounded-2xl" tamano={30} />
                   <span className="text-xs font-medium uv-text-secondary">
                     {partner.name}
                   </span>
@@ -558,9 +566,7 @@ export const MarketplaceView: React.FC = () => {
               {isConnected(partner.id) && (
                 <span className="absolute top-2 right-2 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-surface-dark" />
               )}
-              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${partner.color} flex items-center justify-center text-3xl mb-3 shadow-md`}>
-                {partner.logo}
-              </div>
+              <MosaicoDeCategoria categoria={partner.category} className="w-14 h-14 rounded-xl mb-3" tamano={28} />
               <p className="font-bold uv-text-primary">{partner.name}</p>
               <p className="text-xs text-gray-500 mt-1">{t(partner.descriptionKey)}</p>
             </button>
@@ -576,9 +582,7 @@ export const MarketplaceView: React.FC = () => {
       >
         {selectedPartner && (
           <div className="text-center py-4">
-            <div className={`w-24 h-24 rounded-3xl bg-gradient-to-br ${selectedPartner.color} flex items-center justify-center text-5xl mx-auto mb-4 shadow-xl`}>
-              {selectedPartner.logo}
-            </div>
+            <MosaicoDeCategoria categoria={selectedPartner.category} className="w-24 h-24 rounded-3xl mx-auto mb-4" tamano={44} />
             <h2 className="text-2xl font-black uv-text-primary mb-2">
               {selectedPartner.name}
             </h2>
@@ -600,7 +604,7 @@ export const MarketplaceView: React.FC = () => {
                       setOrderStep('menu');
                     }
                   }}
-                  className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg"
+                  className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg"
                 >
                   {t('market_use_partner').replace('{name}', selectedPartner.name)}
                 </button>
@@ -694,7 +698,7 @@ export const MarketplaceView: React.FC = () => {
                   onClick={() => setPickup(t('market_my_location'))}
                   className="w-full flex items-center gap-3 p-3 uv-surface-2 rounded-xl"
                 >
-                  <Icons.MapPin size={18} className="text-[var(--color-primary)]" />
+                  <Icons.MapPin size={18} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
                   <span className="uv-text-primary">{t('market_my_location')}</span>
                 </button>
                 <button
@@ -750,8 +754,8 @@ export const MarketplaceView: React.FC = () => {
 
               {activeRide.driver && (
                 <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-                  <div className="w-16 h-16 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center text-2xl">
-                    👨
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-3-dark)] uv-text-secondary">
+                    <IconosLinea.Perfil size={30} aria-hidden="true" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold uv-text-primary">{activeRide.driver.name}</p>
@@ -840,7 +844,7 @@ export const MarketplaceView: React.FC = () => {
                             : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-400'
                         } ${active ? 'ring-2 ring-green-400' : ''}`}
                       >
-                        {done ? <Icons.Check size={18} /> : step.icon}
+                        {done ? <Icons.Check size={18} /> : <step.Icono size={18} aria-hidden="true" />}
                       </div>
                       <span className={`font-medium ${done ? 'uv-text-primary' : 'uv-text-muted'}`}>
                         {t(step.labelKey)}
@@ -853,8 +857,8 @@ export const MarketplaceView: React.FC = () => {
               {/* Driver card */}
               {activeRide?.driver && (
                 <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-                  <div className="w-14 h-14 bg-gradient-to-br from-gray-300 to-gray-400 rounded-full flex items-center justify-center text-2xl">
-                    👨
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-3-dark)] uv-text-secondary">
+                    <IconosLinea.Perfil size={26} aria-hidden="true" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold uv-text-primary">{activeRide.driver.name}</p>
@@ -872,7 +876,7 @@ export const MarketplaceView: React.FC = () => {
 
               <button
                 onClick={closeRideSheet}
-                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
+                className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
               >
                 {activeRide?.status === 'completed' ? t('done') : t('market_keep_in_background')}
               </button>
@@ -905,9 +909,7 @@ export const MarketplaceView: React.FC = () => {
                     onClick={() => setSelectedRestaurant(rest)}
                     className="w-full flex items-center gap-4 uv-surface-2 p-4 rounded-xl"
                   >
-                    <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-red-500 rounded-xl flex items-center justify-center text-2xl">
-                      {rest.logo}
-                    </div>
+                    <MosaicoDeCategoria categoria="food" className="w-14 h-14 rounded-xl shrink-0" tamano={26} />
                     <div className="flex-1 text-left">
                       <p className="font-bold uv-text-primary">{rest.name}</p>
                       <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -938,9 +940,7 @@ export const MarketplaceView: React.FC = () => {
                 </button>
 
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-orange-400 to-red-500 rounded-xl flex items-center justify-center text-3xl">
-                    {selectedRestaurant.logo}
-                  </div>
+                  <MosaicoDeCategoria categoria="food" className="w-16 h-16 rounded-xl shrink-0" tamano={30} />
                   <div>
                     <h3 className="text-xl font-bold uv-text-primary">
                       {selectedRestaurant.name}
@@ -962,7 +962,7 @@ export const MarketplaceView: React.FC = () => {
                       </div>
                       <button
                         onClick={() => addToCart({ name: item.name, price: item.price })}
-                        className="w-8 h-8 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-full flex items-center justify-center"
+                        className="w-8 h-8 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white rounded-full flex items-center justify-center"
                       >
                         <Icons.Plus size={16} />
                       </button>
@@ -975,7 +975,7 @@ export const MarketplaceView: React.FC = () => {
                 <div className="sticky bottom-0 uv-surface-1 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
                   <button
                     onClick={() => setOrderStep('cart')}
-                    className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-between px-4"
+                    className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-between px-4"
                   >
                     <span>{t('market_view_cart').replace('{n}', String(cartItems.reduce((a, i) => a + i.qty, 0)))}</span>
                     <span>{formatCurrency(cartTotal)}</span>
@@ -1066,7 +1066,7 @@ export const MarketplaceView: React.FC = () => {
                             : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-400'
                         } ${active ? 'ring-2 ring-green-400' : ''}`}
                       >
-                        {done ? <Icons.Check size={18} /> : step.icon}
+                        {done ? <Icons.Check size={18} /> : <step.Icono size={18} aria-hidden="true" />}
                       </div>
                       <span className={`font-medium ${done ? 'uv-text-primary' : 'uv-text-muted'}`}>
                         {t(step.labelKey)}
@@ -1098,8 +1098,8 @@ export const MarketplaceView: React.FC = () => {
               {/* Courier card appears once the order is on the way */}
               {activeOrder?.courier && (
                 <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-                  <div className="w-14 h-14 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-2xl">
-                    🛵
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-3-dark)] uv-text-secondary">
+                    <IconosLinea.Moto size={26} aria-hidden="true" />
                   </div>
                   <div className="flex-1">
                     <p className="font-bold uv-text-primary">{activeOrder.courier.name}</p>
@@ -1114,7 +1114,7 @@ export const MarketplaceView: React.FC = () => {
 
               <button
                 onClick={() => { setShowFoodSheet(false); setOrderStep('menu'); setCartItems([]); setActiveOrder(null); setOrderAviso(null); }}
-                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
+                className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold"
               >
                 {activeOrder?.status === 'delivered' ? t('done') : t('market_keep_in_background')}
               </button>

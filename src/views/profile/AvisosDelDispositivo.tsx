@@ -56,7 +56,7 @@ export function FilaDeAvisos({ estado, ocupado, fallo, onAlternar }: FilaDeAviso
       <p
         id={idDetalle}
         aria-live="polite"
-        className={`text-xs mt-0.5 ${fallo ? 'text-[var(--color-danger)]' : 'uv-text-muted'}`}
+        className={`text-xs mt-0.5 ${fallo ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-muted'}`}
       >
         {detalle}
       </p>

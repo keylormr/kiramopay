@@ -42,10 +42,21 @@ describe('Bandera', () => {
     expect(a.container.innerHTML).toBe(b.container.innerHTML);
   });
 
-  it('lo que no es una bandera pasa tal cual (un edificio, una moneda cripto)', () => {
+  it('lo que no es una bandera (una cuenta sin pais) es el banco en linea, no el emoji', () => {
     const { container } = render(<Bandera pais={'\u{1F3E6}'} />);
-    expect(container.querySelector('svg')).toBeNull();
-    expect(container.textContent).toBe('\u{1F3E6}');
+    const svg = container.querySelector('svg');
+    expect(svg?.getAttribute('data-icono')).toBe('Banco');
+    expect(svg?.getAttribute('data-pais')).toBe('banco');
+    // Ningun emoji en pantalla: cambian de dibujo en cada sistema.
+    expect(container.textContent).toBe('');
+    expect(svg?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('el banco tambien se anuncia con titulo', () => {
+    const svg = render(<Bandera pais={'\u{1F3E6}'} titulo="Cuenta" />).container.querySelector('svg');
+    expect(svg?.getAttribute('role')).toBe('img');
+    expect(svg?.getAttribute('aria-label')).toBe('Cuenta');
+    expect(svg?.getAttribute('aria-hidden')).toBeNull();
   });
 
   it('un pais que no sabe dibujar no rompe la pantalla: un recuadro neutro', () => {

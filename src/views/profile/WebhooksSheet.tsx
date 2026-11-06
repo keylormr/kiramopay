@@ -180,7 +180,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
           <>
             <p className="uv-text-secondary text-sm">{t('webhooks_desc')}</p>
             {errorBorrar && (
-              <p role="alert" className="text-[var(--color-danger)] text-sm">
+              <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">
                 {errorBorrar}
               </p>
             )}
@@ -188,7 +188,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
 
             {!loading && errorLista && (
               <div className="flex flex-col items-center gap-3 py-4 text-center">
-                <p role="alert" className="text-[var(--color-danger)] text-sm">
+                <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">
                   {mensajeDeRechazo(errorLista, {}, 'webhooks_err_load', t)}
                 </p>
                 <button
@@ -224,7 +224,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
                   <div className="flex gap-3 mt-2">
                     <button
                       onClick={() => openDeliveries(e.id)}
-                      className="text-[var(--color-primary)] text-xs font-semibold"
+                      className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-xs font-semibold"
                     >
                       {t('webhooks_deliveries')}
                     </button>
@@ -259,7 +259,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
 
             <button
               onClick={() => { setError(''); setErrorBorrar(''); setStep('create'); }}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               <Icons.Plus size={18} />
               {t('webhooks_new')}
@@ -330,7 +330,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
               <button
                 onClick={create}
                 disabled={loading || !url.trim()}
-                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
               >
                 {loading ? t('loading') : t('webhooks_create_btn')}
               </button>
@@ -363,7 +363,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
                 setStep('list');
                 load();
               }}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all"
             >
               {t('apikeys_done')}
             </button>
@@ -374,7 +374,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
           <>
             <button
               onClick={() => setStep('list')}
-              className="text-[var(--color-primary)] text-sm font-semibold flex items-center gap-1"
+              className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-sm font-semibold flex items-center gap-1"
             >
               <Icons.ChevronLeft size={16} />
               {t('webhooks_title')}
@@ -382,7 +382,7 @@ export const WebhooksSheet: React.FC<WebhooksSheetProps> = ({ isOpen, onClose })
             <h3 className="font-bold uv-text-primary text-sm">{t('webhooks_deliveries')}</h3>
             {loading && <p className="uv-text-muted text-sm text-center">{t('loading')}</p>}
             {!loading && errorEntregas && (
-              <p role="alert" className="text-center py-6 text-[var(--color-danger)] text-sm">
+              <p role="alert" className="text-center py-6 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">
                 {t('webhooks_err_deliveries')}
               </p>
             )}

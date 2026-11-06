@@ -147,7 +147,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
           {user.expiresAt && (
             <>
               <dt className="uv-text-muted">{t('admin_users_expires_at')}</dt>
-              <dd className={`tabular-nums ${expired ? 'text-[var(--color-danger)]' : 'uv-text-primary'}`}>
+              <dd className={`tabular-nums ${expired ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-primary'}`}>
                 {formatWhen(user.expiresAt, locale, '—')}
                 {expired && <span className="ml-1 font-semibold">· {t('admin_users_expired')}</span>}
               </dd>
@@ -162,7 +162,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
             type="button"
             onClick={() => onUnblock(user)}
             disabled={busy}
-            className="w-full flex items-center justify-center gap-2 border border-[var(--color-primary)] text-[var(--color-primary)] py-2.5 rounded-xl font-bold disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 border border-[var(--color-primary)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] py-2.5 rounded-xl font-bold disabled:opacity-50"
           >
             <Icons.Unlock size={16} aria-hidden="true" />
             {t('admin_users_unblock')}
@@ -173,7 +173,7 @@ const UserCard: React.FC<UserCardProps> = ({ user, busy, now, locale, t, onBlock
               type="button"
               onClick={() => onBlock(user)}
               disabled={busy}
-              className="flex-1 min-w-0 flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold disabled:opacity-50"
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] py-2.5 rounded-xl font-bold disabled:opacity-50"
             >
               <Icons.Lock size={16} aria-hidden="true" />
               <span className="truncate">{t('admin_users_block')}</span>
@@ -460,7 +460,7 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]" aria-label={t('back')}>
           <Icons.ChevronLeft size={20} />
@@ -518,15 +518,15 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                     className="w-full pl-10 pr-3 py-3 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
                   />
                 </div>
-                <button type="submit" disabled={searching} className="shrink-0 basis-full min-[480px]:basis-auto px-4 py-3 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold disabled:opacity-50">
+                <button type="submit" disabled={searching} className="shrink-0 basis-full min-[480px]:basis-auto px-4 py-3 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold disabled:opacity-50">
                   {t('admin_users_search_action')}
                 </button>
               </div>
-              <p id="admin-users-search-hint" className={`mt-1.5 text-xs ${shortTerm ? 'text-[var(--color-danger)]' : 'uv-text-muted'}`} aria-live="polite">
+              <p id="admin-users-search-hint" className={`mt-1.5 text-xs ${shortTerm ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-muted'}`} aria-live="polite">
                 {t('admin_users_search_hint')}
               </p>
             </form>
-            {searchError && <p className="px-4 pt-3 text-[var(--color-danger)] text-sm" role="alert">{t(errorKey(searchError))}</p>}
+            {searchError && <p className="px-4 pt-3 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" role="alert">{t(errorKey(searchError))}</p>}
             {searching
               ? spinner
               : searched && results.length === 0
@@ -539,7 +539,7 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
 
         {tab === 'blocked' && (
           <>
-            {blockedError && <p className="px-4 pt-3 text-[var(--color-danger)] text-sm" role="alert">{t(errorKey(blockedError))}</p>}
+            {blockedError && <p className="px-4 pt-3 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" role="alert">{t(errorKey(blockedError))}</p>}
             {loadingBlocked
               ? spinner
               : blocked.length === 0
@@ -576,12 +576,12 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 <span className="tabular-nums shrink-0">{reason.length}/{REASON_MAX}</span>
               </div>
             </div>
-            {sheetError && <p className="text-sm text-[var(--color-danger)]" role="alert">{t(errorKey(sheetError))}</p>}
+            {sheetError && <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{t(errorKey(sheetError))}</p>}
             <button
               type="button"
               onClick={() => void confirmBlock()}
               disabled={acting !== null}
-              className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              className="w-full bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
             >
               {acting ? t('loading') : t('admin_users_block_confirm')}
             </button>
@@ -626,17 +626,17 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
                 className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent outline-none focus:border-[var(--color-primary)]"
               />
               {expiryValue && !Number.isNaN(new Date(expiryValue).getTime()) && new Date(expiryValue).getTime() <= Date.now() && (
-                <p className="mt-1.5 text-xs text-[var(--color-danger)]">{t('admin_users_expiry_past')}</p>
+                <p className="mt-1.5 text-xs text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('admin_users_expiry_past')}</p>
               )}
             </div>
 
-            {sheetError && <p className="text-sm text-[var(--color-danger)]" role="alert">{t(errorKey(sheetError))}</p>}
+            {sheetError && <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{t(errorKey(sheetError))}</p>}
 
             <button
               type="button"
               onClick={() => void confirmExpiry(false)}
               disabled={acting !== null}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
             >
               {acting ? t('loading') : t('admin_users_expiry_save')}
             </button>
@@ -694,12 +694,12 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
             {PLANES_PERSONALES.indexOf(planElegido) < PLANES_PERSONALES.indexOf(cambiandoPlan.plan) && (
               <p className="text-xs leading-relaxed uv-text-secondary">{t('admin_users_plan_lower_note')}</p>
             )}
-            {sheetError && <p className="text-sm text-[var(--color-danger)]" role="alert">{t(errorKey(sheetError))}</p>}
+            {sheetError && <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{t(errorKey(sheetError))}</p>}
             <button
               type="button"
               onClick={() => void confirmPlan()}
               disabled={acting !== null || planElegido === cambiandoPlan.plan}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
             >
               {acting ? t('loading') : rellenar(t('admin_users_plan_confirm'), { plan: t(`plans_name_${planElegido}`) })}
             </button>
@@ -712,12 +712,12 @@ export const AdminUsersView: React.FC<{ onClose: () => void }> = ({ onClose }) =
           <div className="space-y-4">
             {sheetPerson(unblocking)}
             <p className="text-sm uv-text-secondary">{t('admin_users_unblock_warning')}</p>
-            {sheetError && <p className="text-sm text-[var(--color-danger)]" role="alert">{t(errorKey(sheetError))}</p>}
+            {sheetError && <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{t(errorKey(sheetError))}</p>}
             <button
               type="button"
               onClick={() => void confirmUnblock()}
               disabled={acting !== null}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
             >
               {acting ? t('loading') : t('admin_users_unblock_confirm')}
             </button>

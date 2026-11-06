@@ -135,12 +135,12 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
                   <button
                     onClick={() => void toggle(c)}
                     disabled={busyId !== null}
-                    className={`text-[11px] font-bold ${c.active ? 'uv-text-muted' : 'text-[var(--color-primary)]'}`}
+                    className={`text-[11px] font-bold ${c.active ? 'uv-text-muted' : 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]'}`}
                   >
                     {c.active ? t('business_location_deactivate') : t('business_location_activate')}
                   </button>
                   <button onClick={() => void remove(c)} disabled={busyId !== null} aria-label={t('business_catalog_delete')}>
-                    <Icons.X size={15} className="text-[var(--color-danger)]" />
+                    <Icons.X size={15} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" />
                   </button>
                 </div>
               </div>
@@ -148,7 +148,7 @@ export const BusinessCatalogSheet: React.FC<Props> = ({ isOpen, onClose, merchan
           </div>
         )}
 
-        {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+        {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
         {!showAdd ? (
           <Button onClick={() => setShowAdd(true)} fullWidth leftIcon={<Icons.Plus size={18} />}>

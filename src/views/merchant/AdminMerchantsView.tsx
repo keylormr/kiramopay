@@ -306,7 +306,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
     }`;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]" aria-label={t('back')}>
           <Icons.ChevronLeft size={20} />
@@ -336,7 +336,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
         {pestana === 'pending' && (
           <>
             <p className="px-4 pt-3 text-xs uv-text-muted">{t('merchant_admin_subtitle')}</p>
-            {error && <p className="px-4 pt-2 text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+            {error && <p className="px-4 pt-2 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
             {loading ? (
               <div className="flex items-center justify-center py-20">
@@ -371,10 +371,10 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                       <span className="uv-text-muted">%</span>
                     </label>
                     <div className="flex gap-2 mt-3">
-                      <button onClick={() => approve(m)} disabled={acting === m.id} className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl font-bold disabled:opacity-50">
+                      <button onClick={() => approve(m)} disabled={acting === m.id} className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl font-bold disabled:opacity-50">
                         {t('merchant_admin_approve')}
                       </button>
-                      <button onClick={() => { setReason(''); setError(''); setRejecting(m); }} disabled={acting === m.id} className="flex-1 border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold disabled:opacity-50">
+                      <button onClick={() => { setReason(''); setError(''); setRejecting(m); }} disabled={acting === m.id} className="flex-1 border border-[var(--color-danger)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] py-2.5 rounded-xl font-bold disabled:opacity-50">
                         {t('merchant_admin_reject')}
                       </button>
                     </div>
@@ -400,7 +400,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                 spellCheck={false}
                 className="min-w-0 flex-1 px-3 py-2.5 rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-transparent text-sm outline-none focus:border-[var(--color-primary)]"
               />
-              <button type="submit" className="shrink-0 px-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold">
+              <button type="submit" className="shrink-0 px-4 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold">
                 {t('merchant_admin_search')}
               </button>
             </form>
@@ -410,7 +410,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                 {rellenar(t('merchant_admin_close_done'), { name: cerradoAhora })}
               </p>
             )}
-            {errorTodos && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{errorTodos}</p>}
+            {errorTodos && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{errorTodos}</p>}
 
             {cargandoTodos ? (
               <div className="flex items-center justify-center py-16">
@@ -450,7 +450,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                         <button
                           type="button"
                           onClick={() => abrirCierre(m)}
-                          className="mt-3 w-full border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold"
+                          className="mt-3 w-full border border-[var(--color-danger)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] py-2.5 rounded-xl font-bold"
                         >
                           {t('merchant_admin_close')}
                         </button>
@@ -497,7 +497,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
 
               <fieldset>
                 <legend className="text-sm font-medium uv-text-secondary mb-1.5">{t('merchant_admin_plan_pick_label')}</legend>
-                {errorCandidatos && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{errorCandidatos}</p>}
+                {errorCandidatos && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{errorCandidatos}</p>}
                 {cargandoCandidatos ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
@@ -579,12 +579,12 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                 </div>
               </fieldset>
 
-              {errorPlan && <p role="alert" className="text-sm text-[var(--color-danger)]">{t(errorPlan)}</p>}
+              {errorPlan && <p role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t(errorPlan)}</p>}
 
               <button
                 type="submit"
                 disabled={asignando || !elegido}
-                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+                className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
               >
                 {t('merchant_admin_plan_review')}
               </button>
@@ -602,8 +602,8 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
             </div>
             {/* Si el rechazo falla la hoja sigue abierta, con el motivo escrito:
                 el aviso va aqui, porque el de la pagina queda detras del fondo. */}
-            {error && <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>}
-            <button onClick={() => reject(rejecting, reason.trim())} disabled={acting === rejecting.id} className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50">
+            {error && <p role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{error}</p>}
+            <button onClick={() => reject(rejecting, reason.trim())} disabled={acting === rejecting.id} className="w-full bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50">
               {acting === rejecting.id ? t('loading') : t('merchant_admin_reject')}
             </button>
           </div>
@@ -635,7 +635,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
               />
             </div>
             {rechazoCierre && (
-              <div role="alert" className="text-sm text-[var(--color-danger)]">
+              <div role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
                 <p>{rechazoCierre.mensaje}</p>
                 {rechazoCierre.saldos.length > 0 && (
                   <ul className="mt-1 font-semibold tabular-nums">
@@ -648,7 +648,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
               type="button"
               onClick={() => void cerrarComercio()}
               disabled={!motivoCierre.trim() || cerrando}
-              className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              className="w-full bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
             >
               {cerrando ? t('loading') : rellenar(t('merchant_admin_close_confirm'), { name: aCerrar.name })}
             </button>
@@ -671,7 +671,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
             type="button"
             onClick={() => void asignarPlan()}
             disabled={asignando}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
           >
             {asignando ? t('loading') : rellenar(t('merchant_admin_plan_confirm'), { plan: t(nombrePlan(planElegido)) })}
           </button>

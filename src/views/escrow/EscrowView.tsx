@@ -269,7 +269,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
@@ -282,7 +282,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <h1 className="text-lg font-bold">{t('escrow_title')}</h1>
         <button
           onClick={() => setShowCreate(true)}
-          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]"
+          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
           aria-label={t('escrow_new')}
         >
           <Icons.Plus size={20} />
@@ -300,7 +300,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           // el boton de crear: a quien si tiene acuerdos se le decia que no
           // los tenia. Se dice que no se pudo consultar, y se ofrece reintentar.
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <p className="text-sm text-[var(--color-danger)] mb-4" aria-live="polite">
+            <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] mb-4" aria-live="polite">
               {mensajeDeError(errorLista ?? undefined, t)}
             </p>
             <button
@@ -319,7 +319,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <p className="text-sm text-center mb-6">{t('escrow_empty_desc')}</p>
             <button
               onClick={() => setShowCreate(true)}
-              className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
+              className="px-6 py-3 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
             >
               {t('escrow_new')}
             </button>
@@ -376,7 +376,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     onClick={() => setSellerPhone(c.phone)}
                     className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
                       sellerPhone === c.phone
-                        ? 'bg-[var(--color-primary)] text-white uv-shadow-primary'
+                        ? 'bg-[var(--color-primary-fill)] text-white uv-shadow-primary'
                         : 'uv-surface-2 uv-text-secondary'
                     }`}
                   >
@@ -421,7 +421,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <button
             onClick={create}
             disabled={creating || !sellerPhone.trim() || !description.trim() || !montoValido(amount)}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
           >
             {creating ? t('loading') : t('escrow_create_btn')}
           </button>
@@ -512,7 +512,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   <button
                     onClick={() => runAction((id) => api.escrow.fund(id))}
                     disabled={acting}
-                    className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                    className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
                   >
                     {acting ? t('loading') : t('escrow_fund')}
                   </button>
@@ -539,7 +539,7 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   <button
                     onClick={() => runAction((id) => api.escrow.refund(id))}
                     disabled={acting}
-                    className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                    className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
                   >
                     {acting ? t('loading') : t('escrow_refund')}
                   </button>

@@ -149,14 +149,14 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
         {leyendo ? (
           <p className="uv-text-muted" aria-hidden="true">{t('qr_reading_image')}</p>
         ) : cameraFailed ? (
-          <p className="text-[var(--color-danger)] text-sm">{t('camera_unavailable')}</p>
+          <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{t('camera_unavailable')}</p>
         ) : (
           <p className="uv-text-muted">{isScanning ? t('scanning') : t('point_camera')}</p>
         )}
         {hint && <p className="text-xs uv-text-muted mt-2">{hint}</p>}
         {/* Tambien siempre montada: el aviso entra y sale de adentro. */}
         <div data-testid="qr-aviso" aria-live="polite">
-          {aviso && <p className="text-[var(--color-danger)] text-sm mt-2">{aviso}</p>}
+          {aviso && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mt-2">{aviso}</p>}
         </div>
       </div>
 
@@ -178,7 +178,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
           type="button"
           onClick={() => entradaDeImagen.current?.click()}
           disabled={leyendo}
-          className="w-full py-3 rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60 uv-focus-ring"
+          className="w-full py-3 rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60 uv-focus-ring"
         >
           {leyendo ? (
             <div
@@ -210,7 +210,7 @@ export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({
           <button
             onClick={submitManual}
             disabled={!manualCode.trim()}
-            className="px-4 rounded-xl bg-[var(--color-primary)] text-white font-bold text-sm disabled:opacity-50"
+            className="px-4 rounded-xl bg-[var(--color-primary-fill)] text-white font-bold text-sm disabled:opacity-50"
           >
             {t('continue')}
           </button>

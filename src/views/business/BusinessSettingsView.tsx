@@ -186,7 +186,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           {t(`merchant_status_${merchant.verificationStatus}` as Parameters<typeof t>[0])}
         </span>
         {merchant.verificationStatus === 'rejected' && merchant.rejectionReason && (
-          <p className="text-xs text-[var(--color-danger)] mt-2">{merchant.rejectionReason}</p>
+          <p className="text-xs text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] mt-2">{merchant.rejectionReason}</p>
         )}
       </div>
 
@@ -305,7 +305,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
             onClick={abrirCierre}
             fullWidth
             leftIcon={<Icons.XCircle size={18} />}
-            className="!text-[var(--color-danger)] hover:!bg-[var(--color-danger-soft)]"
+            className="!text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] hover:!bg-[var(--color-danger-soft)]"
           >
             {t('business_close')}
           </Button>
@@ -361,7 +361,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
             </div>
           )}
           {rechazo && (
-            <div role="alert" className="text-sm text-[var(--color-danger)]">
+            <div role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
               <p>{rechazo.mensaje}</p>
               {rechazo.saldos.length > 0 && (
                 <ul className="mt-1 font-semibold tabular-nums">
@@ -415,7 +415,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
           {identityChanged && merchant.verificationStatus === 'verified' && (
             <p className="text-xs text-[var(--color-warning)]">{t('business_edit_identity_note')}</p>
           )}
-          {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+          {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
           <Button
             onClick={save}

@@ -27,7 +27,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const inputId = id || autoId;
   const stateBorder = error
     ? 'border-[var(--color-danger)] focus:border-[var(--color-danger)]'
-    : 'border-[var(--color-border)] focus:border-[var(--color-primary)] dark:border-[var(--color-border-dark)]';
+    : 'border-[var(--color-border)] focus:border-[var(--color-primary)] dark:border-[var(--color-border-control-dark)] dark:focus-within:border-[var(--color-primary-light)]';
 
   return (
     <div className={`flex flex-col gap-1.5 ${containerClassName}`}>
@@ -62,7 +62,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {error ? (
         <span
           id={`${inputId}-err`}
-          className="text-xs font-medium text-[var(--color-danger)]"
+          className="text-xs font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]"
         >
           {error}
         </span>

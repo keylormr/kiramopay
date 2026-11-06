@@ -126,7 +126,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           <div className="flex gap-3 w-full max-w-xs">
             <button
               onClick={this.handleRetry}
-              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold active:scale-95 transition-all"
+              className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold active:scale-95 transition-all"
             >
               {t('error_retry')}
             </button>
