@@ -10,8 +10,13 @@ interface SettingsState {
   themeSchedule: 'off' | 'sunrise-sunset' | 'custom';
   themeScheduleStart: string;
   themeScheduleEnd: string;
+  /** Menu lateral plegado a riel en pantalla ancha. Preferencia del
+   *  dispositivo, como el tema: no es de la cuenta, asi que no se borra al
+   *  cerrar sesion (ver limpiarDatosDeUsuario.ts). */
+  menuLateralPlegado: boolean;
 
   toggleDarkMode: () => void;
+  alternarMenuLateral: () => void;
   toggleOfflineMode: () => void;
   setLocked: (locked: boolean) => void;
   toggleBiometric: () => void;
@@ -37,8 +42,10 @@ export const useSettingsStore = create<SettingsState>()(
       themeSchedule: 'off',
       themeScheduleStart: '18:00',
       themeScheduleEnd: '06:00',
+      menuLateralPlegado: false,
 
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
+      alternarMenuLateral: () => set((s) => ({ menuLateralPlegado: !s.menuLateralPlegado })),
       toggleOfflineMode: () => set((s) => ({ offlineMode: !s.offlineMode })),
       setLocked: (locked) => set({ isLocked: locked }),
       toggleBiometric: () => set((s) => ({ biometricEnabled: !s.biometricEnabled })),

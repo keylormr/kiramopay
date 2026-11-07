@@ -89,6 +89,11 @@ const zhCn: TranslationKeys = {
   nav_apps: '应用',
   nav_profile: '个人',
   nav_main_aria: '主导航',
+  nav_menu_collapse: '收起菜单',
+  nav_menu_expand: '展开菜单',
+  nav_menu_open: '打开菜单',
+  nav_menu_close: '关闭菜单',
+  nav_goals: '目标',
 
   // Home
   total_balance: '总余额',

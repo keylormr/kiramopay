@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Base del rediseno de 2026-11 (tema oscuro premium): los tokens de index.css
@@ -149,5 +149,70 @@ describe('movimiento', () => {
     for (const nombre of ['toque', 'estado', 'hoja', 'cifra']) {
       expect(conTokens).toContain(`--kp-mov-${nombre}: 0ms`);
     }
+  });
+});
+
+describe('letra del colon', () => {
+  const cara = [...css.matchAll(/@font-face\s*{[^}]*}/g)].map((m) => m[0]).find((c) => c.includes('"Inter Colon"')) ?? '';
+
+  it('el ₡ viene de Inter recortada al glifo, solo cuando la pagina lo usa', () => {
+    expect(cara).toContain('unicode-range: U+20A1;');
+    expect(cara).toContain('font-weight: 100 900');
+    expect(cara).toContain('font-display: swap');
+    const archivo = /url\("\.\/([^"]+\.woff2)"\)/.exec(cara)?.[1];
+    expect(archivo).toBe('assets/fonts/inter/Inter-Colon.woff2');
+    // Un solo glifo: unos pocos KB, no los 350 KB de Inter completa.
+    expect(statSync(join(RAIZ, archivo!)).size).toBeLessThan(4096);
+    expect(readFileSync(join(RAIZ, 'assets/fonts/inter/OFL.txt'), 'utf8')).toContain('SIL Open Font License, Version 1.1');
+  });
+
+  it('va justo despues de Geist en la pila, con su altura de mayusculas igualada', () => {
+    expect(token('font-sans').startsWith('"Geist", "Inter Colon",')).toBe(true);
+    // Altura de mayusculas: Geist 0,71 em, Inter 0,7275 em.
+    expect(cara).toContain(`size-adjust: ${((0.71 / 0.7275) * 100).toFixed(1)}%;`);
+  });
+});
+
+describe('esquema de color y barras de desplazamiento', () => {
+  it('la raiz declara el esquema del tema elegido, no el del sistema', () => {
+    expect(css).toMatch(/:root\s*{[^}]*color-scheme: light;/);
+    expect(css).toMatch(/:root\.dark\s*{[^}]*color-scheme: dark;/);
+    expect(readFileSync(join(process.cwd(), 'index.html'), 'utf8')).toContain('<meta name="color-scheme" content="dark light" />');
+  });
+
+  it('la barra es fina y su pulgar llega a 3:1 contra el fondo en los dos temas', () => {
+    expect(css).toMatch(/:root\s*{[^}]*scrollbar-width: thin;/);
+    expect(css).toMatch(/:root\.dark\s*{[^}]*scrollbar-color: var\(--color-border-control-dark\) transparent;/);
+    expect(css).toMatch(/:root\s*{[^}]*scrollbar-color: var\(--color-text-muted\) transparent;/);
+    expect(contraste(rgb(token('color-border-control-dark')), rgb(token('color-background-dark')))).toBeGreaterThanOrEqual(3);
+    expect(contraste(rgb(token('color-text-muted')), rgb(token('color-background')))).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('menu lateral plegable', () => {
+  it('plegado en ventana expandida mide lo mismo que el riel, y todo sale de --kp-nav-ancho', () => {
+    const expandida = /@media \(min-width: 52\.5rem\)\s*{([\s\S]*?)\n}/.exec(css)?.[1] ?? '';
+    expect(expandida).toMatch(/\.kp-marco\s*{\s*--kp-nav-ancho: calc\(256px \+ env\(safe-area-inset-left, 0px\)\);/);
+    expect(expandida).toMatch(/\.kp-marco\[data-menu='plegado'\]\s*{\s*--kp-nav-ancho: calc\(88px \+ env\(safe-area-inset-left, 0px\)\);/);
+    // Las pantallas completas acompanan al menu con la misma curva y duracion.
+    expect(css).toMatch(/\.kp-capa\s*{[^}]*left: var\(--kp-nav-ancho\);[^}]*transition: left var\(--kp-mov-hoja\) var\(--kp-curva-hoja\);/);
+  });
+});
+
+describe('pantallas completas en pantalla ancha', () => {
+  const regla = /@container capa \(min-width: 42rem\)\s*{([\s\S]*?)\n}/.exec(css)?.[1] ?? '';
+
+  it('toman la columna de 42rem segun el ancho real de la capa, no el de la ventana', () => {
+    expect(css).toMatch(/\.kp-capa\s*{[^}]*container: capa \/ inline-size;/);
+    expect(regla).toContain('padding-inline: max(1rem, calc((100% - var(--kp-columna, 42rem)) / 2 + 1rem));');
+    expect(regla).toContain('max-width: var(--kp-columna, 42rem);');
+    // Con px-4 en el contenedor o mx-4 en el bloque, 1rem menos por lado: el
+    // texto del cuerpo queda debajo del de la cabecera.
+    expect(regla).toContain('max-width: calc(var(--kp-columna, 42rem) - 2rem);');
+  });
+
+  it('respetan el max-w propio de una vista y dejan salir a las que necesitan todo el ancho', () => {
+    expect(regla).toContain(":not([class*='max-w-'])");
+    expect(regla).toContain(":not([data-ancho='libre'])");
   });
 });

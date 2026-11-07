@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { esHojaSuperior, useCapa } from '@/navegacion/pilaDeCapas';
+import { enfocablesDentro } from '@/navegacion/enfocables';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -37,25 +38,6 @@ interface BottomSheetProps {
  * de cola que se pierden abajo son el 1 % de opacidad de la sombra: no se ven.
  */
 const HOLGURA_SOMBRA = { lado: 24, arriba: 12, abajo: 24 } as const;
-
-const ENFOCABLES = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-  '[contenteditable="true"]',
-].join(',');
-
-function enfocablesDentro(contenedor: HTMLElement): HTMLElement[] {
-  return Array.from(contenedor.querySelectorAll<HTMLElement>(ENFOCABLES)).filter((el) => {
-    if (el.closest('[hidden],[inert],[aria-hidden="true"]')) return false;
-    // checkVisibility no existe en todos los motores (jsdom): ahi cuenta como visible.
-    const conVisibilidad = el as HTMLElement & { checkVisibility?: () => boolean };
-    return typeof conVisibilidad.checkVisibility === 'function' ? conVisibilidad.checkVisibility() : true;
-  });
-}
 
 export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, children, title, titleAccessory, dismissable = true }) => {
   const { t } = useLanguage();

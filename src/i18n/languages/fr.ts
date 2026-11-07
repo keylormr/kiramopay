@@ -88,6 +88,11 @@ const fr: TranslationKeys = {
   nav_apps: 'Apps',
   nav_profile: 'Profil',
   nav_main_aria: 'Navigation principale',
+  nav_menu_collapse: 'Réduire le menu',
+  nav_menu_expand: 'Développer le menu',
+  nav_menu_open: 'Ouvrir le menu',
+  nav_menu_close: 'Fermer le menu',
+  nav_goals: 'Objectifs',
 
   // Home
   total_balance: 'Solde total',

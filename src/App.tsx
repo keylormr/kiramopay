@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
 import { sincronizarAvisos } from './utils/avisosPush';
@@ -41,7 +41,16 @@ import { BusinessOnboardingSheet } from './views/business/BusinessOnboardingShee
 import { NegocioSinCargar } from './views/business/NegocioSinCargar';
 import { OfflineBanner } from './components/OfflineBanner';
 import { instalarNavegacionPorCapas, retroceder, useCapa } from './navegacion/pilaDeCapas';
-import { BarraInferior, NavegacionLateral, useClaseDeVentana, type ElementoDeNavegacion } from './navegacion/NavegacionAdaptable';
+import {
+  BarraInferior,
+  BotonDelMenu,
+  MenuModal,
+  NavegacionLateral,
+  useAtajoDelMenu,
+  useClaseDeVentana,
+  type ElementoDeNavegacion,
+  type PieDeNavegacion,
+} from './navegacion/NavegacionAdaptable';
 
 // Lazy-loaded views (code splitting)
 const HomeView = lazyConRecarga(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
@@ -473,11 +482,30 @@ const Layout = () => {
   // Accesos que solo caben en el menu lateral (ventana expandida): abren la
   // misma pantalla que el mosaico de Inicio o la fila de Perfil.
   const ATAJOS: (ElementoDeNavegacion & { id: 'savings' | 'cards' | 'sessions' })[] = businessMode ? [] : [
-    { id: 'savings', Icono: IconosLinea.Metas, etiqueta: t('home_savings') },
+    // "Metas" y no "Ahorro": decision del dueno (2026-11-06).
+    { id: 'savings', Icono: IconosLinea.Metas, etiqueta: t('nav_goals') },
     { id: 'cards', Icono: IconosLinea.Tarjeta, etiqueta: t('home_cards') },
     { id: 'sessions', Icono: IconosLinea.Dispositivos, etiqueta: t('sessions_title') },
   ];
   const claseDeVentana = useClaseDeVentana();
+  // Menu lateral: en expandida se pliega a riel y la eleccion queda en el
+  // dispositivo (settings); en mediana el mismo boton abre el menu completo como
+  // cajon modal, que se cierra solo si la ventana deja de ser mediana.
+  const menuPlegado = useSettingsStore((s) => s.menuLateralPlegado);
+  const alternarMenuLateral = useSettingsStore((s) => s.alternarMenuLateral);
+  const [menuModalAbierto, setMenuModalAbierto] = useState(false);
+  const [claseDelMenuModal, setClaseDelMenuModal] = useState(claseDeVentana);
+  if (claseDelMenuModal !== claseDeVentana) {
+    setClaseDelMenuModal(claseDeVentana);
+    setMenuModalAbierto(false);
+  }
+  const botonDelMenuRef = useRef<HTMLButtonElement>(null);
+  const alternarMenu = useCallback(() => {
+    if (claseDeVentana === 'expandida') alternarMenuLateral();
+    else if (claseDeVentana === 'mediana') setMenuModalAbierto((abierto) => !abierto);
+  }, [claseDeVentana, alternarMenuLateral]);
+  const cerrarMenuModal = useCallback(() => setMenuModalAbierto(false), []);
+  useAtajoDelMenu(claseDeVentana !== 'compacta', alternarMenu);
   const atajoAbierto = ATAJOS.find((a) => a.id === overlayView)?.id;
   const currentNavId: string = atajoAbierto ?? (businessMode ? bizTab : activeTab);
   const onNavSelect = (id: string) => {
@@ -504,26 +532,17 @@ const Layout = () => {
   const nombreCompleto = [state.user?.firstName, state.user?.lastName].filter(Boolean).join(' ');
   // Pie del riel y del menu lateral: la cuenta activa; tocarla cambia de perfil
   // (personal o comercio), igual que el selector de la barra superior.
-  const pieDeNavegacion = (
-    <button
-      type="button"
-      onClick={() => setShowSwitcher(true)}
-      aria-label={t('business_switch')}
-      className={`kp-toque kp-foco flex items-center gap-2.5 rounded-xl text-left ${claseDeVentana === 'expandida' ? 'w-full p-2 hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]' : 'p-1'}`}
-    >
+  const pieDeNavegacion: PieDeNavegacion = {
+    avatar: (
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-surface-muted)] text-[13px] font-semibold uv-text-primary dark:bg-[var(--color-surface-2-dark)] dark:shadow-[inset_0_0_0_1px_var(--color-border-strong-dark)]">
         {businessMode && activeMerchant ? <Icons.ShoppingCart size={18} aria-hidden="true" /> : (iniciales || <IconosLinea.Perfil size={20} aria-hidden="true" />)}
       </span>
-      {claseDeVentana === 'expandida' && (
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold uv-text-primary">
-            {businessMode && activeMerchant ? activeMerchant.name : (nombreCompleto || t('app_name'))}
-          </span>
-          <span className="block truncate text-xs uv-text-secondary">{t('business_switch')}</span>
-        </span>
-      )}
-    </button>
-  );
+    ),
+    titulo: businessMode && activeMerchant ? activeMerchant.name : (nombreCompleto || t('app_name')),
+    subtitulo: t('business_switch'),
+    ariaLabel: t('business_switch'),
+    onElegir: () => setShowSwitcher(true),
+  };
 
   const notifications = state.notifications || [];
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -582,12 +601,16 @@ const Layout = () => {
   };
 
   return (
-    <div className="kp-marco min-h-screen flex bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans">
-      {/* Riel (600-839 px) o menu lateral fijo (840 px o mas). En telefono, la
-          barra inferior de mas abajo. */}
+    <div
+      data-menu={claseDeVentana === 'expandida' && menuPlegado ? 'plegado' : 'abierto'}
+      className="kp-marco min-h-screen flex bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans"
+    >
+      {/* Riel (600-839 px) o menu lateral fijo, abierto o plegado (840 px o
+          mas). En telefono, la barra inferior de mas abajo. */}
       {claseDeVentana !== 'compacta' && (
         <NavegacionLateral
           clase={claseDeVentana}
+          plegado={menuPlegado}
           elementos={NAV_ITEMS}
           atajos={ATAJOS}
           actual={currentNavId}
@@ -599,11 +622,27 @@ const Layout = () => {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Top Bar */}
-      <div className="sticky top-0 z-30 bg-white/75 dark:bg-[var(--color-background-dark)]/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center justify-between">
+      <div className="sticky top-0 z-30 bg-white/75 dark:bg-[var(--color-background-dark)]/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+      {/* En riel o menu, la fila va en la misma columna que el contenido: el
+          boton y el titulo arriba del borde izquierdo de la pantalla y la campana
+          arriba del derecho, no en las puntas de la ventana. pt-safe va en la
+          misma caja que min-h-14, como antes: con muesca la barra mide
+          max(56, margen + 44) y no margen + 56. */}
+      <div className={`flex min-h-14 items-center justify-between gap-2 px-4 pt-safe ${claseDeVentana !== 'compacta' ? 'mx-auto w-full max-w-2xl' : ''}`}>
         {claseDeVentana !== 'compacta' ? (
           // Con riel o menu lateral, la marca y el cambio de perfil ya estan en
           // la navegacion: la barra dice donde esta la persona.
-          <span className="text-lg font-semibold tracking-[-0.01em] uv-text-primary truncate">{tituloDeSeccion}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <BotonDelMenu
+              ref={botonDelMenuRef}
+              clase={claseDeVentana}
+              plegado={menuPlegado}
+              modalAbierto={menuModalAbierto}
+              onAlternar={alternarMenu}
+              etiquetas={{ plegar: t('nav_menu_collapse'), desplegar: t('nav_menu_expand'), abrir: t('nav_menu_open') }}
+            />
+            <span className="text-lg font-semibold tracking-[-0.01em] uv-text-primary truncate">{tituloDeSeccion}</span>
+          </div>
         ) : (
         <button
           onClick={() => setShowSwitcher(true)}
@@ -658,6 +697,7 @@ const Layout = () => {
           </button>
         </div>
       </div>
+      </div>
 
       {/* Content Area. En plegables a medio abrir, kp-contenido-segmentado
           deja el contenido de un lado del pliegue (index.css). */}
@@ -673,6 +713,23 @@ const Layout = () => {
           ("-₡1.00" bajo "Inicio"). */}
       {claseDeVentana === 'compacta' && (
         <BarraInferior elementos={NAV_ITEMS} actual={currentNavId} onElegir={onNavSelect} ariaLabel={t('nav_main_aria')} />
+      )}
+
+      {/* Menu completo como cajon modal sobre el riel (600-839 px). */}
+      {claseDeVentana === 'mediana' && (
+        <MenuModal
+          abierto={menuModalAbierto}
+          onCerrar={cerrarMenuModal}
+          elementos={NAV_ITEMS}
+          atajos={ATAJOS}
+          actual={currentNavId}
+          onElegir={onNavSelect}
+          ariaLabel={t('nav_main_aria')}
+          nombreDeLaApp={t('app_name')}
+          pie={pieDeNavegacion}
+          etiquetaCerrar={t('nav_menu_close')}
+          devolverFocoA={botonDelMenuRef}
+        />
       )}
 
       {/* Overlay Views */}

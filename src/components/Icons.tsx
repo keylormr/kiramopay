@@ -344,6 +344,16 @@ export const IconosLinea = {
     cuerpo: 'M6 4.5h12a2 2 0 0 1 2 2v9H4v-9a2 2 0 0 1 2-2z',
     lineas: 'M2.5 18.5h19',
   }),
+  // Boton del menu lateral: el panel relleno es el menu y la flecha dice lo
+  // que pasa al tocar (plegarlo hacia la izquierda o desplegarlo).
+  MenuPlegar: iconoDeLinea('MenuPlegar', {
+    cuerpo: 'M5.5 4.5h4v15h-4a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z',
+    lineas: 'M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zM9.5 4.5v15M16 9.5L13.5 12l2.5 2.5',
+  }),
+  MenuDesplegar: iconoDeLinea('MenuDesplegar', {
+    cuerpo: 'M5.5 4.5h4v15h-4a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z',
+    lineas: 'M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zM9.5 4.5v15M14 9.5l2.5 2.5-2.5 2.5',
+  }),
 
   // Acciones de dinero
   Enviar: iconoDeLinea('Enviar', { cuerpo: CUADRO, lineas: 'M9.5 14.5l5-5M10.5 9.5h4v4' }),

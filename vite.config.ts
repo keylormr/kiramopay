@@ -72,6 +72,11 @@ export default defineConfig(({ mode }) => {
       },
       build: {
         chunkSizeWarningLimit: 200,
+        // Las fuentes salen siempre como archivo, nunca incrustadas en el CSS:
+        // el CSP de nginx.conf permite `font-src 'self'` y no `data:`, y la del
+        // colon (1,6 KB) quedaba bajo el limite de 4 KB de Vite. El resto de
+        // los archivos sigue la regla de siempre (undefined = la de Vite).
+        assetsInlineLimit: (archivo: string) => (archivo.endsWith('.woff2') ? false : undefined),
         rollupOptions: {
           output: {
             manualChunks(id) {
