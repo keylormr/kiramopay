@@ -64,10 +64,13 @@ function setup() {
   );
 }
 
-// La tarjeta principal: el ancestro con el degradado de marca mas cercano al
-// rotulo del saldo.
+// La tarjeta principal: la seccion "Saldo" que contiene el rotulo.
 const tarjetaDelSaldo = (rotulo: string) =>
-  within(screen.getByText(rotulo).closest('.uv-gradient-brand') as HTMLElement);
+  within(screen.getByText(rotulo).closest('section') as HTMLElement);
+
+// La cifra grande va partida (simbolo, entero y decimales en su propio tamano):
+// se compara el texto entero del parrafo.
+const cifra = (texto: string) => (_: string, el: Element | null) => el?.tagName === 'P' && el.textContent === texto;
 
 beforeAll(() => precargarIdioma('en'));
 
@@ -82,9 +85,9 @@ describe('HomeView: saldo total de la tarjeta principal', () => {
     setup();
 
     // 500.000 colones + 445 dolares (a 0,002 USD por colon) = 722.500 colones.
-    expect(tarjetaDelSaldo('Saldo total').getByText('₡722,500.00')).toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').getByText(cifra('₡722,500.00'))).toBeInTheDocument();
     // La cuenta base sola ya no se presenta como el total.
-    expect(tarjetaDelSaldo('Saldo total').queryByText('₡500,000.00')).not.toBeInTheDocument();
+    expect(tarjetaDelSaldo('Saldo total').queryByText(cifra('₡500,000.00'))).not.toBeInTheDocument();
   });
 
   it('la linea en dolares sigue ahi, traducida y con el formato de montos de la app', () => {
@@ -110,7 +113,7 @@ describe('HomeView: saldo total de la tarjeta principal', () => {
 
     const tarjeta = tarjetaDelSaldo('Saldo total');
     expect(tarjeta.getByText('—')).toBeInTheDocument();
-    expect(tarjeta.queryByText('₡500,000.00')).not.toBeInTheDocument();
+    expect(tarjeta.queryByText(cifra('₡500,000.00'))).not.toBeInTheDocument();
     expect(tarjeta.queryByText(/≈/)).not.toBeInTheDocument();
   });
 

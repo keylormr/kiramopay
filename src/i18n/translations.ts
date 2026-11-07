@@ -2269,6 +2269,32 @@ export type TranslationKeys = {
   admin_sent_kind_blocked: string;
   admin_sent_kind_rejected: string;
   admin_sent_load_failed: string;
+  // Inicio, envio y comprobante (rediseno fase 3)
+  saldo_seccion: string;
+  saldo_pestanas: string;
+  saldo_pestana_total: string;
+  saldo_pestana_crc: string;
+  saldo_pestana_usd: string;
+  saldo_ocultar: string;
+  saldo_oculto: string;
+  monto_oculto: string;
+  saldo_cripto_valor: string;
+  saldo_cripto_sin_dato: string;
+  saldo_cripto_vacio: string;
+  accion_escanear: string;
+  accion_cobrar: string;
+  actividad_vacia_desc: string;
+  envio_revisar_titulo: string;
+  envio_recibe: string;
+  envio_recibe_sin_nombre: string;
+  envio_comision: string;
+  envio_sin_comision: string;
+  envio_tu_saldo: string;
+  envio_llega: string;
+  envio_al_instante: string;
+  envio_enviar_monto: string;
+  envio_enviando: string;
+  envio_le_llego: string;
 };
 
 import es from './languages/es';

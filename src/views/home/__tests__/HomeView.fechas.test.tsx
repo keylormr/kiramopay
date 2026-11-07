@@ -69,7 +69,10 @@ describe('HomeView — la fecha de los movimientos recientes', () => {
       </LanguageProvider>,
     );
 
-    expect(await screen.findByText(fechaCorta(ISO, 'en'))).toBeInTheDocument();
+    // La actividad agrupa por dia: el encabezado sale en ingles ("Sep 4"), no
+    // en el d/m de es-CR ni con el texto que traia la fila.
+    expect(await screen.findByText(/^Sep 4/)).toBeInTheDocument();
     expect(screen.queryByText('4/9/2026')).not.toBeInTheDocument();
+    expect(screen.queryByText(fechaCorta(ISO, 'es'))).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import { alcanceDeSombra, px } from '@/test/sombras';
 import { HomeView } from '../HomeView';
@@ -72,7 +72,7 @@ function carrusel() {
       <HomeView />
     </LanguageProvider>,
   );
-  return screen.getByRole('tablist');
+  return screen.getByRole('tablist', { name: 'Cuentas' });
 }
 
 beforeEach(() => {
@@ -93,8 +93,7 @@ describe('Inicio: la sombra de la cuenta elegida cabe en el carrusel que se desp
   });
 
   it('la cuenta elegida lleva la sombra principal', () => {
-    carrusel();
-    const elegida = screen.getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true');
+    const elegida = within(carrusel()).getAllByRole('tab').find((t) => t.getAttribute('aria-selected') === 'true');
     expect(elegida?.className).toContain('uv-shadow-primary');
   });
 

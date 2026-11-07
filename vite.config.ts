@@ -76,7 +76,11 @@ export default defineConfig(({ mode }) => {
         // el CSP de nginx.conf permite `font-src 'self'` y no `data:`, y la del
         // colon (1,6 KB) quedaba bajo el limite de 4 KB de Vite. El resto de
         // los archivos sigue la regla de siempre (undefined = la de Vite).
-        assetsInlineLimit: (archivo: string) => (archivo.endsWith('.woff2') ? false : undefined),
+        // El arte 3D (.webp) tampoco: la version de 64 px pesa 2-3 KB y Vite la
+        // metia en base64 dentro del JavaScript del Inicio, que la bajaba
+        // aunque la pantalla pidiera la de 128.
+        assetsInlineLimit: (archivo: string) =>
+          archivo.endsWith('.woff2') || archivo.endsWith('.webp') ? false : undefined,
         rollupOptions: {
           output: {
             manualChunks(id) {

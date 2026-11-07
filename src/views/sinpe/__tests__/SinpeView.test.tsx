@@ -105,7 +105,7 @@ describe('SinpeView — send', () => {
         idempotencyKey: expect.any(String),
       }),
     );
-    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText(/^Le llegó a /)).toBeInTheDocument();
     expect(mocks.dispatch).toHaveBeenCalled();
   });
 
@@ -131,7 +131,7 @@ describe('SinpeView — send', () => {
       expect(mocks.api.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
       expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2);
     });
-    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText(/^Le llegó a /)).toBeInTheDocument();
   });
 
   // El envío a un número que NO es de KiramoPay se debita pero NO se entrega:
@@ -156,7 +156,7 @@ describe('SinpeView — send', () => {
     expect(await screen.findByText('Envío en proceso')).toBeInTheDocument();
     expect(screen.getByText(/no pertenece a KiramoPay/)).toBeInTheDocument();
     // Y NO puede decir que se envió.
-    expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Le llegó a /)).not.toBeInTheDocument();
   });
 
   // El backend rechaza los envios a numeros sin cuenta: entregarlos exigiria el
@@ -187,7 +187,7 @@ describe('SinpeView — send', () => {
 
     await openSendSheetAndSubmit(user);
 
-    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText(/^Le llegó a /)).toBeInTheDocument();
     expect(screen.queryByText('Envío en proceso')).not.toBeInTheDocument();
   });
 
@@ -1044,7 +1044,7 @@ describe('SinpeView — la llave del envío', () => {
 
     const titulo = await screen.findByText(/Ese envío ya se había hecho/);
     expect(screen.getByText(/No se envió otra vez/)).toBeInTheDocument();
-    expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Le llegó a /)).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ADD_SINPE_TRANSACTION' }));
     // La app no se había enterado del envío: trae del servidor el saldo, los
     // movimientos y el historial SINPE.
@@ -1053,7 +1053,7 @@ describe('SinpeView — la llave del envío', () => {
     expect(mocks.dataSync.refreshSinpe).toHaveBeenCalled();
 
     const aviso = titulo.closest('[role="dialog"]') as HTMLElement;
-    await user.click(within(aviso).getByRole('button', { name: 'Cerrar' }));
+    await user.click(within(aviso).getByRole('button', { name: 'Listo' }));
     await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
     await openSendSheetAndSubmit(user);
     await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(3));
@@ -1069,13 +1069,108 @@ describe('SinpeView — la llave del envío', () => {
     setup();
 
     await openSendSheetAndSubmit(user);
-    const exito = (await screen.findByText('¡Enviado!')).closest('[role="dialog"]') as HTMLElement;
-    await user.click(within(exito).getByRole('button', { name: 'Cerrar' }));
+    const exito = (await screen.findByText(/^Le llegó a /)).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(exito).getByRole('button', { name: 'Listo' }));
     await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
     await openSendSheetAndSubmit(user);
     await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));
 
     const [primera, segunda] = llaves();
     expect(segunda).not.toBe(primera);
+  });
+});
+
+// La hoja "Revisa antes de enviar" le pregunta al servidor el nombre del perfil
+// de un numero TECLEADO (decision del dueno del 2026-11-05) y lo dice como
+// "En su perfil de KiramoPay: X". Mientras consulta, Enviar espera; sin cuenta,
+// aviso y bloqueo; si falla, nada. Un contacto guardado no se consulta.
+describe('SinpeView — nombre del perfil al revisar el envio', () => {
+  async function abrirRevision(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getAllByRole('button', { name: 'Enviar' })[0]);
+    const d = within(await screen.findByRole('dialog'));
+    await user.type(d.getByPlaceholderText('8888-0000'), '88887777');
+    await user.type(d.getByPlaceholderText('0'), '5000');
+    await user.click(d.getByRole('button', { name: /Enviar/ }));
+    return within(await screen.findByRole('dialog', { name: 'Revisa antes de enviar' }));
+  }
+
+  beforeEach(() => {
+    mocks.api.sinpe.lookupRecipient.mockReset();
+    mocks.api.sinpe.send.mockResolvedValue({ success: true, data: sentTx });
+  });
+
+  it('dice el nombre del perfil, sin llamarlo registrado ni verificado, y deja enviar', async () => {
+    mocks.api.sinpe.lookupRecipient.mockResolvedValue({ success: true, data: { registered: true, displayName: 'Ana S.' } });
+    const user = userEvent.setup();
+    setup();
+    const hoja = await abrirRevision(user);
+
+    expect(await hoja.findByText('En su perfil de KiramoPay: Ana S.')).toBeInTheDocument();
+    expect(mocks.api.sinpe.lookupRecipient).toHaveBeenCalledTimes(1);
+    expect(mocks.api.sinpe.lookupRecipient).toHaveBeenCalledWith('+50688887777');
+    expect(hoja.queryByText(/registrad|verificad/i)).not.toBeInTheDocument();
+
+    await user.click(hoja.getByRole('button', { name: /^Enviar ₡/ }));
+    await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(1));
+  });
+
+  it('mientras consulta lo dice y Enviar espera', async () => {
+    let responder: (v: unknown) => void = () => {};
+    mocks.api.sinpe.lookupRecipient.mockReturnValue(new Promise((r) => { responder = r; }));
+    const user = userEvent.setup();
+    setup();
+    const hoja = await abrirRevision(user);
+
+    expect(hoja.getByText('Verificando el nombre del perfil…')).toBeInTheDocument();
+    const enviar = hoja.getByRole('button', { name: /^Enviar ₡/ });
+    expect(enviar).toBeDisabled();
+    fireEvent.click(enviar);
+    expect(mocks.api.sinpe.send).not.toHaveBeenCalled();
+
+    responder({ success: true, data: { registered: true, displayName: 'Ana S.' } });
+    expect(await hoja.findByText('En su perfil de KiramoPay: Ana S.')).toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /^Enviar ₡/ })).toBeEnabled();
+  });
+
+  it('un numero sin cuenta: el aviso, ningun nombre y no se puede enviar', async () => {
+    mocks.api.sinpe.lookupRecipient.mockResolvedValue({ success: true, data: { registered: false } });
+    const user = userEvent.setup();
+    setup();
+    const hoja = await abrirRevision(user);
+
+    expect(await hoja.findByText(/no tiene cuenta de KiramoPay/)).toBeInTheDocument();
+    expect(hoja.queryByText(/En su perfil/)).not.toBeInTheDocument();
+    const enviar = hoja.getByRole('button', { name: /^Enviar ₡/ });
+    expect(enviar).toBeDisabled();
+    fireEvent.click(enviar);
+    expect(mocks.api.sinpe.send).not.toHaveBeenCalled();
+  });
+
+  it('si la consulta falla no dice ningun nombre y se puede enviar', async () => {
+    mocks.api.sinpe.lookupRecipient.mockResolvedValue({ success: false, error: { code: 'RATE_LIMITED', message: 'x' } });
+    const user = userEvent.setup();
+    setup();
+    const hoja = await abrirRevision(user);
+
+    await waitFor(() => expect(hoja.getByRole('button', { name: /^Enviar ₡/ })).toBeEnabled());
+    expect(hoja.queryByText(/En su perfil/)).not.toBeInTheDocument();
+    expect(hoja.queryByText('Verificando el nombre del perfil…')).not.toBeInTheDocument();
+    expect(hoja.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('a un contacto guardado no se le consulta el nombre', async () => {
+    mocks.state.sinpeContacts = [{ id: 'c1', name: 'Diego Mora', phone: '8888-1234', isFavorite: true }];
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getAllByRole('button', { name: /Diego Mora/ })[0]);
+    const d = within(await screen.findByRole('dialog'));
+    await user.type(d.getByPlaceholderText('0'), '5000');
+    await user.click(d.getByRole('button', { name: /Enviar/ }));
+    const hoja = within(await screen.findByRole('dialog', { name: 'Revisa antes de enviar' }));
+
+    expect(hoja.getByText('Diego recibe')).toBeInTheDocument();
+    expect(hoja.getByRole('button', { name: /^Enviar ₡/ })).toBeEnabled();
+    expect(mocks.api.sinpe.lookupRecipient).not.toHaveBeenCalled();
   });
 });

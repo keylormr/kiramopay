@@ -14,9 +14,14 @@ interface SettingsState {
    *  dispositivo, como el tema: no es de la cuenta, asi que no se borra al
    *  cerrar sesion (ver limpiarDatosDeUsuario.ts). */
   menuLateralPlegado: boolean;
+  /** Saldos del Inicio tapados con puntos (el ojo de la tarjeta de saldo).
+   *  Tambien del dispositivo: quien lo tapa lo hace por quien mira la
+   *  pantalla, no por la cuenta. */
+  saldoOculto: boolean;
 
   toggleDarkMode: () => void;
   alternarMenuLateral: () => void;
+  alternarSaldoOculto: () => void;
   toggleOfflineMode: () => void;
   setLocked: (locked: boolean) => void;
   toggleBiometric: () => void;
@@ -43,9 +48,11 @@ export const useSettingsStore = create<SettingsState>()(
       themeScheduleStart: '18:00',
       themeScheduleEnd: '06:00',
       menuLateralPlegado: false,
+      saldoOculto: false,
 
       toggleDarkMode: () => set((s) => ({ darkMode: !s.darkMode })),
       alternarMenuLateral: () => set((s) => ({ menuLateralPlegado: !s.menuLateralPlegado })),
+      alternarSaldoOculto: () => set((s) => ({ saldoOculto: !s.saldoOculto })),
       toggleOfflineMode: () => set((s) => ({ offlineMode: !s.offlineMode })),
       setLocked: (locked) => set({ isLocked: locked }),
       toggleBiometric: () => set((s) => ({ biometricEnabled: !s.biometricEnabled })),

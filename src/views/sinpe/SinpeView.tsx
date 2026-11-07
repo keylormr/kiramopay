@@ -5,7 +5,8 @@ import { Icons } from '../../components/Icons';
 import { BottomSheet } from '../../components/BottomSheet';
 import { BotonCompartirQr } from '../../components/BotonCompartirQr';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
-import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
+import { HojaRevisarEnvio } from '@/components/envio/HojaRevisarEnvio';
+import { ComprobanteDeEnvio } from '@/components/envio/ComprobanteDeEnvio';
 import { CampoMonto } from '../../components/CampoMonto';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
@@ -189,6 +190,16 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // contacto elegido el numero ya viene completo.
   const telefonoIncompleto = !selectedContact && phone.length > 0 && normalizarTelefonoCR(phone) === null;
 
+  // El nombre del perfil de KiramoPay del numero TECLEADO, en la hoja de
+  // revisar (decision del dueno del 2026-11-05: si para enviar basta el
+  // telefono, se muestra el nombre de la persona). Se pregunta al revisar,
+  // cuando la persona ya va a enviar a ese numero, y no mientras teclea: cada
+  // consulta es un dato personal. Un contacto guardado no se consulta: su
+  // nombre lo puso la persona (igual que en Inicio). La respuesta de un numero
+  // anterior que llega tarde la descarta el hook.
+  const telefonoARevisar = showConfirm && !selectedContact ? normalizarTelefonoCR(phone) : null;
+  const destinatarioDelEnvio = useDestinatarioRegistrado(telefonoARevisar);
+
   const handleSelectContact = (contact: SinpeContact) => {
     setSelectedContact(contact);
     setPhone(contact.phone.replace(/-/g, ''));
@@ -197,6 +208,11 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
   const handleSendMoney = async () => {
     if (!amount || !phone) return;
+    // Mientras se consulta de quien es el numero no se envia (seria una
+    // ventana para saltarse la consulta), y a un numero sin cuenta tampoco: el
+    // servidor lo rechazaria. El boton de la hoja ya lo bloquea; esto es el
+    // segundo cerrojo.
+    if (destinatarioDelEnvio.fase === 'consultando' || destinatarioDelEnvio.fase === 'sin_cuenta') return;
 
     const numAmount = parseFloat(amount);
     // El boton del formulario ya bloquea estos casos, pero el saldo puede
@@ -1317,18 +1333,17 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
       </BottomSheet>
 
       {/* Review-before-send confirmation (money moves are irreversible on the ledger) */}
-      <ConfirmSendSheet
+      <HojaRevisarEnvio
         isOpen={showConfirm}
         onClose={() => setShowConfirm(false)}
         onConfirm={handleSendMoney}
-        amount={parseFloat(amount || '0')}
-        currency="CRC"
-        processing={isProcessing}
-        confirmLabel={t('send')}
-        rows={[
-          { label: t('recipient'), value: selectedContact?.name || formatearTelefonoCR(phone) },
-          ...(reference ? [{ label: t('detail_optional'), value: reference }] : []),
-        ]}
+        procesando={isProcessing}
+        nombre={selectedContact?.name || formatearTelefonoCR(phone)}
+        telefono={formatearTelefonoCR(phone)}
+        monto={parseFloat(amount || '0')}
+        saldo={balance}
+        referencia={reference || undefined}
+        destinatario={destinatarioDelEnvio}
       />
 
       {/* Receive Money Sheet */}
@@ -1476,93 +1491,25 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         )}
       </BottomSheet>
 
-      {/* Success Sheet */}
+      {/* Envio listo: el estado y el comprobante (ComprobanteDeEnvio). */}
       <BottomSheet
         isOpen={showSuccessSheet}
         onClose={() => setShowSuccessSheet(false)}
         title=""
       >
-        <div className="text-center py-6">
-          {/* El envio que ya estaba hecho no se celebra: sin el brillo, y con su
-              propio titulo. */}
-          <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${envioYaHecho ? '' : 'animate-pulse-glow'} ${lastTransaction?.internal === false ? 'bg-[var(--color-warning-soft)]' : 'bg-[var(--color-success-soft)]'}`}>
-            {lastTransaction?.internal === false ? (
-              <Icons.History size={40} className="text-[var(--color-warning)]" />
-            ) : envioYaHecho ? (
-              <Icons.CheckCircle size={40} className="text-[var(--color-success)]" />
-            ) : (
-              <Icons.Check size={40} className="text-[var(--color-success)]" />
-            )}
-          </div>
-          <h2 className="text-2xl font-black uv-text-primary mb-2 tracking-tight">
-            {lastTransaction?.internal === false
-              ? t('sinpe_external_pending_title')
-              : envioYaHecho
-                ? t('sinpe_ya_hecho')
-                : t('sent_success')}
-          </h2>
-          <p className="uv-text-muted mb-6">
-            {lastTransaction?.internal === false
-              ? t('sinpe_external_pending_desc')
-              : envioYaHecho
-                ? t('sinpe_ya_hecho_desc')
-                : t('sinpe_transfer_success')}
-          </p>
-
-          {lastTransaction && (
-            <div className="uv-surface-2 rounded-2xl p-4 mb-6 text-left">
-              <div className="flex justify-between py-2">
-                <span className="uv-text-muted text-sm">{t('amount')}</span>
-                <span className="font-bold uv-text-primary tabular-nums">
-                  {formatCurrency(lastTransaction.amount)}
-                </span>
-              </div>
-              <div className="flex justify-between py-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted text-sm">{t('sent_to_label')}</span>
-                <span className="font-bold uv-text-primary">
-                  {lastTransaction.name}
-                </span>
-              </div>
-              <div className="flex justify-between py-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                <span className="uv-text-muted text-sm">{t('phone')}</span>
-                <span className="font-bold uv-text-primary tabular-nums">
-                  {formatearTelefonoCR(lastTransaction.phone)}
-                </span>
-              </div>
-              {lastTransaction.reference && (
-                <div className="flex justify-between py-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-                  <span className="uv-text-muted text-sm">{t('detail')}</span>
-                  <span className="font-bold uv-text-primary">
-                    {lastTransaction.reference}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex gap-2.5">
-            <button
-              onClick={() => setShowSuccessSheet(false)}
-              className="flex-1 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-4 rounded-xl font-bold active:scale-[0.98] transition-transform"
-            >
-              {t('close')}
-            </button>
-            <button
-              onClick={() => {
-                if (lastTransaction) {
-                  handleShare(
-                    t('sinpe_receipt'),
-                    `${t('sent_to')} ${lastTransaction.name} (${lastTransaction.phone}) ${formatCurrency(lastTransaction.amount)} - ${t('sinpe_mobile')}${lastTransaction.reference ? ` - ${lastTransaction.reference}` : ''}`
-                  );
-                }
-              }}
-              className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
-            >
-              <Icons.Share size={18} />
-              {t('share')}
-            </button>
-          </div>
-        </div>
+        {lastTransaction && (
+          <ComprobanteDeEnvio
+            envio={lastTransaction}
+            yaEstabaHecho={envioYaHecho}
+            onListo={() => setShowSuccessSheet(false)}
+            onCompartir={() =>
+              handleShare(
+                t('sinpe_receipt'),
+                `${t('sent_to')} ${lastTransaction.name} (${lastTransaction.phone}) ${formatCurrency(lastTransaction.amount)} - ${t('sinpe_mobile')}${lastTransaction.reference ? ` - ${lastTransaction.reference}` : ''}`
+              )
+            }
+          />
+        )}
       </BottomSheet>
 
       {/* High-value MFA challenge → on verify, retry the transfer */}
