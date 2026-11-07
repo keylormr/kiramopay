@@ -9,8 +9,12 @@ import type {
   RespuestaPorEntregar,
   ContactoDeRespuesta,
   RespuestaEnviadaSinConfirmar,
+  AccionDeHistorial,
+  EventoDeHistorial,
 } from '../../repositories/admin.repository';
 import type { PlanPersonal } from '../../repositories/plans.repository';
+import type { DeviceSession } from '../../repositories/sessions.repository';
+import { mapearSesiones, cuantasCerro } from './sessions.http';
 import type { ApiResponse } from '../../types';
 import { apiSuccess } from '../../types';
 import { falla } from './falla';
@@ -296,4 +300,70 @@ export class HttpAdminRepository implements IAdminRepository {
       updatedAt: String(d.updated_at ?? ''),
     });
   }
+
+  async listUserSessions(id: string): Promise<ApiResponse<DeviceSession[]>> {
+    const res = await this.client.get<unknown>(`/api/v1/admin/users/${encodeURIComponent(id)}/sessions`);
+    if (!res.success) return fail(res);
+    // El servidor nunca marca una como actual para el administrador; se fija
+    // aqui tambien para que la pantalla no la proteja por error.
+    return apiSuccess(mapearSesiones(res.data).map((s) => ({ ...s, current: false })));
+  }
+
+  async revokeUserSession(id: string, sessionId: string): Promise<ApiResponse<void>> {
+    const res = await this.client.post<unknown>(
+      `/api/v1/admin/users/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}/revoke`,
+      {},
+    );
+    if (!res.success) return fail(res);
+    return apiSuccess<void>(undefined);
+  }
+
+  async revokeAllUserSessions(id: string): Promise<ApiResponse<number>> {
+    const res = await this.client.post<unknown>(`/api/v1/admin/users/${encodeURIComponent(id)}/sessions/revoke-all`, {});
+    if (!res.success) return fail(res);
+    return apiSuccess(cuantasCerro(res.data));
+  }
+
+  async userHistory(id: string): Promise<ApiResponse<EventoDeHistorial[]>> {
+    const res = await this.client.get<unknown>(`/api/v1/admin/users/${encodeURIComponent(id)}/history?limit=30`);
+    if (!res.success) return fail(res);
+    const filas = Array.isArray(res.data) ? res.data : [];
+    return apiSuccess(
+      filas
+        .filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null && !Array.isArray(r))
+        // Una accion que esta version no sabe contar no se pinta a medias.
+        .filter((r) => ACCIONES_DE_HISTORIAL.includes(r.action as AccionDeHistorial))
+        .map(mapEvento),
+    );
+  }
+}
+
+const ACCIONES_DE_HISTORIAL: readonly AccionDeHistorial[] = [
+  'user_blocked',
+  'user_unblocked',
+  'user_expiry_set',
+  'admin_session_revoked',
+  'admin_sessions_revoked_all',
+  'admin_user_plan_set',
+];
+
+function planOpcional(v: unknown): PlanPersonal | null {
+  return v === 'free' || v === 'plus' || v === 'pro' ? v : null;
+}
+
+function mapEvento(r: Record<string, unknown>): EventoDeHistorial {
+  const sesiones = typeof r.sessions_revoked === 'number' && Number.isFinite(r.sessions_revoked) ? r.sessions_revoked : null;
+  return {
+    id: String(r.id ?? ''),
+    accion: r.action as AccionDeHistorial,
+    actor: typeof r.actor_name === 'string' ? r.actor_name : '',
+    automatico: r.automatic === true,
+    motivo: typeof r.reason === 'string' ? r.reason : '',
+    sesionesCerradas: sesiones,
+    venceEl: typeof r.expires_at === 'string' ? r.expires_at : null,
+    vencimientoQuitado: r.cleared === true,
+    planAntes: planOpcional(r.plan_from),
+    planDespues: planOpcional(r.plan_to),
+    createdAt: String(r.created_at ?? ''),
+  };
 }

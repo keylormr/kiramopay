@@ -379,6 +379,32 @@ input[inputmode='numeric'] {
   }
 }
 
+/* Sesiones y administracion (rediseno fase 2) ─────────────────────────────── */
+
+/* Punto "en uso ahora": un halo verde que late cada 2,4 s. Con movimiento
+   reducido queda quieto. */
+@keyframes kp-vivo {
+  0%   { box-shadow: 0 0 0 0 rgba(25, 195, 125, 0.45); }
+  70%  { box-shadow: 0 0 0 6px rgba(25, 195, 125, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(25, 195, 125, 0); }
+}
+.kp-vivo { animation: kp-vivo 2.4s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .kp-vivo { animation: none; }
+}
+
+/* Resumen de "Dispositivos conectados": la misma tarjeta oscura en los dos
+   temas, con un brillo verde de "todo en orden" en la esquina. */
+.kp-resumen-sesiones {
+  background:
+    radial-gradient(110% 90% at 100% 0%, rgba(25, 195, 125, 0.28) 0%, rgba(25, 195, 125, 0) 55%),
+    linear-gradient(160deg, #12213F 0%, #0B1730 70%);
+}
+
+/* Filas de las tablas del panel: el resaltado de la elegida y del paso del
+   raton, con la curva de la app. */
+.kp-fila { transition: background-color var(--kp-mov-estado) var(--kp-curva); }
+
 /* Hide scrollbar (preserved from previous design) */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

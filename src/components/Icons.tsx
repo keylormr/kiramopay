@@ -298,6 +298,7 @@ const CIRCULO = 'M3.5 12a8.5 8.5 0 1 0 17 0a8.5 8.5 0 1 0-17 0z';
 const BOLSA = 'M5 8h14l-1.2 11a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8z';
 const CASA = 'M4 10.5L12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H5.5A1.5 1.5 0 0 1 4 19z';
 const CUADRO = 'M9 3h6a6 6 0 0 1 6 6v6a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6V9a6 6 0 0 1 6-6z';
+const TELEFONO = 'M9.2 2.5h5.6a3.2 3.2 0 0 1 3.2 3.2v12.6a3.2 3.2 0 0 1-3.2 3.2H9.2A3.2 3.2 0 0 1 6 18.3V5.7a3.2 3.2 0 0 1 3.2-3.2z';
 
 export const IconosLinea = {
   // Navegacion principal
@@ -353,6 +354,24 @@ export const IconosLinea = {
   MenuDesplegar: iconoDeLinea('MenuDesplegar', {
     cuerpo: 'M5.5 4.5h4v15h-4a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z',
     lineas: 'M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2zM9.5 4.5v15M14 9.5l2.5 2.5-2.5 2.5',
+  }),
+
+  // Aparatos de una sesion abierta (ver components/IconoDeDispositivo.tsx).
+  // Android lleva la barra abajo y el iPhone la ranura arriba: es la diferencia
+  // que se reconoce de un vistazo sin dibujar ninguna marca.
+  TelefonoAndroid: iconoDeLinea('TelefonoAndroid', { cuerpo: TELEFONO, lineas: 'M10.5 18h3' }),
+  TelefonoIPhone: iconoDeLinea('TelefonoIPhone', { cuerpo: TELEFONO, lineas: 'M10.5 5.2h3' }),
+  Tableta: iconoDeLinea('Tableta', {
+    cuerpo: 'M6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13A2.5 2.5 0 0 1 6.5 3z',
+    lineas: 'M11 17.8h2',
+  }),
+  Computadora: iconoDeLinea('Computadora', {
+    cuerpo: 'M4.5 4h15A1.5 1.5 0 0 1 21 5.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 14.5v-9A1.5 1.5 0 0 1 4.5 4z',
+    lineas: 'M12 16v4M8.5 20h7',
+  }),
+  Navegador: iconoDeLinea('Navegador', {
+    cuerpo: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+    lineas: 'M3 8.5h18M6 6.3h.01M8.5 6.3h.01',
   }),
 
   // Acciones de dinero

@@ -8956,6 +8956,85 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What was done to one account (admin)
+         * @description Blocks, unblocks, closed sessions, scheduled expiry and plan changes on the account, newest first, with the name of who did each one. Read from the audit trail that every one of those actions already writes; this route records nothing. The trail is written in the background (flushed every two seconds), so an action made a moment ago can take that long to show up. Shares the 30/min per-administrator budget with the rest of account management.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Most events to return (default 30, at most 100). */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["ResourceId"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The history (may be empty) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AdminHistoryEntry"][];
+                    };
+                };
+                /** @description INVALID_ID (id is not a UUID) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description FORBIDDEN (not an administrator) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description USER_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description RATE_LIMITED */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description HISTORY_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/plans/interest": {
         parameters: {
             query?: never;
@@ -11977,6 +12056,37 @@ export interface components {
         SessionsRevoked: {
             /** @example 3 */
             revoked?: number;
+        };
+        /** @description One thing that was done to an account, read from the audit trail. Only the fields each action needs to be told come back; the raw details of the trail, its IP addresses and user agents, do not. */
+        AdminHistoryEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            action: "user_blocked" | "user_unblocked" | "user_expiry_set" | "admin_session_revoked" | "admin_sessions_revoked_all" | "admin_user_plan_set";
+            /**
+             * @description Who did it. Empty when no person did (the expiry sweep blocks with `automatic` true) or when that account no longer exists.
+             * @example Keilor Martinez
+             */
+            actor_name: string;
+            /** @description True for the block the expiry sweep made when the date came. */
+            automatic: boolean;
+            /** @description The reason written when blocking (user_blocked only). */
+            reason?: string;
+            /** @description Sessions closed (user_blocked and admin_sessions_revoked_all). Absent when the trail did not record the count, which is not the same as zero. */
+            sessions_revoked?: number;
+            /**
+             * Format: date-time
+             * @description The scheduled expiry (user_expiry_set, when not cleared).
+             */
+            expires_at?: string;
+            /** @description The expiry was removed (user_expiry_set). */
+            cleared?: boolean;
+            /** @enum {string} */
+            plan_from?: "free" | "plus" | "pro";
+            /** @enum {string} */
+            plan_to?: "free" | "plus" | "pro";
+            /** Format: date-time */
+            created_at: string;
         };
         /** @description The seller is identified by `seller_phone` OR `seller_id` — exactly one is needed. The app sends the phone, because no screen in the app shows anyone's UUID; `seller_id` stays for the B2B clients that already integrated against this route. Either way the account must EXIST: an agreement pointing at nobody can still be funded (the money leaves the buyer's wallet into SYSTEM:ESCROW) and can never be released to anyone. A number with no account is rejected with 422 `ESCROW_SELLER_NOT_FOUND`. */
         EscrowCreateRequest: {

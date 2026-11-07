@@ -1412,6 +1412,9 @@ func main() {
 					r.Get("/admin/users/{id}/sessions", adminUsersHandler.Sessions)
 					r.Post("/admin/users/{id}/sessions/revoke-all", adminUsersHandler.RevokeAllSessions)
 					r.Post("/admin/users/{id}/sessions/{sid}/revoke", adminUsersHandler.RevokeSession)
+					// Lo que se le hizo a la cuenta (bloqueos, sesiones
+					// cerradas, vencimiento, plan), leido del rastro.
+					r.Get("/admin/users/{id}/history", adminUsersHandler.History)
 					// Cola de solicitudes de eliminacion hechas desde la web: ya
 					// verificadas, esperando a que una persona las atienda.
 					r.Get("/admin/account-deletion-requests", accountDeletionHandler.ListarSolicitudes)

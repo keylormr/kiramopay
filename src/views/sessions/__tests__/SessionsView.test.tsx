@@ -95,7 +95,48 @@ describe('SessionsView', () => {
     expect(within(filaOtra).queryByText(otra.createdAt)).toBeNull();
     const legible = new Intl.DateTimeFormat('es-CR', { dateStyle: 'medium', timeStyle: 'short' })
       .format(new Date(otra.createdAt));
-    expect(within(filaOtra).getByText(legible)).toBeInTheDocument();
+    expect(within(filaOtra).getByText(`Se abrió el ${legible}`)).toBeInTheDocument();
+  });
+
+  it('cada aparato lleva el icono de su plataforma y el resumen cuenta las sesiones', async () => {
+    mockApi.sessions.listar.mockResolvedValue({ success: true, data: [esta, otra, tercera] });
+    setup();
+    await screen.findByText('Chrome en Windows');
+
+    expect(screen.getByText('3 sesiones abiertas')).toBeInTheDocument();
+    const icono = (nombre: string) => filaDe(nombre).querySelector('svg[data-icono]')?.getAttribute('data-icono');
+    // Antes las tres llevaban el mismo telefono.
+    expect(icono('Chrome en Windows')).toBe('Computadora');
+    expect(icono('Chrome en Android')).toBe('TelefonoAndroid');
+    expect(icono('Safari en iPad')).toBe('Tableta');
+  });
+
+  it('la app instalada se nombra como app, no como un navegador', async () => {
+    const app: DeviceSession = {
+      ...otra,
+      id: 's-app',
+      deviceName:
+        'Mozilla/5.0 (Linux; Android 14; SM-A546E Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/140.0.7339.51 Mobile Safari/537.36',
+    };
+    mockApi.sessions.listar.mockResolvedValue({ success: true, data: [esta, app] });
+    setup();
+
+    expect(await screen.findByText('App KiramoPay en Android')).toBeInTheDocument();
+    expect(screen.getByText('2 sesiones abiertas')).toBeInTheDocument();
+  });
+
+  it('Cancelar cierra la hoja sin cerrar la sesion', async () => {
+    mockApi.sessions.listar.mockResolvedValue({ success: true, data: [esta, otra] });
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Cerrar: Chrome en Android' }));
+    expect(await screen.findByText(/Tu dinero no se mueve\./)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sí, cerrar' })).toBeNull());
+    expect(mockApi.sessions.cerrar).not.toHaveBeenCalled();
+    expect(screen.getByText('Chrome en Android')).toBeInTheDocument();
   });
 
   it('cierra una sesion una sola vez con dos clics y la quita de la lista', async () => {

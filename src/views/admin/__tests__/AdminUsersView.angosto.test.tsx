@@ -7,7 +7,7 @@ import type { AdminUser } from '@/api/repositories/admin.repository';
 // Administracion, usuarios, a 390 px:
 // - el buscador compartia fila con su boton y el texto de ayuda se cortaba
 //   ("Cédula, correo, teléfono o" ... );
-// - las pestanas quedaban pegadas al borde de su contenedor;
+// - "Eliminaciones" se veia "Eliminaci..." en su pestana;
 // - un usuario sin correo dejaba una linea con el icono del sobre y sin texto.
 const mockApi = vi.hoisted(() => ({
   admin: {
@@ -18,6 +18,10 @@ const mockApi = vi.hoisted(() => ({
     unblockUser: vi.fn(),
     setUserExpiry: vi.fn(),
     setUserPlan: vi.fn(),
+    listUserSessions: vi.fn(),
+    revokeUserSession: vi.fn(),
+    revokeAllUserSessions: vi.fn(),
+    userHistory: vi.fn(),
   },
 }));
 
@@ -56,8 +60,7 @@ async function buscar(usuario: AdminUser) {
   const user = userEvent.setup();
   const view = setup();
   await user.type(screen.getByPlaceholderText('Cédula, correo, teléfono o nombre'), 'keilor{Enter}');
-  await screen.findByText('Keilor Martinez');
-  return view;
+  return { view, ficha: await screen.findByRole('article', { name: 'Keilor Martinez' }) };
 }
 
 const clases = (el: Element) => el.className.toString().split(/\s+/);
@@ -66,23 +69,26 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
   Object.values(mockApi.admin).forEach((fn) => fn.mockReset());
+  mockApi.admin.listUserSessions.mockResolvedValue({ success: true, data: [] });
+  mockApi.admin.userHistory.mockResolvedValue({ success: true, data: [] });
 });
 
 describe('AdminUsersView — la ficha de un usuario sin correo', () => {
-  it('con correo, la ficha lo muestra con su icono', async () => {
-    const { container } = await buscar(persona);
+  it('con correo, la ficha lo muestra con su etiqueta', async () => {
+    const { ficha } = await buscar(persona);
 
-    expect(screen.getByText('k•••••@gmail.com')).toBeInTheDocument();
-    expect(container.querySelector('svg.lucide-mail')).not.toBeNull();
+    expect(within(ficha).getByText('Correo')).toBeInTheDocument();
+    expect(within(ficha).getByText('k•••••@gmail.com')).toBeInTheDocument();
   });
 
-  it('sin correo, no deja una linea con el icono del sobre y sin texto', async () => {
-    const { container } = await buscar({ ...persona, emailMasked: '' });
+  it('sin correo, no deja una fila con la etiqueta y sin dato', async () => {
+    const { ficha } = await buscar({ ...persona, emailMasked: '', username: '' });
 
-    expect(container.querySelector('svg.lucide-mail')).toBeNull();
+    expect(within(ficha).queryByText('Correo')).toBeNull();
+    expect(within(ficha).queryByText('Nombre de usuario')).toBeNull();
     // El resto de la ficha sigue ahi.
-    expect(screen.getByText('••••••930')).toBeInTheDocument();
-    expect(screen.getByText('••••••••1234')).toBeInTheDocument();
+    expect(within(ficha).getByText('••••••930')).toBeInTheDocument();
+    expect(within(ficha).getByText('••••••••1234')).toBeInTheDocument();
   });
 });
 
@@ -96,32 +102,29 @@ describe('AdminUsersView a 390 px', () => {
     expect(clases(campo.parentElement as HTMLElement)).toContain('basis-full');
   });
 
-  it('las pestanas tienen aire a los lados y el texto puede encogerse', () => {
+  // "Eliminaciones" se veia "Eliminaci...". Las etiquetas no se cortan nunca:
+  // van en una sola linea y, si las tres no caben, la fila se desplaza de lado.
+  it('las etiquetas de las pestanas se muestran completas: sin puntos suspensivos', () => {
     setup();
 
-    for (const nombre of ['Buscar', 'Bloqueadas', 'Eliminaciones']) {
-      const pestana = screen.getByRole('tab', { name: new RegExp(nombre) });
-      expect(clases(pestana)).toContain('px-2');
-      expect(clases(pestana)).toContain('min-w-0');
-    }
-  });
-
-  // "Eliminaciones" se veia "Eliminaci..." (tres pestanas en 358 px dejan ~74 px
-  // de texto junto al icono y la etiqueta se cortaba con puntos suspensivos). El
-  // nombre de la pestana se muestra completo: el icono va arriba del texto en
-  // pantalla angosta y la etiqueta puede pasar a una segunda linea.
-  it('las etiquetas de las pestanas se muestran completas: pasan de linea en vez de cortarse', () => {
-    setup();
-
+    const lista = screen.getByRole('tablist');
+    expect(clases(lista)).toContain('overflow-x-auto');
     for (const nombre of ['Buscar', 'Bloqueadas', 'Eliminaciones']) {
       const pestana = screen.getByRole('tab', { name: new RegExp(nombre) });
       const etiqueta = within(pestana).getByText(nombre);
       expect(clases(etiqueta)).not.toContain('truncate');
-      expect(clases(etiqueta)).toContain('break-words');
-      expect(clases(etiqueta)).toContain('text-center');
-      // Icono sobre el texto en angosto; lado a lado cuando hay ancho.
-      expect(clases(pestana)).toContain('flex-col');
-      expect(clases(pestana).some((c) => c.startsWith('sm:flex-row'))).toBe(true);
+      expect(clases(pestana)).toContain('whitespace-nowrap');
+      expect(clases(pestana)).toContain('shrink-0');
+    }
+  });
+
+  it('los botones de la ficha tienen su tamano, no el ancho de la pantalla', async () => {
+    await buscar(persona);
+
+    for (const nombre of ['Bloquear cuenta', 'Programar vencimiento']) {
+      const boton = screen.getByRole('button', { name: new RegExp(nombre) });
+      expect(clases(boton)).not.toContain('w-full');
+      expect(clases(boton)).toContain('inline-flex');
     }
   });
 });
