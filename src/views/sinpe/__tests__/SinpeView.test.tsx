@@ -105,7 +105,7 @@ describe('SinpeView — send', () => {
         idempotencyKey: expect.any(String),
       }),
     );
-    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText(/^Le llegó a /)).toBeInTheDocument();
     expect(mocks.dispatch).toHaveBeenCalled();
   });
 
@@ -131,7 +131,7 @@ describe('SinpeView — send', () => {
       expect(mocks.api.mfa.totpVerify).toHaveBeenCalledWith('123456', 'high_value_tx');
       expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2);
     });
-    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText(/^Le llegó a /)).toBeInTheDocument();
   });
 
   // El envío a un número que NO es de KiramoPay se debita pero NO se entrega:
@@ -156,7 +156,7 @@ describe('SinpeView — send', () => {
     expect(await screen.findByText('Envío en proceso')).toBeInTheDocument();
     expect(screen.getByText(/no pertenece a KiramoPay/)).toBeInTheDocument();
     // Y NO puede decir que se envió.
-    expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Le llegó a /)).not.toBeInTheDocument();
   });
 
   // El backend rechaza los envios a numeros sin cuenta: entregarlos exigiria el
@@ -187,7 +187,7 @@ describe('SinpeView — send', () => {
 
     await openSendSheetAndSubmit(user);
 
-    expect(await screen.findByText('¡Enviado!')).toBeInTheDocument();
+    expect(await screen.findByText(/^Le llegó a /)).toBeInTheDocument();
     expect(screen.queryByText('Envío en proceso')).not.toBeInTheDocument();
   });
 
@@ -1044,7 +1044,7 @@ describe('SinpeView — la llave del envío', () => {
 
     const titulo = await screen.findByText(/Ese envío ya se había hecho/);
     expect(screen.getByText(/No se envió otra vez/)).toBeInTheDocument();
-    expect(screen.queryByText('¡Enviado!')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Le llegó a /)).not.toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ADD_SINPE_TRANSACTION' }));
     // La app no se había enterado del envío: trae del servidor el saldo, los
     // movimientos y el historial SINPE.
@@ -1053,7 +1053,7 @@ describe('SinpeView — la llave del envío', () => {
     expect(mocks.dataSync.refreshSinpe).toHaveBeenCalled();
 
     const aviso = titulo.closest('[role="dialog"]') as HTMLElement;
-    await user.click(within(aviso).getByRole('button', { name: 'Cerrar' }));
+    await user.click(within(aviso).getByRole('button', { name: 'Listo' }));
     await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
     await openSendSheetAndSubmit(user);
     await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(3));
@@ -1069,8 +1069,8 @@ describe('SinpeView — la llave del envío', () => {
     setup();
 
     await openSendSheetAndSubmit(user);
-    const exito = (await screen.findByText('¡Enviado!')).closest('[role="dialog"]') as HTMLElement;
-    await user.click(within(exito).getByRole('button', { name: 'Cerrar' }));
+    const exito = (await screen.findByText(/^Le llegó a /)).closest('[role="dialog"]') as HTMLElement;
+    await user.click(within(exito).getByRole('button', { name: 'Listo' }));
     await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0));
     await openSendSheetAndSubmit(user);
     await waitFor(() => expect(mocks.api.sinpe.send).toHaveBeenCalledTimes(2));

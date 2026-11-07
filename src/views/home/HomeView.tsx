@@ -15,9 +15,6 @@ import { Button } from '../../components/ui';
 import { Transaction, SinpeContact } from '../../types';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { txTitle } from '../../utils/txTitle';
-import { fechaCorta } from '@/utils/fechaPlazo';
-import { estaCompletado, estiloDeEstado, noMovioDinero } from '@/utils/estadoMovimiento';
 import { getApiLayer, MFA_REQUIRED } from '@/api';
 import { refreshAccounts, refreshSinpe, refreshTransactions } from '@/services/dataSync';
 import { llaveDelIntento, soltarIntento } from '@/services/intentoPendiente';
@@ -35,7 +32,6 @@ import {
   textoDeDuracion,
 } from '@/utils/erroresQr';
 import { rellenar } from '@/utils/planes';
-import { saldoTotal, formatearSaldoTotal } from '@/utils/saldoTotal';
 import { nombreDeCuenta } from '@/utils/nombreDeCuenta';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { tryParseContactQr, type ContactQrPayload } from '@/utils/contactQr';
@@ -48,6 +44,13 @@ import { AvisoDelDestinatario, LineaDelDestinatario } from '@/components/Destina
 import { BannerInicio } from '@/components/home/BannerInicio';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
 import { useGastoDelMes } from './useGastoDelMes';
+import { TarjetaDeSaldo } from '@/components/home/TarjetaDeSaldo';
+import { ActividadReciente } from '@/components/home/ActividadReciente';
+import { Icono3D, Ilustracion3D } from '@/components/arte3d/Arte3D';
+import type { NombreIcono3D } from '@/components/arte3d/catalogo';
+import { useCryptoStore } from '@/stores/crypto.store';
+import { useSettingsStore } from '@/stores/settings.store';
+import { useClaseDeVentana } from '@/navegacion/NavegacionAdaptable';
 
 type QRCurrency = 'BTC' | 'ETH' | 'CRC' | 'USD';
 
@@ -88,7 +91,7 @@ interface HomeViewProps {
 
 export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onOpenCrypto, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
   // Los movimientos se refrescan solos cuando llega una notificación en vivo
@@ -242,10 +245,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   
   // El saldo total de la tarjeta principal: todas las cuentas en moneda,
   // llevadas a la moneda base con la tasa de cada una (utils/saldoTotal, el
-  // mismo calculo del Perfil). Una tasa faltante deja el total sin dato; antes
-  // se contaba como 1 y los colones valian dolares.
+  // mismo calculo del Perfil, dentro de TarjetaDeSaldo). Una tasa faltante deja
+  // el total sin dato; antes se contaba como 1 y los colones valian dolares.
   const monedaDelSaldo = state.baseCurrency || 'CRC';
-  const totales = saldoTotal(state.accounts, monedaDelSaldo);
+  const activosCripto = useCryptoStore((s) => s.assets);
+  const saldoOculto = useSettingsStore((s) => s.saldoOculto);
+  // En pantalla ancha la actividad tiene su propia columna y caben mas filas.
+  const expandida = useClaseDeVentana() === 'expandida';
+  const cuantosMovimientos = expandida ? 7 : 4;
 
 
   // Contacto ya guardado bajo ese numero, si lo hay. Mismo criterio que
@@ -612,362 +619,260 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
     return info[ccy];
   };
 
+  // Los accesos a las demas funciones, con su icono 3D. El "?" va como hermano
+  // de la tarjeta, nunca adentro: la tarjeta ya es un <button> y anidar un boton
+  // en otro es HTML invalido. Puesto aqui, se puede preguntar que es una funcion
+  // ANTES de entrar a ella.
+  const atajos: { id: string; icono: NombreIcono3D; rotulo: string; titulo: string; texto: string; ayuda: string; onClick?: () => void }[] = [
+    { id: 'metas', icono: 'metas', rotulo: t('home_savings'), titulo: t('home_savings_view'), texto: t('home_savings_desc'), ayuda: 'savings', onClick: onOpenSavings },
+    { id: 'dividir', icono: 'dividir', rotulo: t('home_split'), titulo: t('home_split_view'), texto: t('home_split_desc'), ayuda: 'splitpay', onClick: onOpenSplitPay },
+    { id: 'puntos', icono: 'recompensas', rotulo: t('home_loyalty'), titulo: t('home_loyalty_view'), texto: t('home_loyalty_desc'), ayuda: 'loyalty', onClick: onOpenLoyalty },
+    { id: 'mercado', icono: 'mercado', rotulo: t('home_marketplace'), titulo: t('home_marketplace_view'), texto: t('home_marketplace_desc'), ayuda: 'marketplace', onClick: onOpenMarketplace },
+    { id: 'tarjetas', icono: 'tarjetas', rotulo: t('home_cards'), titulo: t('home_cards_view'), texto: t('home_cards_desc'), ayuda: 'cards', onClick: onOpenCards },
+  ];
+
+  // Movimientos recientes: el refresco llega solo con la notificacion en vivo
+  // (efecto de arriba). En pantalla ancha caben mas.
+  const bloqueActividad = (
+    <div className="order-3">
+      <ActividadReciente
+        movimientos={state.transactions.slice(0, cuantosMovimientos)}
+        onAbrir={(tx) => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
+        onVerTodo={onViewAllTransactions}
+        formatearMonto={formatCurrency}
+        oculto={saldoOculto}
+      />
+    </div>
+  );
+
   return (
-    <div className="pb-24 pt-4 space-y-6 px-4">
-      
-      {/* Main Balance Card — Unified Vision hero treatment */}
-      <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 uv-shadow-floating text-white">
-        {/* Decorative blur orb */}
-        <div
-          className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
-          style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
-        />
-        <div className="relative flex justify-between items-start mb-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-white/70">
-            {t('total_balance')}
-          </span>
-          <div className="px-2.5 py-1 bg-white/15 backdrop-blur-sm text-white text-[11px] font-bold rounded-full">
-            {state.baseCurrency} · Base
+    // Contenedor: a partir de 44rem de ancho util el Inicio va en dos columnas
+    // (saldo, avisos y accesos a la izquierda; actividad y gasto a la derecha).
+    // En una sola columna, `contents` deshace los dos grupos y queda el orden
+    // de siempre: saldo, avisos, actividad, accesos, cuentas, gasto.
+    //
+    // El orden del DOM es el que recorren el tabulador y el lector de
+    // pantalla, asi que la actividad va en el DOM donde se ve: despues de los
+    // avisos fuera de la clase expandida (telefono y tableta, siempre una
+    // columna) y en la columna derecha dentro de ella. `order` solo cubre el
+    // tramo expandido que todavia no llega a 44rem (menu abierto en ~840 px).
+    <div className="@container/inicio px-4 pb-24 pt-4">
+      <div className="flex flex-col gap-6 @min-[44rem]/inicio:grid @min-[44rem]/inicio:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] @min-[44rem]/inicio:items-start">
+        <div className="contents @min-[44rem]/inicio:flex @min-[44rem]/inicio:flex-col @min-[44rem]/inicio:gap-6">
+          <div className="order-1">
+            <TarjetaDeSaldo
+              cuentas={state.accounts}
+              monedaBase={monedaDelSaldo}
+              cripto={activosCripto}
+              onAgregarDinero={() => setActiveSheet('addMoney')}
+              acciones={[
+                { id: 'enviar', etiqueta: t('send'), onClick: () => onNavigateToSinpe?.('send') },
+                { id: 'recibir', etiqueta: t('receive'), onClick: () => onNavigateToSinpe?.('receive') },
+                { id: 'escanear', etiqueta: t('accion_escanear'), nombreAccesible: t('scan_qr'), onClick: startQRScan },
+                { id: 'cobrar', etiqueta: t('accion_cobrar'), nombreAccesible: t('charge_qr'), onClick: () => setActiveSheet('cobrar') },
+              ]}
+            />
           </div>
-        </div>
-        <div className="relative text-[2.5rem] leading-tight font-black tracking-tight mb-1 tabular-nums">
-          {formatearSaldoTotal(totales.enBase, monedaDelSaldo)}
-        </div>
-        {/* Sin tasa para alguna cuenta no hay total en dolares: la linea de
-            la cifra se va en vez de mostrar una inventada, y en su lugar dice
-            por que el total es un guion. */}
-        <div className="relative text-sm text-white/70 mb-6 tabular-nums">
-          {totales.enBase === null
-            ? t('fx_total_unavailable')
-            : totales.enUsd !== null && rellenar(t('balance_usd_estimate'), { amount: formatearSaldoTotal(totales.enUsd, 'USD') })}
-        </div>
 
-        <div className="relative flex gap-2.5">
-          <button
-            onClick={() => setActiveSheet('addMoney')}
-            className="flex-1 bg-white text-[var(--color-navy-800)] h-11 rounded-xl text-sm font-bold active:scale-[0.98] transition-transform"
-          >
-            {t('add_money')}
-          </button>
-          <button
-            onClick={() => setActiveSheet('addAccount')}
-            aria-label={t('open_new_account')}
-            className="w-11 h-11 flex items-center justify-center bg-white/15 backdrop-blur-sm rounded-xl border border-white/20 text-white active:scale-[0.98] transition-transform"
-          >
-            <Icons.Plus size={18} />
-          </button>
-        </div>
-      </div>
+          {/* Banner de novedades: planes, referidos y QR sin comision. Debajo
+              del saldo, nunca encima ni tapandolo. Se auto-oculta si no hay
+              tarjetas que mostrar; el envoltorio vacio no deja hueco. */}
+          <div className="order-2 empty:hidden">
+            <BannerInicio onAbrirPlanes={onOpenPlans} onCobrarQR={() => setActiveSheet('cobrar')} />
+          </div>
 
-      {/* Banner de novedades: planes, referidos y QR sin comision. Debajo del
-          saldo, nunca encima ni tapandolo. Se auto-oculta si no hay tarjetas
-          que mostrar (todas cerradas por 30 dias, o sin codigo de referidos). */}
-      <BannerInicio onAbrirPlanes={onOpenPlans} onCobrarQR={() => setActiveSheet('cobrar')} />
+          {!expandida && bloqueActividad}
 
-      {/* Acciones rapidas primero: el gesto mas frecuente (enviar, escanear)
-          queda bajo el pulgar apenas abre la app. */}
-      <div>
-        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)]', action: () => onNavigateToSinpe?.('send') },
-            { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => onNavigateToSinpe?.('receive') },
-            { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
-            { icon: Icons.QrCode, label: t('charge_qr'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => setActiveSheet('cobrar') },
-          ].map((action, i) => (
-            <button key={i} onClick={action.action} className="flex flex-col items-center gap-2 group">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${action.color} uv-shadow-soft group-active:scale-[0.94] transition-transform`}>
-                <action.icon size={22} />
-              </div>
-              <span className="text-[11px] font-semibold uv-text-secondary">{action.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Transacciones recientes: cuatro entradas; el refresco llega solo con
-          la notificacion en vivo (efecto de arriba). */}
-      <div>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-base font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h3>
-          <button
-            onClick={onViewAllTransactions}
-            className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-sm font-semibold hover:underline"
-          >
-            {t('view_all')}
-          </button>
-        </div>
-        <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
-          {state.transactions.slice(0, 4).map((tx) => {
-            const incoming = tx.amount > 0;
-            // Lo completado va como siempre, sin rotulo. Lo demas dice su
-            // estado: un SINPE que fallo se veia igual que uno que salio.
-            const completado = estaCompletado(tx);
-            const estado = estiloDeEstado(tx);
-            const tachado = noMovioDinero(tx);
-            return (
-              <div
-                key={tx.id}
-                data-movimiento
-                onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
-                className="flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors cursor-pointer"
-              >
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]'}`}>
-                  {incoming ? <Icons.ArrowDownLeft size={18} /> : <Icons.ArrowUpRight size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold uv-text-primary text-sm truncate">{txTitle(tx, t)}</div>
-                  <div className="text-xs uv-text-muted mt-0.5">{fechaCorta(tx.dateISO, language) || tx.date}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className={`font-bold text-sm tabular-nums ${
-                    tachado ? 'uv-text-muted line-through' : incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'
-                  }`}>
-                    {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
-                  </div>
-                  {!completado && (
-                    <span className={`mt-0.5 inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-bold ${estado.chip}`}>
-                      {t(estado.clave)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Monthly Insights Card */}
-      {(() => {
-        return (
-          <div className="grid grid-cols-2 gap-3">
-            {/* El "?" va como hermano de la tarjeta, nunca adentro: la tarjeta
-                ya es un <button> y anidar un botón en otro es HTML inválido.
-                Puesto aquí, se puede preguntar qué es una función ANTES de
-                entrar a ella. */}
-            <div className="col-span-2 relative">
+          <div className="order-4 grid grid-cols-2 gap-3">
+            <div className="relative col-span-2">
               <button
+                type="button"
                 onClick={onOpenAssistant}
-                className="w-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive flex items-center gap-3"
+                className="kp-toque kp-foco flex w-full items-center gap-3 rounded-[20px] border border-[var(--color-border)] uv-surface-1 p-3.5 pr-12 text-left hover:bg-[var(--color-surface-2)] dark:border-[var(--color-border-dark)] dark:hover:bg-[var(--color-surface-2-dark)]"
               >
-                <div className="w-10 h-10 shrink-0 rounded-xl uv-gradient-brand flex items-center justify-center">
-                  <Icons.MessageCircle size={20} className="text-white" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-base font-extrabold uv-text-primary">{t('assistant_title')}</div>
-                  <div className="text-[11px] uv-text-muted mt-0.5">{t('assistant_card_desc')}</div>
-                </div>
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[15px] bg-[var(--color-surface-3)] dark:bg-[var(--color-surface-3-dark)]">
+                  <Icono3D nombre="asistente" tamano={40} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[15px] font-semibold uv-text-primary">{t('assistant_title')}</span>
+                  <span className="mt-0.5 block text-xs uv-text-secondary">{t('assistant_card_desc')}</span>
+                </span>
               </button>
               <HelpButton topic="assistant" className="absolute top-2 right-2" />
             </div>
 
-            {/* La tarjeta de gastos vivio aqui hasta que "Gastado este mes"
-                (arriba, con curva) la volvio redundante. */}
-            <div className="relative">
-              <button
-                onClick={onOpenSavings}
-                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-success-soft)] flex items-center justify-center">
-                    <Icons.PiggyBank size={16} className="text-[var(--color-success)]" />
-                  </div>
-                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_savings')}</span>
-                </div>
-                <div className="text-lg font-extrabold uv-text-primary">{t('home_savings_view')}</div>
-                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_savings_desc')}</div>
-              </button>
-              <HelpButton topic="savings" className="absolute top-2 right-2" />
-            </div>
+            {atajos.map((a, i) => (
+              // Con un numero impar de accesos, el ultimo ocupa la fila entera
+              // en vez de dejar un hueco al lado.
+              <div key={a.id} className={`relative ${i === atajos.length - 1 && atajos.length % 2 === 1 ? 'col-span-2' : ''}`}>
+                <button
+                  type="button"
+                  onClick={a.onClick}
+                  className="kp-toque kp-foco flex h-full w-full flex-col items-start rounded-[20px] border border-[var(--color-border)] uv-surface-1 p-3.5 text-left hover:bg-[var(--color-surface-2)] dark:border-[var(--color-border-dark)] dark:hover:bg-[var(--color-surface-2-dark)]"
+                >
+                  <span className="flex items-center gap-2 pr-8">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-[var(--color-surface-3)] dark:bg-[var(--color-surface-3-dark)]">
+                      <Icono3D nombre={a.icono} tamano={34} />
+                    </span>
+                    <span className="text-xs font-medium uv-text-muted">{a.rotulo}</span>
+                  </span>
+                  <span className="mt-2.5 block text-[15px] font-semibold uv-text-primary">{a.titulo}</span>
+                  <span className="mt-0.5 block text-xs uv-text-secondary">{a.texto}</span>
+                </button>
+                <HelpButton topic={a.ayuda} className="absolute top-2 right-2" />
+              </div>
+            ))}
+          </div>
 
-            <div className="relative">
-              <button
-                onClick={onOpenSplitPay}
-                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                    <Icons.Users size={16} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
-                  </div>
-                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_split')}</span>
-                </div>
-                <div className="text-lg font-extrabold uv-text-primary">{t('home_split_view')}</div>
-                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_split_desc')}</div>
-              </button>
-              <HelpButton topic="splitpay" className="absolute top-2 right-2" />
-            </div>
+          {/* Cuentas (de lado). La elegida es la moneda base: la del total y la
+              que paga un QR. */}
+          <div className="order-5">
+            <h2 className="mb-3 text-[17px] font-semibold tracking-[-0.01em] uv-text-primary">{t('accounts')}</h2>
+            <div
+              className="flex gap-3 overflow-x-auto no-scrollbar"
+              style={{
+                paddingTop: HOLGURA_SOMBRA_CARRUSEL.arriba,
+                paddingRight: HOLGURA_SOMBRA_CARRUSEL.lado,
+                paddingBottom: HOLGURA_SOMBRA_CARRUSEL.abajo,
+                paddingLeft: HOLGURA_SOMBRA_CARRUSEL.lado,
+                marginTop: -HOLGURA_SOMBRA_CARRUSEL.arriba,
+                marginRight: -HOLGURA_SOMBRA_CARRUSEL.lado,
+                marginBottom: RELLENO_BAJO_EL_CARRUSEL - HOLGURA_SOMBRA_CARRUSEL.abajo,
+                marginLeft: -HOLGURA_SOMBRA_CARRUSEL.lado,
+              }}
+              role="tablist"
+              aria-label={t('accounts')}
+            >
+              {state.accounts.map((acc) => {
+                const selected = state.baseCurrency === acc.ccy;
+                return (
+                  <button
+                    key={acc.ccy}
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => dispatch({ type: 'SET_BASE_CURRENCY', payload: acc.ccy })}
+                    className={`kp-toque kp-foco min-w-[160px] p-4 rounded-[20px] border cursor-pointer flex flex-col justify-between h-32 text-left uv-surface-1 uv-text-primary ${
+                      selected
+                        ? 'border-transparent ring-2 ring-inset ring-[var(--color-primary)] uv-shadow-primary'
+                        : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-shadow-soft hover:uv-shadow-elevated'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <Bandera pais={acc.flag} className="text-2xl" />
+                      <span className="text-[11px] font-semibold uv-text-muted">{acc.ccy}</span>
+                    </div>
+                    <div>
+                      <div className="text-lg font-semibold truncate kp-num">
+                        {saldoOculto ? (
+                          <>
+                            <span aria-hidden="true">••••</span>
+                            <span className="sr-only">{t('saldo_oculto')}</span>
+                          </>
+                        ) : (
+                          formatCurrency(acc.balance, acc.ccy)
+                        )}
+                      </div>
+                      <div className="text-xs truncate uv-text-muted">{nombreDeCuenta(acc, t)}</div>
+                    </div>
+                  </button>
+                );
+              })}
 
-            <div className="relative">
+              {/* Add Account Button */}
               <button
-                onClick={onOpenLoyalty}
-                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
+                onClick={() => setActiveSheet('addAccount')}
+                className="kp-toque kp-foco min-w-[100px] h-32 flex flex-col items-center justify-center rounded-[20px] border-2 border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-strong-dark)] uv-text-muted hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
-                    <Icons.Award size={16} className="text-[var(--color-accent)]" />
-                  </div>
-                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_loyalty')}</span>
+                <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-2">
+                  <Icons.Plus size={20} />
                 </div>
-                <div className="text-lg font-extrabold uv-text-primary">{t('home_loyalty_view')}</div>
-                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_loyalty_desc')}</div>
+                <span className="text-xs font-semibold">{t('add_new')}</span>
               </button>
-              <HelpButton topic="loyalty" className="absolute top-2 right-2" />
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={onOpenMarketplace}
-                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                    <Icons.ShoppingCart size={16} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
-                  </div>
-                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_marketplace')}</span>
-                </div>
-                <div className="text-lg font-extrabold uv-text-primary">{t('home_marketplace_view')}</div>
-                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_marketplace_desc')}</div>
-              </button>
-              <HelpButton topic="marketplace" className="absolute top-2 right-2" />
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={onOpenCards}
-                className="w-full h-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left card-interactive"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-accent-soft)] flex items-center justify-center">
-                    <Icons.Card size={16} className="text-[var(--color-accent)]" />
-                  </div>
-                  <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_cards')}</span>
-                </div>
-                <div className="text-lg font-extrabold uv-text-primary">{t('home_cards_view')}</div>
-                <div className="text-[10px] uv-text-muted mt-0.5">{t('home_cards_desc')}</div>
-              </button>
-              <HelpButton topic="cards" className="absolute top-2 right-2" />
             </div>
           </div>
-        );
-      })()}
+        </div>
 
-      {/* Accounts List (Horizontal Scroll) */}
-      <div>
-        <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('accounts')}</h3>
-        <div
-          className="flex gap-3 overflow-x-auto no-scrollbar"
-          style={{
-            paddingTop: HOLGURA_SOMBRA_CARRUSEL.arriba,
-            paddingRight: HOLGURA_SOMBRA_CARRUSEL.lado,
-            paddingBottom: HOLGURA_SOMBRA_CARRUSEL.abajo,
-            paddingLeft: HOLGURA_SOMBRA_CARRUSEL.lado,
-            marginTop: -HOLGURA_SOMBRA_CARRUSEL.arriba,
-            marginRight: -HOLGURA_SOMBRA_CARRUSEL.lado,
-            marginBottom: RELLENO_BAJO_EL_CARRUSEL - HOLGURA_SOMBRA_CARRUSEL.abajo,
-            marginLeft: -HOLGURA_SOMBRA_CARRUSEL.lado,
-          }}
-          role="tablist"
-          aria-label={t('accounts')}
-        >
-          {state.accounts.map((acc) => {
-            const selected = state.baseCurrency === acc.ccy;
-            return (
-              <button
-                key={acc.ccy}
-                role="tab"
-                aria-selected={selected}
-                onClick={() => dispatch({ type: 'SET_BASE_CURRENCY', payload: acc.ccy })}
-                className={`min-w-[160px] p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between h-32 text-left ${
-                  selected
-                    ? 'uv-gradient-brand text-white border-transparent uv-shadow-primary'
-                    : 'uv-surface-1 uv-text-primary uv-shadow-soft hover:uv-shadow-elevated'
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <Bandera pais={acc.flag} className="text-2xl" />
-                  <span className={`text-[11px] font-bold uppercase tracking-wider ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{acc.ccy}</span>
-                </div>
-                <div>
-                  <div className="text-lg font-bold truncate tabular-nums">{formatCurrency(acc.balance, acc.ccy)}</div>
-                  <div className={`text-xs truncate ${selected ? 'text-white/70' : 'uv-text-muted'}`}>{nombreDeCuenta(acc, t)}</div>
-                </div>
-              </button>
-            );
-          })}
+        <div className="contents @min-[44rem]/inicio:flex @min-[44rem]/inicio:flex-col @min-[44rem]/inicio:gap-6">
+          {expandida && bloqueActividad}
 
-          {/* Add Account Button */}
+          {/* Gastado este mes: al final a pedido del dueno, el resumen del
+              gasto es consulta ocasional, no lo primero del dia. Las cifras son
+              las de Analisis (useGastoDelMes): el mismo resumen del servidor. */}
           <button
-            onClick={() => setActiveSheet('addAccount')}
-            className="min-w-[100px] h-32 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--color-border-strong)] dark:border-[var(--color-border-dark)] uv-text-muted hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors"
+            onClick={onOpenAnalytics}
+            aria-busy={gastoMes.estado === 'cargando'}
+            className="order-6 kp-toque kp-foco w-full text-left uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]"
           >
-            <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-2">
-              <Icons.Plus size={20} />
+            {/* Envuelve en vez de recortar: en idiomas largos la comparacion baja
+                de linea y el monto se sigue leyendo completo. */}
+            <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-[var(--color-surface-3)] dark:bg-[var(--color-surface-3-dark)]">
+                  <Icono3D nombre="analisis" tamano={34} />
+                </span>
+                <div>
+                  <p className="text-[13px] font-medium uv-text-secondary">{t('home_spent_month')}</p>
+                  {gastoMes.estado === 'cargando' ? (
+                    // Mientras llega el resumen no hay cifra: un cero aqui se leeria
+                    // como "no gastaste nada".
+                    <div className="h-8 w-36 mt-0.5 rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] animate-pulse" aria-hidden="true" />
+                  ) : gastoMes.estado === 'sin_datos' ? (
+                    <p className="mt-1 flex items-start gap-1.5 text-sm uv-text-secondary">
+                      <Icons.AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+                      {t('home_spent_failed')}
+                    </p>
+                  ) : (
+                    <p className="text-2xl font-semibold tracking-[-0.02em] uv-text-primary kp-num mt-0.5">
+                      {saldoOculto ? (
+                        // El ojo de la tarjeta de saldo tapa todas las cifras
+                        // del Inicio, no solo el saldo.
+                        <>
+                          <span aria-hidden="true">••••••</span>
+                          <span className="sr-only">{t('monto_oculto')}</span>
+                        </>
+                      ) : (
+                        formatCurrency(gastoMes.gastado, gastoMes.moneda)
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {gastoMes.variacion !== null && Math.abs(gastoMes.variacion) >= 1 && (() => {
+                const Icono = gastoMes.variacion <= 0 ? Icons.TrendingDown : Icons.TrendingUp;
+                return (
+                  <span className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full tabular-nums ${gastoMes.variacion <= 0 ? 'uv-chip-success' : 'uv-chip-danger'}`}>
+                    <Icono size={12} aria-hidden="true" />
+                    {Math.abs(gastoMes.variacion).toFixed(0)}% {t('home_vs_last_month')}
+                  </span>
+                );
+              })()}
             </div>
-            <span className="text-xs font-bold">{t('add_new')}</span>
+            {/* La curva no lleva cifras, pero al tocarla las muestra: con el
+                saldo oculto no se dibuja. */}
+            {!saldoOculto && gastoMes.acumulado.length >= 2 && gastoMes.gastado > 0 && (
+              <GraficoArea
+                puntos={gastoMes.acumulado}
+                etiquetas={gastoMes.dias.map((d) => `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`)}
+                alto={72}
+                className="mt-2 -mx-1"
+                formato={(v) => formatCurrency(v, gastoMes.moneda)}
+                titulo={t('home_spent_month')}
+              />
+            )}
+            {gastoMes.estado === 'respaldo' && (
+              <p className="mt-2 flex items-start gap-1.5 text-[11px] uv-text-muted">
+                <Icons.Info size={13} className="shrink-0 mt-px" aria-hidden="true" />
+                {t('analytics_offline')}
+              </p>
+            )}
+            {gastoMes.otrasMonedas > 0 && (
+              <p className="mt-2 text-[11px] uv-text-muted">
+                {t('other_currency_note').replace('{n}', String(gastoMes.otrasMonedas))}
+              </p>
+            )}
           </button>
         </div>
       </div>
-
-      {/* Gastado este mes — al final a pedido del dueno: el resumen del
-          gasto es consulta ocasional, no lo primero del dia. Las cifras son
-          las de Analisis (useGastoDelMes): el mismo resumen del servidor. */}
-      <button
-        onClick={onOpenAnalytics}
-        aria-busy={gastoMes.estado === 'cargando'}
-        className="w-full text-left uv-surface-1 rounded-2xl uv-shadow-soft border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 card-interactive"
-      >
-        {/* Envuelve en vez de recortar: en idiomas largos la comparacion baja
-            de linea y el monto se sigue leyendo completo. */}
-        <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1.5">
-          <div>
-            <p className="text-[11px] font-bold uv-text-muted uppercase tracking-wider">{t('home_spent_month')}</p>
-            {gastoMes.estado === 'cargando' ? (
-              // Mientras llega el resumen no hay cifra: un cero aqui se leeria
-              // como "no gastaste nada".
-              <div className="h-8 w-36 mt-0.5 rounded-lg bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] animate-pulse" aria-hidden="true" />
-            ) : gastoMes.estado === 'sin_datos' ? (
-              <p className="mt-1 flex items-start gap-1.5 text-sm uv-text-secondary">
-                <Icons.AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
-                {t('home_spent_failed')}
-              </p>
-            ) : (
-              <p className="text-2xl font-black uv-text-primary tabular-nums mt-0.5">
-                {formatCurrency(gastoMes.gastado, gastoMes.moneda)}
-              </p>
-            )}
-          </div>
-          {gastoMes.variacion !== null && Math.abs(gastoMes.variacion) >= 1 && (() => {
-            const Icono = gastoMes.variacion <= 0 ? Icons.TrendingDown : Icons.TrendingUp;
-            return (
-              <span className={`shrink-0 inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full tabular-nums ${gastoMes.variacion <= 0 ? 'uv-chip-success' : 'uv-chip-danger'}`}>
-                <Icono size={12} aria-hidden="true" />
-                {Math.abs(gastoMes.variacion).toFixed(0)}% {t('home_vs_last_month')}
-              </span>
-            );
-          })()}
-        </div>
-        {gastoMes.acumulado.length >= 2 && gastoMes.gastado > 0 && (
-          <GraficoArea
-            puntos={gastoMes.acumulado}
-            etiquetas={gastoMes.dias.map((d) => `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}`)}
-            alto={72}
-            className="mt-2 -mx-1"
-            formato={(v) => formatCurrency(v, gastoMes.moneda)}
-            titulo={t('home_spent_month')}
-          />
-        )}
-        {gastoMes.estado === 'respaldo' && (
-          <p className="mt-2 flex items-start gap-1.5 text-[11px] uv-text-muted">
-            <Icons.Info size={13} className="shrink-0 mt-px" aria-hidden="true" />
-            {t('analytics_offline')}
-          </p>
-        )}
-        {gastoMes.otrasMonedas > 0 && (
-          <p className="mt-2 text-[11px] uv-text-muted">
-            {t('other_currency_note').replace('{n}', String(gastoMes.otrasMonedas))}
-          </p>
-        )}
-      </button>
 
       {/* --- Bottom Sheets --- */}
 
@@ -1180,10 +1085,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           title={payResult ? t('payment_done') : t('payment_detected')}
         >
           {payResult ? (
-            <div className="flex flex-col items-center space-y-4 py-4">
-              <div className="w-16 h-16 rounded-full bg-[var(--color-success-soft)] flex items-center justify-center">
-                <Icons.Check size={32} className="text-[var(--color-success)]" />
-              </div>
+            <div className="flex flex-col items-center space-y-4 py-2">
+              <Ilustracion3D nombre="pagoListo" tamano={136} prioritaria className="kp-aparece" />
               {/* El monto con el formato de la app, como el resto de las
                   pantallas. El titulo de la hoja ya dice "Pago realizado": bajo
                   el monto va a quien se le pago, no la misma frase otra vez. */}
@@ -1357,9 +1260,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
 
             {envioListo ? (
               <div className="flex flex-col items-center py-4 gap-3">
-                <div className="w-14 h-14 rounded-full bg-[var(--color-success-soft)] text-[var(--color-success)] flex items-center justify-center">
-                  {envioYaHecho ? <Icons.CheckCircle size={28} /> : <Icons.Check size={28} />}
-                </div>
+                {/* La repeticion no se celebra: sin la ilustracion de envio listo. */}
+                {envioYaHecho ? (
+                  <div className="w-14 h-14 rounded-full bg-[var(--color-success-soft)] text-[var(--color-success)] flex items-center justify-center">
+                    <Icons.CheckCircle size={28} />
+                  </div>
+                ) : (
+                  <Ilustracion3D nombre="envioListo" tamano={136} prioritaria className="kp-aparece" />
+                )}
                 {/* La repeticion lo dice en el cuerpo y no en el titulo de la
                     hoja, que va en una sola linea y se recortaria. */}
                 {envioYaHecho && (

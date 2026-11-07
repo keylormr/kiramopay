@@ -734,3 +734,52 @@ input[type='number']::-webkit-inner-spin-button {
 .kp-calendario .rdp-day_button { font-size: 14px; font-weight: 500; }
 .kp-calendario .rdp-day_button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .kp-calendario .rdp-today:not(.rdp-selected) .rdp-day_button { font-weight: 800; }
+
+/* Inicio, envio y comprobante (rediseno fase 3) ──────────────────────────── */
+
+/* Tarjeta de saldo "metal": oscura en los dos temas, como una tarjeta fisica.
+   El brillo de 1 px arriba y el borde azul al 10 % la separan del fondo sin
+   subirle el brillo a la superficie. */
+.kp-tarjeta-metal {
+  background: linear-gradient(155deg, #18294F 0%, #0D1833 45%, #070F22 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 1px rgba(125, 170, 255, 0.10),
+    0 24px 44px -18px rgba(0, 0, 0, 0.85);
+}
+:root:not(.dark) .kp-tarjeta-metal {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 1px rgba(125, 170, 255, 0.10),
+    0 18px 36px -14px rgba(7, 13, 28, 0.45);
+}
+
+/* Un reflejo que cruza la tarjeta cada 6 s. Con movimiento reducido no esta. */
+@keyframes kp-brillo {
+  0% { transform: translateX(-140%) skewX(-18deg); }
+  55%, 100% { transform: translateX(420%) skewX(-18deg); }
+}
+.kp-brillo {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0));
+  animation: kp-brillo 6s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+/* La cifra entra de abajo al cambiar de pestana o al mostrarla. */
+@keyframes kp-cifra-entra {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.kp-cifra-entra { animation: kp-cifra-entra var(--kp-mov-estado) var(--kp-curva) both; }
+
+/* Comprobante: la ilustracion aparece con una escala corta. */
+@keyframes kp-aparece {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.kp-aparece { animation: kp-aparece var(--kp-mov-hoja) var(--kp-curva) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .kp-brillo { animation: none; display: none; }
+  .kp-cifra-entra,
+  .kp-aparece { animation: none; }
+}

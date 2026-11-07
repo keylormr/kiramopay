@@ -4,6 +4,7 @@ import { LanguageProvider } from '@/i18n/LanguageContext';
 import { encodeContactQr } from '@/utils/contactQr';
 import { HomeView } from '../home/HomeView';
 import { precargarIdioma } from '@/test/idiomas';
+import { useSettingsStore } from '@/stores/settings.store';
 
 // Sin esto, el banner de Inicio llama al adaptador mock real (getReferrals)
 // y su resolucion asincrona llega despues de que el test ya afirmo, lo que
@@ -141,10 +142,13 @@ describe('HomeView', () => {
 
   it('should render the total balance section', () => {
     renderHomeView();
+    // Rotulo en frase normal (sin mayusculas forzadas) y sin el chip
+    // "CRC · Base": la tarjeta lleva pestanas Total, Colones, Dolares, Cripto.
     expect(screen.getByText('Saldo total')).toBeInTheDocument();
-    // The base currency badge — rendered as "CRC · Base" (separator added in
-    // the Unified Vision design refactor); match flexibly on the separator.
-    expect(screen.getByText(/CRC.*Base/)).toBeInTheDocument();
+    expect(screen.queryByText(/CRC.*Base/)).not.toBeInTheDocument();
+    const pestanas = screen.getAllByRole('tab').filter((p) => p.closest('section[aria-label="Saldo"]'));
+    expect(pestanas.map((p) => p.textContent)).toEqual(['Total', 'Colones', 'Dólares', 'Cripto']);
+    expect(pestanas[0]).toHaveAttribute('aria-selected', 'true');
   });
 
   it('should display the formatted balance for the base account', () => {
@@ -157,11 +161,12 @@ describe('HomeView', () => {
 
   it('should render the quick actions section with all four buttons', () => {
     renderHomeView();
-    expect(screen.getByText('Acciones rápidas')).toBeInTheDocument();
-    expect(screen.getByText('Enviar')).toBeInTheDocument();
-    expect(screen.getByText('Recibir')).toBeInTheDocument();
-    expect(screen.getByText('Escanear QR')).toBeInTheDocument();
-    expect(screen.getByText('Cobrar con QR')).toBeInTheDocument();
+    // Dentro de la tarjeta de saldo, con etiqueta corta y nombre completo.
+    const acciones = within(screen.getByRole('navigation', { name: 'Acciones rápidas' }));
+    expect(acciones.getByRole('button', { name: 'Enviar' })).toBeInTheDocument();
+    expect(acciones.getByRole('button', { name: 'Recibir' })).toBeInTheDocument();
+    expect(acciones.getByRole('button', { name: 'Escanear QR' })).toHaveTextContent('Escanear');
+    expect(acciones.getByRole('button', { name: 'Cobrar con QR' })).toHaveTextContent('Cobrar');
   });
 
   it('should render the accounts section with all accounts', () => {
@@ -181,6 +186,25 @@ describe('HomeView', () => {
     renderHomeView();
     expect(screen.getByText('Transacciones recientes')).toBeInTheDocument();
     expect(screen.getByText('Ver todo')).toBeInTheDocument();
+  });
+
+  it('en una columna el orden del DOM es el que se ve: la actividad antes que los accesos', () => {
+    renderHomeView();
+    const actividad = screen.getByRole('heading', { name: 'Transacciones recientes' });
+    const asistente = screen.getByText('Pregúntame sobre tus finanzas').closest('button') as HTMLElement;
+    expect(actividad.compareDocumentPosition(asistente) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('el ojo de la tarjeta tapa tambien los montos de la actividad', () => {
+    useSettingsStore.setState({ saldoOculto: true });
+    try {
+      renderHomeView();
+      const actividad = screen.getByRole('heading', { name: 'Transacciones recientes' }).closest('section') as HTMLElement;
+      expect(within(actividad).getAllByText('Monto oculto').length).toBeGreaterThan(0);
+      expect(within(actividad).queryByText(/₡|\$/)).not.toBeInTheDocument();
+    } finally {
+      useSettingsStore.setState({ saldoOculto: false });
+    }
   });
 
   it('should display transaction titles and dates', () => {
@@ -214,7 +238,7 @@ describe('HomeView', () => {
     renderHomeView();
     // English ships as a lazily-loaded chunk; wait for it before asserting.
     expect(await screen.findByText('Total Balance')).toBeInTheDocument();
-    expect(screen.getByText('Quick Actions')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Quick Actions' })).toBeInTheDocument();
     expect(screen.getByText('Accounts')).toBeInTheDocument();
     expect(screen.getByText('Recent Transactions')).toBeInTheDocument();
     expect(screen.getByText('View All')).toBeInTheDocument();

@@ -552,6 +552,14 @@ const Layout = () => {
     return <LockScreen />;
   }
 
+  // La columna del contenido: 42rem para todo, salvo el Inicio personal en
+  // pantalla ancha, que se abre en dos columnas (saldo y acciones a un lado,
+  // actividad al otro) y necesita hasta 76rem. La barra superior va en la misma
+  // columna para que el titulo y la campana queden sobre los bordes del
+  // contenido.
+  const anchoDeColumna =
+    claseDeVentana === 'expandida' && !businessMode && activeTab === 'home' ? 'max-w-[76rem]' : 'max-w-2xl';
+
   const renderContent = () => {
     // Business mode replaces the personal tabs entirely: the owner is acting as
     // the shop, so the wallet/crypto/services surfaces do not apply.
@@ -628,7 +636,7 @@ const Layout = () => {
           arriba del derecho, no en las puntas de la ventana. pt-safe va en la
           misma caja que min-h-14, como antes: con muesca la barra mide
           max(56, margen + 44) y no margen + 56. */}
-      <div className={`flex min-h-14 items-center justify-between gap-2 px-4 pt-safe ${claseDeVentana !== 'compacta' ? 'mx-auto w-full max-w-2xl' : ''}`}>
+      <div className={`flex min-h-14 items-center justify-between gap-2 px-4 pt-safe ${claseDeVentana !== 'compacta' ? `mx-auto w-full ${anchoDeColumna}` : ''}`}>
         {claseDeVentana !== 'compacta' ? (
           // Con riel o menu lateral, la marca y el cambio de perfil ya estan en
           // la navegacion: la barra dice donde esta la persona.
@@ -701,7 +709,7 @@ const Layout = () => {
 
       {/* Content Area. En plegables a medio abrir, kp-contenido-segmentado
           deja el contenido de un lado del pliegue (index.css). */}
-      <main className="kp-contenido-segmentado flex-1 relative max-w-2xl mx-auto w-full overflow-x-hidden">
+      <main className={`kp-contenido-segmentado flex-1 relative ${anchoDeColumna} mx-auto w-full overflow-x-hidden`}>
         <Suspense fallback={<LoadingSkeleton />}>
           {renderContent()}
         </Suspense>

@@ -11,9 +11,12 @@ interface MarcaKiramoProps {
   /** Tamano del contenedor en px; la marca ocupa ~62% (como en el icono). */
   size?: number;
   className?: string;
+  /** Toda en blanco: para la marca de agua de la tarjeta de saldo, donde el
+   *  remate naranja al 6 % no se distingue y solo ensucia el tono. */
+  monocromo?: boolean;
 }
 
-export const MarcaKiramo: React.FC<MarcaKiramoProps> = ({ size = 28, className = '' }) => (
+export const MarcaKiramo: React.FC<MarcaKiramoProps> = ({ size = 28, className = '', monocromo = false }) => (
   <svg
     width={size}
     height={size}
@@ -23,8 +26,8 @@ export const MarcaKiramo: React.FC<MarcaKiramoProps> = ({ size = 28, className =
     focusable="false"
   >
     <polygon points="178.5,256 322.3,112.3 371.7,161.7 277.5,256 371.7,350.3 322.3,399.7" fill="#FFFFFF" />
-    <polygon points="261.4,173.1 322.3,112.3 371.7,161.7 310.9,222.6" fill="#FF8A2B" />
-    <polygon points="220,214.5 236,198.5 236,313.5 220,297.5" fill="#DCE6F5" />
+    <polygon points="261.4,173.1 322.3,112.3 371.7,161.7 310.9,222.6" fill={monocromo ? '#FFFFFF' : '#FF8A2B'} />
+    <polygon points="220,214.5 236,198.5 236,313.5 220,297.5" fill={monocromo ? '#FFFFFF' : '#DCE6F5'} />
     <rect x="150" y="137" width="70" height="238" fill="#FFFFFF" />
   </svg>
 );

@@ -5,6 +5,7 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { Icons } from '@/components/Icons';
+import { Ilustracion3D } from '@/components/arte3d/Arte3D';
 import { BottomSheet } from '@/components/BottomSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import {
@@ -528,9 +529,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 uv-text-muted">
-            <div className="w-20 h-20 rounded-3xl uv-surface-2 flex items-center justify-center mb-4">
-              <Icons.Receipt size={32} className="opacity-40" />
-            </div>
+            <Ilustracion3D nombre="sinMovimientos" tamano={136} className="mb-3" />
             <p className="text-lg font-bold mb-1 uv-text-primary">{t('no_transactions_yet')}</p>
             <p className="text-sm">{search ? t('search_transactions') : ''}</p>
           </div>

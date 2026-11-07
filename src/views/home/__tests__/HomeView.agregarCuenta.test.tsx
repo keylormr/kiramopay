@@ -86,14 +86,13 @@ describe('HomeView — Agregar cuenta', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it('el boton + del saldo abre la misma hoja honesta', async () => {
-    const user = userEvent.setup();
+  // El "+" que estaba junto a "Agregar dinero" se fue con la tarjeta de saldo
+  // del rediseno (fase 3): la hoja se abre desde "Agregar" en Cuentas, y la
+  // tarjeta no ofrece abrir cuentas.
+  it('la tarjeta de saldo ya no tiene el boton + de abrir cuenta', () => {
     pintar();
 
-    await user.click(screen.getByRole('button', { name: 'Abrir nueva cuenta' }));
-
-    expect(await screen.findByText('Por ahora, colones y dólares')).toBeInTheDocument();
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Abrir nueva cuenta' })).not.toBeInTheDocument();
   });
 
   it('a quien busca cripto lo lleva a la seccion donde se compra', async () => {

@@ -377,6 +377,25 @@ export const IconosLinea = {
   // Acciones de dinero
   Enviar: iconoDeLinea('Enviar', { cuerpo: CUADRO, lineas: 'M9.5 14.5l5-5M10.5 9.5h4v4' }),
   Recibir: iconoDeLinea('Recibir', { cuerpo: CUADRO, lineas: 'M14.5 9.5l-5 5M13.5 14.5h-4v-4' }),
+  Escanear: iconoDeLinea('Escanear', {
+    cuerpo: 'M10 7.5h4a2.5 2.5 0 0 1 2.5 2.5v4a2.5 2.5 0 0 1-2.5 2.5h-4A2.5 2.5 0 0 1 7.5 14v-4A2.5 2.5 0 0 1 10 7.5z',
+    lineas: 'M3.5 8V6.5a3 3 0 0 1 3-3H8M16 3.5h1.5a3 3 0 0 1 3 3V8M20.5 16v1.5a3 3 0 0 1-3 3H16M8 20.5H6.5a3 3 0 0 1-3-3V16',
+  }),
+  Cobrar: iconoDeLinea('Cobrar', {
+    cuerpo: 'M5.5 13.5h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 4 19v-4a1.5 1.5 0 0 1 1.5-1.5zM15 4h4a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 19 11h-4a1.5 1.5 0 0 1-1.5-1.5v-4A1.5 1.5 0 0 1 15 4z',
+    lineas: 'M5.5 4h4A1.5 1.5 0 0 1 11 5.5v4A1.5 1.5 0 0 1 9.5 11h-4A1.5 1.5 0 0 1 4 9.5v-4A1.5 1.5 0 0 1 5.5 4zM14 14h2.5v2.5M20 14v.01M14 20h.01M17.5 20H20v-2.5',
+  }),
+  AgregarDinero: iconoDeLinea('AgregarDinero', { cuerpo: CIRCULO, lineas: 'M12 8v8M8 12h8' }),
+
+  // Saldo visible u oculto
+  Ojo: iconoDeLinea('Ojo', {
+    cuerpo: 'M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z',
+    lineas: 'M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0',
+  }),
+  OjoTachado: iconoDeLinea('OjoTachado', {
+    cuerpo: 'M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z',
+    lineas: 'M3 3l18 18M10.6 5.1A9.8 9.8 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.9 8.4 2.5 12 2.5 12S6 19 12 19a9.6 9.6 0 0 0 4.4-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2',
+  }),
   Banco: iconoDeLinea('Banco', {
     cuerpo: 'M3.5 8.5L12 4l8.5 4.5z',
     lineas: 'M5.5 11.5v6M9.8 11.5v6M14.2 11.5v6M18.5 11.5v6M3.5 20.5h17',
