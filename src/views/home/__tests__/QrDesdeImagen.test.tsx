@@ -145,7 +145,7 @@ describe('Pagar un QR elegido desde una imagen', () => {
     await screen.findByText('Soda Tica');
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
 
     await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(1));
     expect(mocks.scanAndPay).toHaveBeenCalledWith(expect.objectContaining({ qrData: KP }));

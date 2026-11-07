@@ -56,7 +56,7 @@ describe('TransactionDetailSheet: tipo de movimiento', () => {
     ['p2p_send', 'Pago dividido enviado'],
     ['crypto_buy', 'Compra de cripto'],
     ['crypto_sell', 'Venta de cripto'],
-    ['savings_deposit', 'Depósito a ahorro'],
+    ['savings_deposit', 'Aporte a meta'],
     ['merchant_withdrawal', 'Retiro del negocio'],
     ['refund', 'Reembolso'],
   ])('%s se dice "%s"', (kind, esperado) => {

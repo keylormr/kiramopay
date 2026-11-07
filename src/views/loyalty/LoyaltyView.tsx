@@ -236,7 +236,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                       <TierIcon size={24} className={tierConfig?.texto} />
                     </div>
                     <div>
-                      <p className={`text-xs font-bold uppercase tracking-wider ${tierConfig?.texto ?? 'uv-text-secondary'}`}>
+                      <p className={`text-xs font-semibold ${tierConfig?.texto ?? 'uv-text-secondary'}`}>
                         {accountFailed ? t('loyalty_unavailable') : t('loyalty_tier').replace('{nivel}', nombreDelNivel(account?.tier || 'bronze'))}
                       </p>
                       <p className="text-3xl font-black uv-text-primary">
@@ -247,11 +247,11 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('loyalty_lifetime')}</p>
+                    <p className="text-[10px] font-semibold text-gray-500">{t('loyalty_lifetime')}</p>
                     <p className="text-sm font-extrabold uv-text-primary">{accountFailed ? SIN_DATO : `${formatPoints(account?.lifetimePoints || 0)} pts`}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('loyalty_available')}</p>
+                    <p className="text-[10px] font-semibold text-gray-500">{t('loyalty_available')}</p>
                     <p className="text-sm font-extrabold text-green-600">{accountFailed ? SIN_DATO : `${formatPoints(account?.availablePoints || 0)} pts`}</p>
                   </div>
                 </div>

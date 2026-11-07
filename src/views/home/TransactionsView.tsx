@@ -5,7 +5,8 @@ import { useLanguage } from '@/i18n/LanguageContext';
 import { txTitle } from '@/utils/txTitle';
 import { fechaCorta } from '@/utils/fechaPlazo';
 import { Icons } from '@/components/Icons';
-import { Ilustracion3D } from '@/components/arte3d/Arte3D';
+import { EstadoVacio } from '@/components/EstadoVacio';
+import { Monto, BotonOcultarMontos, useMontosOcultos } from '@/components/montos/MontoOcultable';
 import { BottomSheet } from '@/components/BottomSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import {
@@ -343,15 +344,19 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
         >
           <Icons.ChevronLeft size={20} />
         </button>
-        <h1 className="text-lg font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h1>
-        <button
-          onClick={() => setShowExportSheet(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] rounded-lg text-sm font-semibold hover:bg-[var(--color-primary)] hover:text-white transition-colors"
-          aria-label={t('export_options')}
-        >
-          <Icons.Download size={16} />
-          {t('export_transactions')}
-        </button>
+        <h1 className="min-w-0 flex-1 truncate px-2 text-lg font-semibold uv-text-primary tracking-tight">{t('recent_transactions')}</h1>
+        <div className="flex shrink-0 items-center gap-1">
+          <BotonOcultarMontos />
+          <button
+            onClick={() => setShowExportSheet(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] rounded-lg text-sm font-semibold hover:bg-[var(--color-primary)] hover:text-white transition-colors"
+            aria-label={t('export_options')}
+          >
+            <Icons.Download size={16} />
+            {/* En un telefono angosto solo el icono: el titulo no cabia en una linea. */}
+            <span className="max-[419px]:sr-only">{t('export_transactions')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Scrollable content */}
@@ -365,14 +370,14 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 <div className="w-6 h-6 rounded-full bg-[var(--color-success-soft)] flex items-center justify-center">
                   <Icons.ArrowDownLeft size={12} className="text-[var(--color-success)]" />
                 </div>
-                <span className="text-[10px] font-bold text-[var(--color-success)] uppercase tracking-wider">{t('income')}</span>
+                <span className="text-[10px] font-semibold text-[var(--color-success)]">{t('income')}</span>
               </div>
               <div
                 className={`font-extrabold text-[var(--color-success)] whitespace-nowrap tabular-nums ${claseDeMonto(
                   `+${formatCurrency(totalIncome, resumenCcy)}`,
                 )}`}
               >
-                +{formatCurrency(totalIncome, resumenCcy)}
+                <Monto>+{formatCurrency(totalIncome, resumenCcy)}</Monto>
               </div>
             </div>
 
@@ -382,14 +387,14 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 <div className="w-6 h-6 rounded-full bg-[var(--color-danger-soft)] flex items-center justify-center">
                   <Icons.ArrowUpRight size={12} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" />
                 </div>
-                <span className="text-[10px] font-bold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] uppercase tracking-wider">{t('expenses')}</span>
+                <span className="text-[10px] font-semibold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('analytics_dir_out')}</span>
               </div>
               <div
                 className={`font-extrabold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] whitespace-nowrap tabular-nums ${claseDeMonto(
                   `-${formatCurrency(totalExpenses, resumenCcy)}`,
                 )}`}
               >
-                -{formatCurrency(totalExpenses, resumenCcy)}
+                <Monto>-{formatCurrency(totalExpenses, resumenCcy)}</Monto>
               </div>
             </div>
 
@@ -401,7 +406,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 }`}>
                   <Icons.TrendingUp size={12} className={net >= 0 ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'text-[var(--color-warning)]'} />
                 </div>
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                <span className={`text-[10px] font-semibold ${
                   net >= 0 ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'text-[var(--color-warning)]'
                 }`}>{t('net_balance')}</span>
               </div>
@@ -410,7 +415,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                   net >= 0 ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'text-[var(--color-warning)]'
                 } ${claseDeMonto(`${net >= 0 ? '+' : ''}${formatCurrency(net, resumenCcy)}`)}`}
               >
-                {net >= 0 ? '+' : ''}{formatCurrency(net, resumenCcy)}
+                <Monto>{net >= 0 ? '+' : ''}{formatCurrency(net, resumenCcy)}</Monto>
               </div>
             </div>
           </div>
@@ -510,7 +515,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 
         {/* Transaction Count */}
         <div className="px-4 py-1" aria-live="polite">
-          <span className="text-xs font-semibold uv-text-muted uppercase tracking-wider">
+          <span className="text-xs font-semibold uv-text-muted">
             {buscando
               ? t('tx_searching')
               : `${filtered.length} ${filtered.length === 1 ? t('num_transactions_one') : t('num_transactions')}`}
@@ -528,11 +533,13 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 uv-text-muted">
-            <Ilustracion3D nombre="sinMovimientos" tamano={136} className="mb-3" />
-            <p className="text-lg font-bold mb-1 uv-text-primary">{t('no_transactions_yet')}</p>
-            <p className="text-sm">{search ? t('search_transactions') : ''}</p>
-          </div>
+          <EstadoVacio
+            ilustracion="sinMovimientos"
+            titulo={t('no_transactions_yet')}
+            descripcion={search ? t('search_transactions') : undefined}
+            comoTitulo="h2"
+            className="py-16"
+          />
         ) : (
           <div className="px-4 space-y-2 pt-1">
             {filtered.map((tx) => (
@@ -618,6 +625,7 @@ const TransactionCard: React.FC<{
   const estado = estiloDeEstado(tx);
   const IconoEstado = estado.icon;
   const tachado = noMovioDinero(tx);
+  const ocultos = useMontosOcultos();
 
   // Un boton de verdad: la fila parecia tocable (cursor, sombra al pasar) y no
   // abria nada, ni con el dedo ni con el teclado.
@@ -648,9 +656,9 @@ const TransactionCard: React.FC<{
       {/* Amount */}
       <span className="text-right flex-shrink-0">
         <span className={`block font-extrabold text-sm tabular-nums ${
-          tachado ? 'uv-text-muted line-through' : incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'
+          ocultos ? 'uv-text-primary' : tachado ? 'uv-text-muted line-through' : incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'
         }`}>
-          {incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}
+          <Monto>{incoming ? '+' : ''}{formatCurrency(tx.amount, tx.ccy)}</Monto>
         </span>
         <span className={`text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 ${estado.chip}`}>
           <IconoEstado size={10} aria-hidden="true" />

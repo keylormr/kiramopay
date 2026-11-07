@@ -134,7 +134,7 @@ export const AdminDisputasView: React.FC<{ onClose: () => void }> = ({ onClose }
           </div>
         ) : (
           <div className="px-4 py-4 space-y-3">
-            <p className="text-xs font-semibold uv-text-muted uppercase tracking-wider">
+            <p className="text-xs font-semibold uv-text-muted">
               {t(total === 1 ? 'admin_disputes_total_one' : 'admin_disputes_total').replace('{n}', String(total))}
             </p>
             {casos.map((a) => (

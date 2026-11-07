@@ -5,6 +5,10 @@ import { Icons } from '../../components/Icons';
 import { HelpButton } from '../../components/HelpSheet';
 import { BottomSheet } from '../../components/BottomSheet';
 import { ConfirmSendSheet } from '../../components/ConfirmSendSheet';
+import { AvatarCripto } from '@/components/cripto/AvatarCripto';
+import { EstadoVacio } from '@/components/EstadoVacio';
+import { BotonOcultarMontos, Monto } from '@/components/montos/MontoOcultable';
+import { rellenar } from '@/utils/planes';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
 import { CampoMonto } from '../../components/CampoMonto';
 import { QrScannerPanel } from '../../components/QrScannerPanel';
@@ -993,21 +997,28 @@ export const CryptoView: React.FC = () => {
     // Con el aviso a la vista, la pagina deja lugar para que no tape el final
     // de la lista (ver altoDelAviso): la barra mas el aviso miden mas que el
     // pb-24 de siempre.
+    // Desde 56rem de ancho (tablet en horizontal, escritorio) la cartera queda
+    // a la izquierda y las pestanas con su lista a la derecha, como el Inicio.
     <div
-      className="pb-24 pt-4 space-y-6 px-4"
+      className="@container/cripto pb-24 pt-4 px-4"
       style={hayAviso ? { paddingBottom: `calc(${SOBRE_LA_BARRA} + ${altoDelAviso}px + 0.75rem)` } : undefined}
     >
+      {/* Mientras es una sola columna no pasa de 42rem, como antes de la
+          columna ancha: entre 42 y 56rem se estiraba la tarjeta. */}
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 @min-[56rem]/cripto:max-w-none @min-[56rem]/cripto:grid @min-[56rem]/cripto:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] @min-[56rem]/cripto:items-start @min-[56rem]/cripto:gap-8">
+      <div className="flex min-w-0 flex-col gap-6">
 
       {/* Portfolio Header — Unified Vision hero */}
-      <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 text-white uv-shadow-floating">
+      <section aria-label={t('total_portfolio')} className="kp-tarjeta-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary-dark)] @min-[56rem]/cripto:p-6">
         <div
-          className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
-          style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+          style={{ background: 'radial-gradient(closest-side, rgba(45,123,255,0.30), transparent)' }}
         />
         <div className="relative flex flex-col gap-3 min-[420px]:flex-row min-[420px]:justify-between min-[420px]:items-start mb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-white/70 whitespace-nowrap">{t('total_portfolio')}</p>
+              <p className="text-[13px] text-white/70 whitespace-nowrap">{t('total_portfolio')}</p>
               <div aria-live="polite">
                 {isLoading ? (
                   <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title={t('crypto_updating')} role="status" aria-label={t('crypto_updating')} />
@@ -1017,6 +1028,7 @@ export const CryptoView: React.FC = () => {
                   <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" title={t('crypto_prices_updated')} role="status" aria-label={t('crypto_prices_updated')} />
                 )}
               </div>
+              <BotonOcultarMontos tamano={18} sobreOscuro className="-my-2" />
             </div>
             {/* El guion no se lee: un lector de pantalla anuncia "raya" o
                 nada. Sin el aria-label, quien no ve la pantalla escucha un
@@ -1024,14 +1036,14 @@ export const CryptoView: React.FC = () => {
                 Por lo mismo el subtitulo desaparece en vez de quedar en un
                 espacio en blanco, que no dice nada a nadie. */}
             <h1
-              className="text-3xl font-black mt-1 tabular-nums"
+              className="kp-num mt-1 text-[34px] font-semibold leading-tight tracking-[-0.035em] tabular-nums"
               aria-label={sinPrecios ? t('crypto_value_unavailable') : undefined}
             >
-              {sinPrecios ? SIN_DATO : formatUsd(totalUsdValue)}
+              {sinPrecios ? SIN_DATO : <Monto puntos="••••••">{formatUsd(totalUsdValue)}</Monto>}
             </h1>
             {!sinPrecios && (
               <p className="text-white/70 text-sm mt-1 tabular-nums">
-                {totalCrcValue === null ? t('crypto_crc_unavailable') : formatCrc(totalCrcValue)}
+                {totalCrcValue === null ? t('crypto_crc_unavailable') : <Monto>{formatCrc(totalCrcValue)}</Monto>}
               </p>
             )}
           </div>
@@ -1039,8 +1051,8 @@ export const CryptoView: React.FC = () => {
             {/* Sin precios, la ganancia se calcula contra cero y sale una
                 perdida enorme que nadie tuvo: es la mentira mas cara de esta
                 pantalla, peor que el total. Se muestra neutra. */}
-            <div className={`px-3 py-1.5 rounded-full text-sm font-bold backdrop-blur-sm border tabular-nums ${sinPrecios ? 'bg-white/15 border-white/25 text-white' : totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
-              {sinPrecios ? SIN_DATO : `${totalProfitLoss >= 0 ? '+' : ''}${formatUsd(totalProfitLoss)} (${totalProfitLossPercent.toFixed(2)}%)`}
+            <div className={`inline-block px-3 py-1.5 rounded-full text-sm font-semibold backdrop-blur-sm border tabular-nums ${sinPrecios ? 'bg-white/15 border-white/25 text-white' : totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
+              {sinPrecios ? SIN_DATO : <Monto>{`${totalProfitLoss >= 0 ? '+' : ''}${formatUsd(totalProfitLoss)} (${totalProfitLossPercent.toFixed(2)}%)`}</Monto>}
             </div>
             {/* La ganancia o perdida de la pastilla es contra lo que se pago al
                 comprar; sin precios no hay cifra y tampoco rotulo. */}
@@ -1077,25 +1089,27 @@ export const CryptoView: React.FC = () => {
         <div className="relative flex gap-2 mt-4">
           <button
             onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
-            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
+            className="kp-toque kp-foco flex-1 min-w-0 bg-white/[0.08] hover:bg-white/[0.13] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)] py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.Plus size={16} /> {t('buy')}
           </button>
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
-            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
+            className="kp-toque kp-foco flex-1 min-w-0 bg-white/[0.08] hover:bg-white/[0.13] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)] py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.Minus size={16} /> {t('sell')}
           </button>
           <button
             onClick={openConvertSheet}
-            className="flex-1 min-w-0 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 py-2.5 px-1 rounded-xl text-sm font-bold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2 active:scale-[0.98] transition-all"
+            className="kp-toque kp-foco flex-1 min-w-0 bg-white/[0.08] hover:bg-white/[0.13] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)] py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.RefreshCw size={16} /> {t('convert')}
           </button>
         </div>
+      </section>
       </div>
 
+      <div className="flex min-w-0 flex-col gap-6">
       {/* Tabs */}
       <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-1">
         {(['portfolio', 'market', 'staking'] as const).map(tab => (
@@ -1115,17 +1129,15 @@ export const CryptoView: React.FC = () => {
           <h3 className="text-lg font-bold text-slate-800 dark:text-white">{t('my_assets')}</h3>
 
           {assetsWithBalance.length === 0 ? (
-            <div className="uv-surface-1 rounded-2xl p-8 text-center border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-              <div className="w-16 h-16 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mx-auto mb-4">
-                <Icons.Wallet size={28} className="uv-text-muted" />
-              </div>
-              <p className="text-gray-500 mb-4">{t('no_crypto_yet')}</p>
-              <button
-                onClick={() => { setSelectedAsset(state.crypto.assets[0]); setActiveSheet('buy'); }}
-                className="bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-2 rounded-xl font-bold"
-              >
-                {t('buy_crypto')}
-              </button>
+            <div className="uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+              <EstadoVacio ilustracion="sinCripto" titulo={t('no_crypto_yet')}>
+                <button
+                  onClick={() => { setSelectedAsset(state.crypto.assets[0]); setActiveSheet('buy'); }}
+                  className="kp-toque kp-foco h-12 rounded-[16px] bg-[var(--color-primary-fill)] px-6 font-semibold text-white hover:bg-[var(--color-primary-hover)]"
+                >
+                  {t('buy_crypto')}
+                </button>
+              </EstadoVacio>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1140,12 +1152,7 @@ export const CryptoView: React.FC = () => {
                     onClick={() => { setSelectedAsset(asset); setActiveSheet('assetDetail'); }}
                     className="w-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] flex items-center gap-4 hover:shadow-md transition-all"
                   >
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold"
-                      style={{ backgroundColor: asset.color }}
-                    >
-                      {asset.icon}
-                    </div>
+                    <AvatarCripto simbolo={asset.symbol} color={asset.color} icono={asset.icon} tamano={48} />
                     <div className="flex-1 min-w-0 text-left">
                       {/* El nombre es lo que identifica al activo: se muestra
                           completo ("Ether..." no dice nada). Si el nombre y el
@@ -1153,10 +1160,10 @@ export const CryptoView: React.FC = () => {
                           nombre solo no cabe, pasa a una segunda linea. */}
                       <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-0.5">
                         <span className="min-w-0 break-words font-bold uv-text-primary">{asset.name}</span>
-                        <span className="ml-auto font-bold uv-text-primary shrink-0 whitespace-nowrap">{montoUsd(value, asset.currentPrice)}</span>
+                        <span className="ml-auto font-semibold uv-text-primary shrink-0 whitespace-nowrap tabular-nums"><Monto>{montoUsd(value, asset.currentPrice)}</Monto></span>
                       </div>
                       <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-0.5 mt-1">
-                        <span className="min-w-0 break-words text-sm text-gray-500">{formatCrypto(asset.balance)} {asset.symbol}</span>
+                        <span className="min-w-0 break-words text-sm uv-text-secondary"><Monto>{formatCrypto(asset.balance)} {asset.symbol}</Monto></span>
                         {/* Ganancia o perdida desde la compra, no el cambio de
                             24 h ni la tendencia de la curva: se rotula para
                             que no se lean como la misma cifra. */}
@@ -1219,12 +1226,14 @@ export const CryptoView: React.FC = () => {
                         <div className={`font-bold text-sm tabular-nums ${
                           tachado ? 'uv-text-muted line-through' : principal.entra ? 'text-green-500' : 'uv-text-primary'
                         }`}>
-                          {principal.entra ? '+' : '-'}{formatCrypto(principal.monto)} {principal.activo}
+                          <Monto>{principal.entra ? '+' : '-'}{formatCrypto(principal.monto)} {principal.activo}</Monto>
                         </div>
                         <div className={`text-xs text-gray-500 tabular-nums ${tachado ? 'line-through' : ''}`}>
-                          {contraparte
-                            ? `${contraparte.entra ? '+' : '-'}${formatMonto(contraparte.monto, contraparte.activo)}`
-                            : valorUsd}
+                          <Monto>
+                            {contraparte
+                              ? `${contraparte.entra ? '+' : '-'}${formatMonto(contraparte.monto, contraparte.activo)}`
+                              : valorUsd}
+                          </Monto>
                         </div>
                       </div>
                     </button>
@@ -1276,12 +1285,7 @@ export const CryptoView: React.FC = () => {
                   className="w-full uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] hover:shadow-md transition-all"
                 >
                   <div className="flex items-center gap-4">
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold"
-                      style={{ backgroundColor: asset.color }}
-                    >
-                      {asset.icon}
-                    </div>
+                    <AvatarCripto simbolo={asset.symbol} color={asset.color} icono={asset.icon} tamano={48} />
                     <div className="flex-1 text-left">
                       <div className="flex justify-between items-center">
                         <span className="font-bold uv-text-primary">{asset.name}</span>
@@ -1367,12 +1371,7 @@ export const CryptoView: React.FC = () => {
                 return (
                   <div key={position.id} className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
                     <div className="flex items-center gap-4 mb-3">
-                      <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
-                        style={{ backgroundColor: asset?.color || '#666' }}
-                      >
-                        {asset?.icon}
-                      </div>
+                      <AvatarCripto simbolo={position.asset} color={asset?.color} icono={asset?.icon} tamano={40} />
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap justify-between items-center gap-x-2 gap-y-1">
                           <span className="min-w-0 break-words font-bold uv-text-primary">{position.asset} {t('staking')}</span>
@@ -1389,13 +1388,13 @@ export const CryptoView: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4 uv-surface-2 rounded-xl p-3">
                       <div>
                         <p className="text-xs text-gray-500">{t('crypto_staked')}</p>
-                        <p className="font-bold uv-text-primary">{formatCrypto(position.amount)} {position.asset}</p>
-                        <p className="text-xs text-gray-500">{montoUsd(valueUsd, precioPosicion)}</p>
+                        <p className="font-bold uv-text-primary"><Monto>{formatCrypto(position.amount)} {position.asset}</Monto></p>
+                        <p className="text-xs text-gray-500"><Monto>{montoUsd(valueUsd, precioPosicion)}</Monto></p>
                       </div>
                       <div>
                         <p className="text-xs text-gray-500">{t('earned')}</p>
-                        <p className="font-bold text-green-500">{formatCrypto(position.earned)} {position.asset}</p>
-                        <p className="text-xs text-gray-500">{montoUsd(earnedUsd, precioPosicion)}</p>
+                        <p className="font-bold text-green-500"><Monto>{formatCrypto(position.earned)} {position.asset}</Monto></p>
+                        <p className="text-xs text-gray-500"><Monto>{montoUsd(earnedUsd, precioPosicion)}</Monto></p>
                       </div>
                     </div>
 
@@ -1439,6 +1438,9 @@ export const CryptoView: React.FC = () => {
         </div>
       )}
 
+      </div>
+      </div>
+
       {/* ===== Bottom Sheets ===== */}
 
       {/* Asset Detail Sheet */}
@@ -1451,12 +1453,7 @@ export const CryptoView: React.FC = () => {
           <div className="space-y-4">
             {/* Precio actual + cambio 24h, compacto en una fila */}
             <div className="flex items-center gap-3">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0"
-                style={{ backgroundColor: selectedAsset.color }}
-              >
-                {selectedAsset.icon}
-              </div>
+              <AvatarCripto simbolo={selectedAsset.symbol} color={selectedAsset.color} icono={selectedAsset.icon} tamano={48} />
               <div className="min-w-0">
                 <div className="text-2xl font-black uv-text-primary leading-tight tabular-nums">{montoUsd(selectedAsset.currentPrice, selectedAsset.currentPrice)}</div>
                 {selectedAsset.currentPrice > 0 ? (
@@ -1485,21 +1482,25 @@ export const CryptoView: React.FC = () => {
               const gano = pnl >= 0;
               return (
                 <div className="rounded-2xl p-4 bg-[var(--color-primary-soft)]">
-                  <p className="text-xs uv-text-secondary uppercase tracking-wide">{t('crypto_holding_title')}</p>
+                  <p className="text-xs uv-text-secondary">{t('crypto_holding_title')}</p>
+                  {/* La tenencia respeta el ojo, como la lista de la que se
+                      abrio; el precio promedio es un precio, no lo que tenes. */}
                   <p className="text-2xl font-black uv-text-primary leading-tight mt-1">
-                    {formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}
+                    <Monto>{formatCrypto(selectedAsset.balance)} {selectedAsset.symbol}</Monto>
                   </p>
                   <p className="text-lg font-semibold uv-text-primary tabular-nums">
-                    ≈ {montoUsd(valorActual, selectedAsset.currentPrice)}
-                    {selectedAsset.currentPrice > 0 && crcDesdeUsd(valorActual) !== null && (
-                      <span className="ml-2 text-sm font-medium uv-text-secondary">{crcDesdeUsd(valorActual)}</span>
-                    )}
+                    <Monto>
+                      ≈ {montoUsd(valorActual, selectedAsset.currentPrice)}
+                      {selectedAsset.currentPrice > 0 && crcDesdeUsd(valorActual) !== null && (
+                        <span className="ml-2 text-sm font-medium uv-text-secondary">{crcDesdeUsd(valorActual)}</span>
+                      )}
+                    </Monto>
                   </p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-border)]/30">
                     <span className="text-sm uv-text-secondary">{t('crypto_pnl')}</span>
                     {selectedAsset.currentPrice > 0 && selectedAsset.avgBuyPrice > 0 ? (
                       <span className={`text-sm font-bold ${gano ? 'text-green-500' : 'text-red-500'}`}>
-                        {gano ? '▲' : '▼'} {formatUsd(Math.abs(pnl))} ({gano ? '+' : ''}{pnlPct.toFixed(2)}%)
+                        <Monto>{gano ? '▲' : '▼'} {formatUsd(Math.abs(pnl))}</Monto> ({gano ? '+' : ''}{pnlPct.toFixed(2)}%)
                       </span>
                     ) : (
                       <span className="text-sm font-bold uv-text-muted">{SIN_DATO}</span>
@@ -1879,7 +1880,7 @@ export const CryptoView: React.FC = () => {
                 la pantalla lo dice en vez de inventarlo. */}
             <div className="uv-surface-2 rounded-xl p-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs uv-text-muted uppercase tracking-wider">{t('crypto_send_recipient')}</p>
+                <p className="text-xs uv-text-muted">{t('crypto_send_recipient')}</p>
                 <p className="text-lg font-bold uv-text-primary truncate">
                   {sendPreview
                     ? sendPreview.recipientName
@@ -1970,13 +1971,15 @@ export const CryptoView: React.FC = () => {
         onClose={() => setShowSendConfirm(false)}
         onConfirm={handleSend}
         processing={isTrading}
-        amountDisplay={`${formatCrypto(sendPreview?.amount ?? 0, 8)} ${sendPreview?.asset || ''}`}
-        confirmLabel={`${t('send')} ${sendPreview?.asset || ''}`}
+        quantity={{ value: formatCrypto(sendPreview?.amount ?? 0, 8), unit: sendPreview?.asset || '' }}
+        recipient={sendPreview?.recipientName || ''}
+        recipientDetail={t('crypto_send_kiramopay')}
+        confirmLabel={rellenar(t('envio_enviar_monto'), { monto: `${formatCrypto(sendPreview?.amount ?? 0, 8)} ${sendPreview?.asset || ''}` })}
         warning={t('crypto_send_irreversible')}
         rows={[
           {
-            label: t('crypto_send_recipient'),
-            value: sendPreview?.recipientName || '',
+            label: t('envio_recibe_sin_nombre'),
+            value: `${formatCrypto(sendPreview?.amount ?? 0, 8)} ${sendPreview?.asset || ''}`,
           },
           {
             label: t('crypto_send_balance_drops'),
@@ -1984,7 +1987,8 @@ export const CryptoView: React.FC = () => {
           },
           {
             label: t('crypto_send_fee_label'),
-            value: `${(sendPreview?.feePercent ?? 0).toFixed(2)}%`,
+            value: `${formatCrypto(sendPreview?.fee ?? 0, 8)} ${sendPreview?.asset || ''} (${(sendPreview?.feePercent ?? 0).toFixed(2)}%)`,
+            note: t('crypto_send_fee_note'),
           },
         ]}
       />

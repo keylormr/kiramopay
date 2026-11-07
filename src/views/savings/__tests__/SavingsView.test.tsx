@@ -191,8 +191,8 @@ describe('SavingsView — el tope de metas del plan', () => {
 });
 
 // El defecto que estas pruebas cierran: `if (res.success && res.data)` sin rama
-// de fallo. La consulta se caia y la pantalla afirmaba "Total ahorrado 0" y
-// "Sin metas de ahorro" — o sea, le decia al usuario que no tiene ahorros
+// de fallo. La consulta se caia y la pantalla afirmaba "Total apartado 0" y
+// "Sin metas todavía" — o sea, le decia al usuario que no tiene ahorros
 // cuando lo unico cierto era que no se habian podido consultar.
 describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
   it('cuando la consulta de metas falla, lo dice en vez de afirmar que no hay ahorros', async () => {
@@ -200,9 +200,9 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
 
     setup();
 
-    expect(await screen.findByText('No pudimos cargar tus metas de ahorro.')).toBeInTheDocument();
-    expect(screen.queryByText('Sin metas de ahorro')).not.toBeInTheDocument();
-    expect(screen.queryByText('Total ahorrado')).not.toBeInTheDocument();
+    expect(await screen.findByText('No pudimos cargar tus metas.')).toBeInTheDocument();
+    expect(screen.queryByText('Sin metas todavía')).not.toBeInTheDocument();
+    expect(screen.queryByText('Total apartado')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
   });
 
@@ -211,7 +211,7 @@ describe('SavingsView — no inventa numeros ni festeja rechazos', () => {
 
     setup();
 
-    expect(await screen.findByText('No pudimos cargar tus metas de ahorro.')).toBeInTheDocument();
+    expect(await screen.findByText('No pudimos cargar tus metas.')).toBeInTheDocument();
   });
 
   // El `finally` cerraba la hoja y limpiaba el monto pasara lo que pasara: un
@@ -420,7 +420,7 @@ describe('SavingsView — retirar de una meta', () => {
     await user.click(await screen.findByRole('button', { name: 'Retirar fondos' }));
     await user.type(await screen.findByPlaceholderText('0'), '60000');
 
-    expect(screen.getByText('Ese monto supera lo que tienes ahorrado en esta meta.')).toBeInTheDocument();
+    expect(screen.getByText('Ese monto supera lo que tienes apartado en esta meta.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retirar' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Retirar' }));
     expect(mocks.api.savings.withdraw).not.toHaveBeenCalled();

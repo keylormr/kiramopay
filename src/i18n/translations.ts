@@ -1212,6 +1212,15 @@ export type TranslationKeys = {
 
   // Savings
   savings_title: string;
+  /** Nombres de los dibujos que se eligen para una meta. El de la alcancia dice Dinero: decision del dueno, nada de ahorro. */
+  meta_icono_dinero: string;
+  meta_icono_casa: string;
+  meta_icono_auto: string;
+  meta_icono_viaje: string;
+  meta_icono_regalo: string;
+  meta_icono_meta: string;
+  meta_icono_salud: string;
+  meta_icono_especial: string;
   savings_total_saved: string;
   savings_of_target: string;
   savings_no_goals: string;
@@ -2287,6 +2296,15 @@ export type TranslationKeys = {
   saldo_ocultar: string;
   saldo_oculto: string;
   monto_oculto: string;
+  /** Fase 5: el ojo fuera del Inicio (misma preferencia que el de la tarjeta de saldo). */
+  montos_ocultar: string;
+  /** Fase 5: revisar un pago con QR, la bienvenida y la revision de cripto. */
+  qr_revisar_titulo: string;
+  qr_pagar_monto: string;
+  qr_sin_costo_para_ti: string;
+  onboard_paso: string;
+  crypto_send_kiramopay: string;
+  crypto_send_fee_note: string;
   saldo_cripto_valor: string;
   saldo_cripto_sin_dato: string;
   saldo_cripto_vacio: string;

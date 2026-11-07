@@ -289,10 +289,12 @@ describe('envio de cripto — confirmacion y reintento', () => {
     await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
     await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
 
-    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Revisa antes de enviar' }));
     expect(confirmacion.getByText('Victor Lobo')).toBeInTheDocument();
     expect(confirmacion.getByText('0.0050125 BTC')).toBeInTheDocument();
-    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
+    // La comision dice cuanto es, no solo el porcentaje.
+    expect(confirmacion.getByText('0.0000125 BTC (0.25%)')).toBeInTheDocument();
+    await user.click(confirmacion.getByRole('button', { name: /^Enviar 0.005 BTC$/ }));
 
     await waitFor(() =>
       expect(mocks.dispatch).toHaveBeenCalledWith({
@@ -323,8 +325,8 @@ describe('envio de cripto — confirmacion y reintento', () => {
 
     await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
     await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
-    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
-    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Revisa antes de enviar' }));
+    await user.click(confirmacion.getByRole('button', { name: /^Enviar 0.005 BTC$/ }));
 
     expect(await screen.findByText('Esa operación ya se había hecho')).toBeInTheDocument();
     expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SEND_CRYPTO' }));
@@ -344,8 +346,8 @@ describe('envio de cripto — confirmacion y reintento', () => {
 
     await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
     await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
-    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
-    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Revisa antes de enviar' }));
+    await user.click(confirmacion.getByRole('button', { name: /^Enviar 0.005 BTC$/ }));
 
     await user.click(await screen.findByRole('button', { name: 'verificar-mfa' }));
 
@@ -402,8 +404,8 @@ describe('envio de cripto — el error se anuncia y queda a la vista', () => {
 
     await user.type(hoja.getByPlaceholderText('0.00'), '0.005');
     await user.click(await hoja.findByRole('button', { name: 'Enviar BTC' }));
-    const confirmacion = within(await screen.findByRole('dialog', { name: 'Confirmar' }));
-    await user.click(confirmacion.getByRole('button', { name: /Enviar BTC/ }));
+    const confirmacion = within(await screen.findByRole('dialog', { name: 'Revisa antes de enviar' }));
+    await user.click(confirmacion.getByRole('button', { name: /^Enviar 0.005 BTC$/ }));
 
     const aviso = await hoja.findByRole('alert');
     expect(aviso.textContent).not.toBe('');

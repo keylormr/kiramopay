@@ -5,6 +5,8 @@ import { getApiLayer } from '@/api';
 import type { ReferralSummary } from '@/api/repositories/loyalty.repository';
 import { compartirEnlace, enlaceInvitacion } from '@/utils/compartir';
 import { Icons } from '../../components/Icons';
+import { BotonOcultarMontos, Monto } from '@/components/montos/MontoOcultable';
+import { iniciales } from '@/utils/arteDelMovimiento';
 import { MarcaKiramo } from '../../components/MarcaKiramo';
 import { Bandera } from '../../components/Bandera';
 import { HistorialDeVersiones } from './HistorialDeVersiones';
@@ -69,6 +71,10 @@ interface ProfileViewProps {
   /** Pagos fijos: recordatorios de pagos que se repiten. */
   onOpenRecurring?: () => void;
 }
+
+// Mientras las secciones van en una sola columna no pasan de 42rem, como antes
+// de la columna ancha del escritorio; desde 52rem se reparten en dos.
+const UNA_COLUMNA = 'mx-auto w-full max-w-2xl @min-[52rem]/perfil:max-w-none';
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenAdminCapital, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
   const { state, dispatch } = useApp();
@@ -360,42 +366,46 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
   };
 
   return (
-    <div className="pb-24 pt-4 space-y-6 px-4">
-      {/* Profile Header — Unified Vision hero */}
-      <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 text-white uv-shadow-floating">
+    // Desde 52rem (tablet en horizontal, escritorio) las secciones se reparten
+    // en dos columnas debajo de la tarjeta, en vez de una lista de 42rem.
+    <div className="@container/perfil pb-24 pt-4 space-y-6 px-4">
+      {/* Tarjeta del perfil: la metal oscura del Inicio */}
+      <div className={`kp-tarjeta-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary-dark)] @min-[52rem]/perfil:p-6 ${UNA_COLUMNA}`}>
         <div
-          className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
-          style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+          style={{ background: 'radial-gradient(closest-side, rgba(45,123,255,0.28), transparent)' }}
         />
         <div className="relative flex items-center gap-4">
-          <div className="w-20 h-20 bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl flex items-center justify-center text-white text-3xl font-black">
-            {state.user?.firstName?.charAt(0) || 'K'}
+          <div aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-white/[0.08] text-[28px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.10)]">
+            {iniciales([state.user?.firstName, state.user?.lastName].filter(Boolean).join(' ')) || 'K'}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-black truncate tracking-tight">
+            <h2 className="text-xl font-semibold truncate tracking-[-0.01em]">
               {state.user?.firstName} {state.user?.lastName}
             </h2>
             <p className="text-white/70 text-sm">{state.user?.phone ? formatearTelefonoCR(state.user.phone) : null}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/15 backdrop-blur-sm border border-white/20">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-white/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)]">
                 KYC {kycLevelText[state.user?.kycLevel || 0]}
               </span>
               {state.settings.biometricEnabled && biometriaDisponible && (
-                <span className="px-2 py-0.5 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                <span className="px-2 py-0.5 bg-white/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.10)] rounded-full text-[11px] font-semibold flex items-center gap-1">
                   <Icons.Fingerprint size={11} />
                   {t('biometrics')}
                 </span>
               )}
             </div>
           </div>
+          <BotonOcultarMontos tamano={18} sobreOscuro className="-mr-2 self-start" />
         </div>
 
         {/* Quick Stats */}
         <div className="relative grid grid-cols-1 min-[480px]:grid-cols-2 gap-3 mt-6">
-          <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('total_balance')}</p>
-            <p className="text-lg font-black tabular-nums">
-              {formatearSaldoTotal(totalBalance, monedaBase)}
+          <div className="rounded-xl bg-white/[0.06] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+            <p className="text-xs text-white/70 mb-1">{t('total_balance')}</p>
+            <p className="kp-num text-lg font-semibold tabular-nums">
+              <Monto>{formatearSaldoTotal(totalBalance, monedaBase)}</Monto>
             </p>
             {/* Un guion solo no dice si cargo mal o si no hay dato. */}
             {totalBalance === null && (
@@ -403,19 +413,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
             )}
           </div>
           <div
-            className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-xl p-3"
+            className="rounded-xl bg-white/[0.06] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]"
             aria-busy={gastoMes.estado === 'cargando'}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70 mb-1">{t('home_spent_month')}</p>
+            <p className="text-xs text-white/70 mb-1">{t('home_spent_month')}</p>
             {/* Mientras llega el resumen no hay cifra, y sin servidor ni nada
                 guardado tampoco: un cero ahi se leeria como "no gastaste nada". */}
             {gastoMes.estado === 'cargando' ? (
               <div className="h-7 w-24 rounded-lg bg-white/15 animate-pulse" aria-hidden="true" />
             ) : gastoMes.estado === 'sin_datos' ? (
-              <p className="text-lg font-black">{SALDO_SIN_DATO}</p>
+              <p className="text-lg font-semibold">{SALDO_SIN_DATO}</p>
             ) : (
-              <p className="text-lg font-black tabular-nums">
-                {formatearSaldoTotal(gastoMes.gastado, gastoMes.moneda)}
+              <p className="kp-num text-lg font-semibold tabular-nums">
+                <Monto>{formatearSaldoTotal(gastoMes.gastado, gastoMes.moneda)}</Monto>
               </p>
             )}
             {gastoMes.estado === 'respaldo' && (
@@ -425,10 +435,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </div>
       </div>
 
+      <div className={`${UNA_COLUMNA} space-y-6 @min-[52rem]/perfil:columns-2 @min-[52rem]/perfil:gap-6 @min-[52rem]/perfil:space-y-0 @min-[52rem]/perfil:[&>*]:mb-6 [&>*]:break-inside-avoid`}>
       {/* Account Section */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+          <h3 className="text-xs font-semibold uv-text-muted">
             {t('my_account')}
           </h3>
           <HelpButton topic="kyc" className="-mr-1" />
@@ -515,7 +526,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
           mano. Existian como pantallas completas sin ninguna entrada. */}
       {(onOpenBudget || onOpenRecurring) && (
         <div>
-          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+          <h3 className="text-xs font-semibold uv-text-muted mb-3">
             {t('profile_finance_section')}
           </h3>
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -557,7 +568,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
       {/* Invite Section — referral program (points to the referrer only) */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+        <h3 className="text-xs font-semibold uv-text-muted mb-3">
           {t('invite_section_title')}
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -647,7 +658,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       {/* Security Section */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+          <h3 className="text-xs font-semibold uv-text-muted">
             {t('security')}
           </h3>
           <HelpButton topic="mfa" className="-mr-1" />
@@ -730,7 +741,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
               <p className="text-xs uv-text-muted mt-0.5">{t('two_factor_desc')}</p>
             </div>
             <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                 twoFactorEnabled
                   ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                   : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
@@ -791,7 +802,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
       {/* Merchant tools Section */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+        <h3 className="text-xs font-semibold uv-text-muted mb-3">
           {t('merchant_tools')}
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -886,7 +897,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       {/* Administration Section: solo para administradores, aparte de las herramientas del dueno de un negocio */}
       {isAdmin && (
         <div>
-          <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+          <h3 className="text-xs font-semibold uv-text-muted mb-3">
             {t('admin_section_title')}
           </h3>
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -965,7 +976,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
       {/* Preferences Section */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+        <h3 className="text-xs font-semibold uv-text-muted mb-3">
           {t('preferences')}
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -1017,7 +1028,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
 
       {/* Support Section */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+        <h3 className="text-xs font-semibold uv-text-muted mb-3">
           {t('support')}
         </h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
@@ -1080,11 +1091,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         </div>
       </div>
 
+      </div>
+
       {/* Logout */}
       <button
         onClick={() => dispatch({ type: 'LOGOUT' })}
         aria-label={t('logout')}
-        className="w-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] p-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-[var(--color-danger)] hover:text-white active:scale-[0.98] transition-all"
+        className="mx-auto max-w-2xl @min-[52rem]/perfil:max-w-none w-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] p-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-[var(--color-danger)] hover:text-white active:scale-[0.98] transition-all"
       >
         <Icons.LogOut size={18} />
         {t('logout')}

@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
+import { EstadoVacio } from '@/components/EstadoVacio';
+import { iniciales } from '@/utils/arteDelMovimiento';
+import { BotonOcultarMontos, Monto } from '@/components/montos/MontoOcultable';
 import { BottomSheet } from '../../components/BottomSheet';
 import { BotonCompartirQr } from '../../components/BotonCompartirQr';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
@@ -604,7 +607,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   const myContactQr = encodeContactQr({ name: userName, phone: userPhone });
 
   return (
-    <div className="pb-24 pt-4 space-y-6 px-4">
+    // Desde 56rem (tablet en horizontal, escritorio) la tarjeta con el saldo y
+    // las acciones queda a la izquierda y las pestanas con su lista a la
+    // derecha, como el Inicio y Cripto.
+    <div className="@container/sinpe pb-24 pt-4 px-4">
       {/* Toast de copiado */}
       {copiedText && (
         <div aria-live="assertive" className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[var(--color-navy-900)] text-white px-4 py-2 rounded-full text-sm font-semibold uv-shadow-floating animate-fade-in-scale">
@@ -612,41 +618,49 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         </div>
       )}
 
-      {/* Hero balance card — Unified Vision */}
-      <div className="relative overflow-hidden uv-gradient-brand rounded-3xl p-6 text-white uv-shadow-floating">
+      {/* Mientras es una sola columna no pasa de 42rem, como antes de la
+          columna ancha: entre 42 y 56rem se estiraba la tarjeta. */}
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 @min-[56rem]/sinpe:max-w-none @min-[56rem]/sinpe:grid @min-[56rem]/sinpe:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] @min-[56rem]/sinpe:items-start @min-[56rem]/sinpe:gap-8">
+      <div className="flex min-w-0 flex-col gap-6">
+      {/* Tarjeta de saldo: la metal oscura del Inicio */}
+      <section aria-label={t('sinpe_mobile')} className="kp-tarjeta-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary-dark)] @min-[56rem]/sinpe:p-6">
         <div
-          className="absolute -right-12 -bottom-12 w-40 h-40 rounded-full opacity-30 pointer-events-none"
-          style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.5), transparent)' }}
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-16 -right-16 h-52 w-52 rounded-full"
+          style={{ background: 'radial-gradient(closest-side, rgba(45,123,255,0.28), transparent)' }}
         />
-        <div className="relative flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 bg-white/15 rounded-lg flex items-center justify-center backdrop-blur-sm">
+        <div className="relative mb-3 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
             <Bandera pais="CR" className="text-base" />
           </div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-white/70">{t('sinpe_mobile')}</span>
+          <span className="text-[13px] text-white/70">{t('sinpe_mobile')}</span>
+          <BotonOcultarMontos tamano={18} sobreOscuro className="-my-2 ml-auto -mr-2" />
         </div>
-        <div className="relative text-3xl font-black mb-1 tabular-nums">
-          {formatCurrency(balance)}
+        <div className="kp-num relative mb-1 text-[34px] font-semibold leading-tight tracking-[-0.035em] tabular-nums">
+          <Monto puntos="••••••">{formatCurrency(balance)}</Monto>
         </div>
         <div className="relative text-white/70 text-sm">{t('available_to_send')}</div>
 
         <div className="relative flex gap-2.5 mt-5">
           <button
             onClick={() => setShowSendSheet(true)}
-            className="flex-1 bg-white text-[var(--color-navy-800)] h-11 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            className="kp-toque kp-foco flex-1 bg-white text-[var(--color-navy-800)] h-11 rounded-xl font-semibold flex items-center justify-center gap-2"
           >
             <Icons.Send size={18} />
             {t('send')}
           </button>
           <button
             onClick={() => setShowReceiveSheet(true)}
-            className="flex-1 bg-white/15 text-white h-11 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform border border-white/20 backdrop-blur-sm"
+            className="kp-toque kp-foco flex-1 bg-white/[0.08] hover:bg-white/[0.13] text-white h-11 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
           >
             <Icons.Receive size={18} />
             {t('request')}
           </button>
         </div>
+      </section>
       </div>
 
+      <div className="flex min-w-0 flex-col gap-6">
       {/* Tabs */}
       <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl">
         {[
@@ -673,7 +687,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         <div className="space-y-6">
           {/* Favoritos */}
           <div>
-            <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold uv-text-muted mb-3">
               {t('favorites')}
             </h3>
             <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
@@ -683,8 +697,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                   onClick={() => handleSelectContact(contact)}
                   className="flex flex-col items-center gap-2 min-w-[70px] group"
                 >
-                  <div className="w-14 h-14 uv-gradient-brand rounded-full flex items-center justify-center text-white font-bold text-lg uv-shadow-elevated group-active:scale-[0.94] transition-transform">
-                    {contact.name.charAt(0)}
+                  <div aria-hidden="true" className="flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-base font-semibold uv-text-primary shadow-[inset_0_0_0_1px_var(--color-border-strong)] transition-transform duration-[var(--kp-mov-toque)] ease-kp group-active:scale-[0.94] dark:bg-[var(--color-surface-2-dark)] dark:shadow-[inset_0_0_0_1px_var(--color-border-strong-dark)]">
+                    {iniciales(contact.name)}
                   </div>
                   <span className="text-xs font-semibold uv-text-secondary truncate w-16 text-center">
                     {contact.name.split(' ')[0]}
@@ -709,7 +723,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             {/* A 390 px el titulo y los tres enlaces no caben en un renglon: la
                 fila se parte y los enlaces bajan juntos, cada uno entero. */}
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-3">
-              <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider whitespace-nowrap">
+              <h3 className="text-xs font-semibold uv-text-muted whitespace-nowrap">
                 {t('sinpe_contacts')}
               </h3>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 ml-auto">
@@ -744,25 +758,21 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             </div>
             <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
               {allContacts.length === 0 ? (
-                <div className="p-8 text-center">
-                  <Icons.Users size={48} className="mx-auto uv-text-muted mb-4 opacity-50" />
-                  <p className="uv-text-secondary mb-4">{t('no_contacts_yet')}</p>
-                  <div className="flex flex-col items-center gap-3">
-                    <button
-                      onClick={openContactScanner}
-                      className="bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 active:scale-[0.98] transition-transform"
-                    >
-                      <Icons.Scan size={18} />
-                      {t('scan_contact_cta')}
-                    </button>
-                    <button
-                      onClick={() => setShowAddContactSheet(true)}
-                      className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] font-semibold hover:underline"
-                    >
-                      {t('add_contact')}
-                    </button>
-                  </div>
-                </div>
+                <EstadoVacio ilustracion="sinContactos" titulo={t('no_contacts_yet')} tamano={120} comoTitulo="p" className="py-8">
+                  <button
+                    onClick={openContactScanner}
+                    className="kp-toque kp-foco flex h-12 items-center justify-center gap-2 rounded-[16px] bg-[var(--color-primary-fill)] px-5 font-semibold text-white hover:bg-[var(--color-primary-hover)]"
+                  >
+                    <Icons.Scan size={18} />
+                    {t('scan_contact_cta')}
+                  </button>
+                  <button
+                    onClick={() => setShowAddContactSheet(true)}
+                    className="kp-foco min-h-11 rounded-lg font-semibold text-[var(--color-primary)] hover:underline dark:text-[var(--color-primary-light)]"
+                  >
+                    {t('add_contact')}
+                  </button>
+                </EstadoVacio>
               ) : (
                 allContacts.map((contact) => (
                   <button
@@ -770,8 +780,8 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     onClick={() => handleSelectContact(contact)}
                     className="w-full flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors"
                   >
-                    <div className="w-12 h-12 uv-gradient-brand rounded-full flex items-center justify-center text-white font-bold mr-3 shrink-0">
-                      {contact.name.charAt(0)}
+                    <div aria-hidden="true" className="mr-3 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--color-surface-2)] text-[15px] font-semibold uv-text-primary shadow-[inset_0_0_0_1px_var(--color-border-strong)] dark:bg-[var(--color-surface-2-dark)] dark:shadow-[inset_0_0_0_1px_var(--color-border-strong-dark)]">
+                      {iniciales(contact.name)}
                     </div>
                     <div className="flex-1 text-left min-w-0">
                       <div className="font-semibold uv-text-primary flex items-center gap-1.5 truncate">
@@ -864,10 +874,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         <div className="space-y-4">
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
             {state.sinpeHistory.length === 0 ? (
-              <div className="p-8 text-center">
-                <Icons.History size={48} className="mx-auto uv-text-muted opacity-50 mb-4" />
-                <p className="uv-text-muted">{t('no_transactions_yet')}</p>
-              </div>
+              <EstadoVacio ilustracion="sinMovimientos" titulo={t('no_transactions_yet')} tamano={112} comoTitulo="p" className="py-8" />
             ) : (
               state.sinpeHistory.map((tx) => {
                 const incoming = tx.type !== 'sent';
@@ -914,8 +921,10 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     <div className={`font-bold tabular-nums shrink-0 ${
                       incoming ? 'text-[var(--color-success)]' : 'uv-text-primary'
                     }`}>
-                      {incoming ? '+' : '-'}
-                      {formatCurrency(tx.amount)}
+                      <Monto>
+                        {incoming ? '+' : '-'}
+                        {formatCurrency(tx.amount)}
+                      </Monto>
                     </div>
                   </div>
                 );
@@ -924,6 +933,9 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           </div>
         </div>
       )}
+
+      </div>
+      </div>
 
       {/* Add Contact Sheet */}
       <BottomSheet
@@ -1210,7 +1222,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         <div className="space-y-6">
           {/* Destinatario */}
           <div className="uv-surface-2 p-4 rounded-xl">
-            <label className="text-xs text-gray-500 font-bold uppercase block mb-2">
+            <label className="text-xs text-gray-500 font-semibold block mb-2">
               {t('phone_number')}
             </label>
             {selectedContact ? (
@@ -1286,7 +1298,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
           {/* Referencia opcional */}
           <div className="uv-surface-2 p-4 rounded-xl">
-            <label className="text-xs text-gray-500 font-bold uppercase block mb-2">
+            <label className="text-xs text-gray-500 font-semibold block mb-2">
               {t('detail_optional')}
             </label>
             <input
@@ -1415,7 +1427,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           </div>
 
           <div className="uv-surface-2 p-4 rounded-xl">
-            <label className="text-xs text-gray-500 font-bold uppercase block mb-2">
+            <label className="text-xs text-gray-500 font-semibold block mb-2">
               {t('reason_optional')}
             </label>
             <input
@@ -1453,7 +1465,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               por WhatsApp: no habia forma de saber si te pagaron ni de
               cancelarlo. Ahora cada uno es una fila con estado propio. */}
           <div>
-            <p className="text-xs text-gray-500 font-bold uppercase mb-2">{t('qr_solicitudes_activas')}</p>
+            <p className="text-xs text-gray-500 font-semibold mb-2">{t('qr_solicitudes_activas')}</p>
             {pedidos.length === 0 ? (
               <p className="text-sm uv-text-muted">{t('qr_sin_solicitudes')}</p>
             ) : (
@@ -1464,7 +1476,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     className="flex items-center justify-between gap-3 uv-surface-2 rounded-xl px-3 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="font-bold uv-text-primary tabular-nums">{formatCurrency(pd.amount)}</p>
+                      <p className="font-bold uv-text-primary tabular-nums"><Monto>{formatCurrency(pd.amount)}</Monto></p>
                       {pd.note && <p className="text-xs uv-text-muted truncate">{pd.note}</p>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

@@ -60,6 +60,28 @@ import v1_480 from '@/assets/arte-3d/ilustraciones/v1-movimientos-480.webp';
 import v1_960 from '@/assets/arte-3d/ilustraciones/v1-movimientos-960.webp';
 import v4_480 from '@/assets/arte-3d/ilustraciones/v4-tarjetas-480.webp';
 import v4_960 from '@/assets/arte-3d/ilustraciones/v4-tarjetas-960.webp';
+import f11_64 from '@/assets/arte-3d/iconos/f11-presupuesto-64.webp';
+import f11_128 from '@/assets/arte-3d/iconos/f11-presupuesto-128.webp';
+import b1_480 from '@/assets/arte-3d/ilustraciones/b1-todo-en-uno-480.webp';
+import b1_960 from '@/assets/arte-3d/ilustraciones/b1-todo-en-uno-960.webp';
+import b2_480 from '@/assets/arte-3d/ilustraciones/b2-envios-480.webp';
+import b2_960 from '@/assets/arte-3d/ilustraciones/b2-envios-960.webp';
+import b3_480 from '@/assets/arte-3d/ilustraciones/b3-seguridad-480.webp';
+import b3_960 from '@/assets/arte-3d/ilustraciones/b3-seguridad-960.webp';
+import b4_480 from '@/assets/arte-3d/ilustraciones/b4-metas-480.webp';
+import b4_960 from '@/assets/arte-3d/ilustraciones/b4-metas-960.webp';
+import v2_480 from '@/assets/arte-3d/ilustraciones/v2-contactos-480.webp';
+import v2_960 from '@/assets/arte-3d/ilustraciones/v2-contactos-960.webp';
+import v3_480 from '@/assets/arte-3d/ilustraciones/v3-notificaciones-480.webp';
+import v3_960 from '@/assets/arte-3d/ilustraciones/v3-notificaciones-960.webp';
+import v5_480 from '@/assets/arte-3d/ilustraciones/v5-metas-480.webp';
+import v5_960 from '@/assets/arte-3d/ilustraciones/v5-metas-960.webp';
+import v6_480 from '@/assets/arte-3d/ilustraciones/v6-pagos-fijos-480.webp';
+import v6_960 from '@/assets/arte-3d/ilustraciones/v6-pagos-fijos-960.webp';
+import v7_480 from '@/assets/arte-3d/ilustraciones/v7-cripto-480.webp';
+import v7_960 from '@/assets/arte-3d/ilustraciones/v7-cripto-960.webp';
+import v8_480 from '@/assets/arte-3d/ilustraciones/v8-dividir-480.webp';
+import v8_960 from '@/assets/arte-3d/ilustraciones/v8-dividir-960.webp';
 
 /** Ancho real en px de cada archivo -> su URL en el build. */
 export type Fuentes = Readonly<Record<number, string>>;
@@ -87,6 +109,7 @@ export const ICONOS_3D = {
   tarjetas: { 64: f7_64, 128: f7_128 },
   cripto: { 64: f9_64, 128: f9_128 },
   protegido: { 64: f10_64, 128: f10_128 },
+  presupuesto: { 64: f11_64, 128: f11_128 },
 } as const satisfies Record<string, Fuentes>;
 
 export const ILUSTRACIONES_3D = {
@@ -94,6 +117,16 @@ export const ILUSTRACIONES_3D = {
   pagoListo: { 480: e2_480, 960: e2_960 },
   sinMovimientos: { 480: v1_480, 960: v1_960 },
   sinTarjetas: { 480: v4_480, 960: v4_960 },
+  bienvenida1: { 480: b1_480, 960: b1_960 },
+  bienvenida2: { 480: b2_480, 960: b2_960 },
+  bienvenida3: { 480: b3_480, 960: b3_960 },
+  bienvenida4: { 480: b4_480, 960: b4_960 },
+  sinContactos: { 480: v2_480, 960: v2_960 },
+  sinAvisos: { 480: v3_480, 960: v3_960 },
+  sinMetas: { 480: v5_480, 960: v5_960 },
+  sinPagosFijos: { 480: v6_480, 960: v6_960 },
+  sinCripto: { 480: v7_480, 960: v7_960 },
+  sinDivisiones: { 480: v8_480, 960: v8_960 },
 } as const satisfies Record<string, Fuentes>;
 
 export type NombreIcono3D = keyof typeof ICONOS_3D;

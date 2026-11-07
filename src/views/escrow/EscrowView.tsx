@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
+import { EstadoVacio } from '@/components/EstadoVacio';
 import { BottomSheet } from '@/components/BottomSheet';
 import { MfaChallengeSheet } from '@/components/MfaChallengeSheet';
 import { CampoMonto } from '@/components/CampoMonto';
@@ -311,19 +312,20 @@ export const EscrowView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </button>
           </div>
         ) : agreements.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-gray-400">
-            <div className="w-24 h-24 rounded-3xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-4">
-              <Icons.Shield size={48} className="opacity-30" />
-            </div>
-            <p className="text-lg font-bold mb-2 uv-text-primary">{t('escrow_empty')}</p>
-            <p className="text-sm text-center mb-6">{t('escrow_empty_desc')}</p>
+          <EstadoVacio
+            icono="protegido"
+            titulo={t('escrow_empty')}
+            descripcion={t('escrow_empty_desc')}
+            comoTitulo="h2"
+            className="py-16"
+          >
             <button
               onClick={() => setShowCreate(true)}
               className="px-6 py-3 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
             >
               {t('escrow_new')}
             </button>
-          </div>
+          </EstadoVacio>
         ) : (
           <div className="px-4 py-4 space-y-3">
             {agreements.map((a, i) => (

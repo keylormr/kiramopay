@@ -172,7 +172,7 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
 
           {notas.length > 0 && (
             <section aria-labelledby="actualizacion-novedades">
-              <h2 id="actualizacion-novedades" className="text-sm font-bold uppercase tracking-wide text-gray-400 mb-3">
+              <h2 id="actualizacion-novedades" className="text-sm font-semibold text-gray-400 mb-3">
                 {t('update_whats_new').replace('{version}', version)}
               </h2>
               <ul className="space-y-2.5">

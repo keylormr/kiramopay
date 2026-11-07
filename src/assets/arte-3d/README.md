@@ -51,29 +51,30 @@ adelante hace falta, se agrega como otra fuente sin tocar las pantallas.
 | **Total en el repo** | **126** | **2,2 MB** |
 
 En el build entran solo los del catálogo (fase 3: 50 archivos, 481 KB; fase 4:
-52 archivos, 568 KB). El navegador baja uno de los dos tamaños de cada imagen
-visible, no los dos.
+52 archivos, 568 KB; fase 5: 74 archivos, 1.666 KB, casi todo por las
+ilustraciones de 960 px). El navegador baja uno de los dos tamaños de cada
+imagen visible, no los dos.
 
 ## Inventario
 
-`En uso` indica la pantalla que lo muestra desde la fase 3 del rediseño. Los
-demás están convertidos y listos para las fases siguientes.
+`En uso` indica la pantalla que lo muestra desde las fases 3 a 5 del rediseño.
+Los demás están convertidos y listos para cuando haga falta.
 
 ### Iconos
 
 | Archivo | Muestra | Nombre en el catálogo | En uso |
 |---|---|---|---|
-| `c0-comida` | tazón de comida | `comida` | Inicio, actividad (categoría comida) |
-| `c1-transporte` | auto compacto | `transporte` | Inicio, actividad (transporte) |
-| `c2-supermercado` | carrito con compras | `supermercado` | Inicio, actividad (supermercado) |
-| `c3-entretenimiento` | claqueta de cine | `entretenimiento` | Inicio, actividad (entretenimiento) |
-| `s0-luz` | rayo | `luz` | Inicio, actividad (electricidad) |
-| `s1-agua` | gota de agua | `agua` | Inicio, actividad (agua) |
-| `s2-telefonia` | teléfono con señal | `telefonia` | Inicio, actividad (telefonía) |
-| `s3-internet` | señal wifi | `internet` | Inicio, actividad (internet) |
-| `s4-cable` | televisor | `cable` | Inicio, actividad (cable) |
-| `s5-recarga` | tarjeta SIM con un más | `recarga` | Inicio, actividad (recargas) |
-| `s6-factura` | factura de papel | `factura` | Inicio, actividad (pago de servicios) |
+| `c0-comida` | tazón de comida | `comida` | Inicio, actividad (categoría comida); Mercado, categoría comida |
+| `c1-transporte` | auto compacto | `transporte` | Inicio, actividad (transporte); Mercado, categoría transporte |
+| `c2-supermercado` | carrito con compras | `supermercado` | Inicio, actividad (supermercado); Mercado, categoría súper |
+| `c3-entretenimiento` | claqueta de cine | `entretenimiento` | Inicio, actividad (entretenimiento); Mercado, categoría cine |
+| `s0-luz` | rayo | `luz` | Inicio, actividad (electricidad); Servicios, empresas de electricidad |
+| `s1-agua` | gota de agua | `agua` | Inicio, actividad (agua); Servicios, empresas de agua |
+| `s2-telefonia` | teléfono con señal | `telefonia` | Inicio, actividad (telefonía); Servicios, telefonía |
+| `s3-internet` | señal wifi | `internet` | Inicio, actividad (internet); Servicios, internet |
+| `s4-cable` | televisor | `cable` | Inicio, actividad (cable); Servicios, cable |
+| `s5-recarga` | tarjeta SIM con un más | `recarga` | Inicio, actividad (recargas); Servicios, recargas |
+| `s6-factura` | factura de papel | `factura` | Inicio, actividad (pago de servicios); Servicios, empresa sin dibujo propio |
 | `m1-moneda` | moneda lisa | `moneda` | Inicio, actividad (reembolsos y respaldo) |
 | `m2-pila` | pila de monedas | `pila` | Inicio, actividad (depósitos y retiros) |
 | `f1-analisis` | barras que suben | `analisis` | Inicio, tarjeta "Gastado este mes" |
@@ -81,12 +82,12 @@ demás están convertidos y listos para las fases siguientes.
 | `f3-dividir` | recibo partido | `dividir` | Inicio, acceso a Dividir cuenta |
 | `f4-recompensas` | caja de regalo | `recompensas` | Inicio, acceso a Puntos y actividad de cashback |
 | `f5-asistente` | globo de chat con destello | `asistente` | Inicio, acceso al asistente |
-| `f6-marketplace` | bolsa de compras | `mercado` | Inicio, acceso al Mercado |
+| `f6-marketplace` | bolsa de compras | `mercado` | Inicio, acceso al Mercado; Mercado vacío |
 | `f7-tarjetas` | tarjeta de pago | `tarjetas` | Inicio, acceso a Mis tarjetas |
 | `f9-cripto` | cubos encadenados | `cripto` | Inicio, actividad de cripto |
-| `f10-protegido` | paquete con candado | `protegido` | Inicio, actividad de pago protegido |
+| `f10-protegido` | paquete con candado | `protegido` | Inicio, actividad de pago protegido; Pagos protegidos vacío |
 | `f8-planes` | diamante | — | Pendiente: planes |
-| `f11-presupuesto` | gráfico de pastel | — | Pendiente: presupuesto |
+| `f11-presupuesto` | gráfico de pastel | `presupuesto` | Presupuestos vacío |
 | `f12-recurrentes` | calendario con flecha | — | Pendiente: pagos fijos |
 | `g0-escudo` | escudo con visto | — | Pendiente: seguridad |
 | `g1-candado` | candado | — | Pendiente: protección de la cuenta |
@@ -97,16 +98,16 @@ demás están convertidos y listos para las fases siguientes.
 |---|---|---|---|
 | `e1-enviado` | visto en círculo de vidrio y avión de papel | `envioListo` | Comprobante de SINPE; envío a un contacto escaneado |
 | `e2-pagado` | recibo con sello de visto | `pagoListo` | Pago con QR desde Inicio |
-| `v1-movimientos` | recibo vacío con lupa | `sinMovimientos` | Inicio y Movimientos sin movimientos |
+| `v1-movimientos` | recibo vacío con lupa | `sinMovimientos` | Inicio, Movimientos e historial de SINPE sin movimientos |
 | `e3-sin-conexion` | wifi roto y cable suelto | — | Pendiente: sin conexión |
-| `b1-todo-en-uno` | teléfono con tarjeta y monedas | — | Pendiente: bienvenida o carrusel |
-| `b2-envios` | dos teléfonos unidos por un arco | — | Pendiente: bienvenida o carrusel |
-| `b3-seguridad` | escudo con huella frente a un teléfono | — | Pendiente: bienvenida o carrusel |
-| `b4-metas` | diana junto a barras | — | Pendiente: bienvenida o carrusel |
-| `v2-contactos` | libreta vacía | — | Pendiente: sin contactos |
-| `v3-notificaciones` | campana con luna | — | Pendiente: sin avisos |
+| `b1-todo-en-uno` | teléfono con tarjeta y monedas | `bienvenida1` | Bienvenida, lámina 1 |
+| `b2-envios` | dos teléfonos unidos por un arco | `bienvenida2` | Bienvenida, lámina 2 |
+| `b3-seguridad` | escudo con huella frente a un teléfono | `bienvenida3` | Bienvenida, lámina 3 |
+| `b4-metas` | diana junto a barras | `bienvenida4` | Bienvenida, lámina 4 |
+| `v2-contactos` | libreta vacía | `sinContactos` | SINPE sin contactos |
+| `v3-notificaciones` | campana con luna | `sinAvisos` | Avisos sin avisos |
 | `v4-tarjetas` | tarjeta con un más | `sinTarjetas` | Tarjetas, sin tarjetas todavía |
-| `v5-metas` | bandera sobre monedas | — | Pendiente: primera meta |
-| `v6-pagos-fijos` | calendario con flecha | — | Pendiente: sin pagos fijos |
-| `v7-cripto` | cubos sobre un pedestal | — | Pendiente: sin cripto |
-| `v8-dividir` | recibo partido | — | Pendiente: sin cuentas divididas |
+| `v5-metas` | bandera sobre monedas | `sinMetas` | Metas sin metas todavía |
+| `v6-pagos-fijos` | calendario con flecha | `sinPagosFijos` | Pagos fijos vacío |
+| `v7-cripto` | cubos sobre un pedestal | `sinCripto` | Cripto sin activos |
+| `v8-dividir` | recibo partido | `sinDivisiones` | Dividir sin cuentas divididas |

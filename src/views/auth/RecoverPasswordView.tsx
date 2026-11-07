@@ -139,7 +139,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
             </h1>
             <p className="text-[var(--color-text-secondary-dark)] mb-8">{t('recover_subtitle')}</p>
 
-            <label htmlFor="recover-identificador" className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
+            <label htmlFor="recover-identificador" className="text-xs font-medium text-[var(--color-text-muted-dark)] mb-2 block">
               {t('login_identifier_label')}
             </label>
             <div className="relative mb-2">
@@ -219,7 +219,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
 
             {devToken && (
               <div className="mb-4 p-3 rounded-xl bg-[var(--color-warning-soft)] border border-[var(--color-warning)]/30">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-warning)] mb-1">
+                <p className="text-[11px] font-semibold text-[var(--color-warning)] mb-1">
                   {t('recover_dev_hint')}
                 </p>
                 <p className="text-[11px] font-mono break-all text-[var(--color-text-secondary-dark)]">{devToken}</p>
@@ -232,7 +232,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
                 handleReset();
               }}
             >
-              <label htmlFor="recover-token" className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
+              <label htmlFor="recover-token" className="text-xs font-medium text-[var(--color-text-muted-dark)] mb-2 block">
                 {t('recover_token_label')}
               </label>
               <input
@@ -251,7 +251,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
                 className={`${inputClass(false)} mb-4 font-mono text-base`}
               />
 
-              <label htmlFor="recover-new-password" className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
+              <label htmlFor="recover-new-password" className="text-xs font-medium text-[var(--color-text-muted-dark)] mb-2 block">
                 {t('new_password')}
               </label>
               <div className="relative mb-2">
@@ -279,7 +279,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
               </div>
               <p className="text-[11px] text-[var(--color-text-muted-dark)] mb-4">{t('reg_password_desc')}</p>
 
-              <label htmlFor="recover-confirm-password" className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block">
+              <label htmlFor="recover-confirm-password" className="text-xs font-medium text-[var(--color-text-muted-dark)] mb-2 block">
                 {t('confirm_password')}
               </label>
               <input

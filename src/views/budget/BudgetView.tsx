@@ -25,6 +25,7 @@ import { getApiLayer } from '@/api';
 import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
+import { EstadoVacio } from '@/components/EstadoVacio';
 import { CampoMonto } from '@/components/CampoMonto';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { rellenar } from '@/utils/planes';
@@ -215,17 +216,18 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
             </Button>
           </div>
         ) : budgets.length === 0 ? (
-          <div className="mx-auto flex max-w-sm flex-col items-center py-16 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-primary-soft)]">
-              <PiggyBank size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden />
-            </div>
-            <h2 className="text-lg font-bold uv-text-primary">{t('budget_empty_title')}</h2>
-            <p className="mt-1.5 text-sm leading-relaxed uv-text-secondary">{t('budget_empty_desc')}</p>
-            <p className="mt-3 text-xs leading-relaxed uv-text-muted">{t('budget_manual_note')}</p>
-            <Button className="mt-6" leftIcon={<Icons.Plus size={18} />} onClick={() => setFormulario({ modo: 'nuevo' })}>
+          <EstadoVacio
+            icono="presupuesto"
+            titulo={t('budget_empty_title')}
+            descripcion={t('budget_empty_desc')}
+            comoTitulo="h2"
+            className="py-16"
+          >
+            <p className="text-xs leading-relaxed uv-text-muted">{t('budget_manual_note')}</p>
+            <Button leftIcon={<Icons.Plus size={18} />} onClick={() => setFormulario({ modo: 'nuevo' })}>
               {t('budget_new')}
             </Button>
-          </div>
+          </EstadoVacio>
         ) : (
           <div className="space-y-5">
             <section className="rounded-2xl uv-surface-1 p-5 uv-shadow-soft" aria-label={t('budget_summary_label')}>

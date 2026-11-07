@@ -12,15 +12,23 @@ interface OverlayShellProps {
    * mosaico de Inicio que lleva a ella.
    */
   accessory?: React.ReactNode;
+  /**
+   * Ancho de la columna en pantalla ancha (la regla de .kp-capa usa 42rem). Una
+   * vista con rejilla, como el Mercado, la abre para usar dos o tres columnas.
+   */
+  columna?: string;
 }
 
 // Full-screen overlay wrapper with a sticky back-header, used to host views that
 // render their own body but no chrome (e.g. Marketplace). Mirrors the header of
 // the other overlay views (SavingsView, EscrowView, …) for a consistent feel.
-export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, children, accessory }) => {
+export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, children, accessory, columna }) => {
   const { t } = useLanguage();
   return (
-    <div className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-fade-in">
+    <div
+      className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-fade-in"
+      style={columna ? ({ '--kp-columna': columna } as React.CSSProperties) : undefined}
+    >
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-[var(--color-background-dark)]/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center gap-2 flex-shrink-0">
         <button
           onClick={onClose}

@@ -158,7 +158,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
     const maxBucket = Math.max(1, ...buckets.map((b) => b.net));
     return (
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-2">{title}</h3>
+        <h3 className="text-xs font-semibold uv-text-muted mb-2">{title}</h3>
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden">
           {buckets.map((b) => (
             <div key={b.key ?? 'none'} className="px-4 py-3">
@@ -257,7 +257,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
         {/* Headline totals */}
         <div className="uv-surface-1 rounded-3xl p-5 uv-shadow-soft">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider uv-text-muted">
+            <span className="text-xs font-semibold uv-text-muted">
               {t('business_report_net')}
             </span>
             {desactualizado && (
@@ -387,7 +387,7 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           <>
             {/* Daily series — one measure, one hue, recessive frame. */}
             <div className="uv-surface-1 rounded-2xl p-4 uv-shadow-soft">
-              <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-3">
+              <h3 className="text-xs font-semibold uv-text-muted mb-3">
                 {t('business_report_daily')}
               </h3>
               <div className="flex items-end gap-px h-28">

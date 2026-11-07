@@ -89,7 +89,7 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-8">
         <div className="uv-surface-1 rounded-2xl uv-shadow-soft p-5">
-          <p className="text-xs font-semibold uv-text-muted uppercase tracking-wider">{t('admin_promo_balance')}</p>
+          <p className="text-xs font-semibold uv-text-muted">{t('admin_promo_balance')}</p>
           {errorSaldo ? (
             // Un saldo que no se pudo leer no es un saldo en cero: se dice.
             <div className="mt-2">

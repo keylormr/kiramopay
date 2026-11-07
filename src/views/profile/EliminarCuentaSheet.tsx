@@ -291,13 +291,13 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
           <>
             {cabecera(t('del_heading'), t('del_timeline'))}
             <section aria-labelledby={`${idError}-borra`} className="uv-surface-2 rounded-xl p-4 space-y-2.5">
-              <h3 id={`${idError}-borra`} className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+              <h3 id={`${idError}-borra`} className="text-xs font-semibold uv-text-muted">
                 {t('del_erased_title')}
               </h3>
               {lista([t('del_erased_1'), t('del_erased_2'), t('del_erased_3')])}
             </section>
             <section aria-labelledby={`${idError}-conserva`} className="uv-surface-2 rounded-xl p-4 space-y-2.5">
-              <h3 id={`${idError}-conserva`} className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+              <h3 id={`${idError}-conserva`} className="text-xs font-semibold uv-text-muted">
                 {t('del_kept_title')}
               </h3>
               {lista([t('del_kept_1'), t(fase.pideCorreo ? 'del_kept_2_no_email' : 'del_kept_2')])}
