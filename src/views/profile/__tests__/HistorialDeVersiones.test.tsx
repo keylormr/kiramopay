@@ -94,11 +94,13 @@ describe('HistorialDeVersiones: vigente completa, anteriores plegadas', () => {
 });
 
 describe('changelog del rediseno', () => {
-  const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0'];
+  // La 2.9.0 junta lo anterior al rediseno; de la 2.10.0 en adelante, una por fase.
+  const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0', '2.13.0'];
+  const fases = nuevas.slice(1);
   const por = (v: string) => getAllVersions().find((x) => x.version === v)!;
 
-  it('una version por fase, con buildNumber consecutivo y la 2.12.0 vigente', () => {
-    expect(APP_VERSION.current.version).toBe('2.12.0');
+  it('una version por fase, con buildNumber consecutivo y la ultima vigente', () => {
+    expect(APP_VERSION.current.version).toBe(nuevas[nuevas.length - 1]);
     nuevas.forEach((v, i) => expect(por(v).buildNumber).toBe(19 + i));
   });
 
@@ -115,9 +117,7 @@ describe('changelog del rediseno', () => {
     }
   });
 
-  it('las tres fases se reconocen como tal en su primer cambio', () => {
-    expect(por('2.10.0').changes[0]).toMatch(/fase 1/);
-    expect(por('2.11.0').changes[0]).toMatch(/fase 2/);
-    expect(por('2.12.0').changes[0]).toMatch(/fase 3/);
+  it('cada fase se reconoce como tal en su primer cambio', () => {
+    fases.forEach((v, i) => expect(por(v).changes[0], v).toMatch(new RegExp(`^Rediseño, fase ${i + 1}:`)));
   });
 });

@@ -495,6 +495,10 @@ export type TranslationKeys = {
   card_number_label: string;
   card_expiry_label: string;
   card_cvv_label: string;
+  card_cid_label: string;
+  card_face_aria: string;
+  card_tipo_virtual: string;
+  card_tipo_fisica: string;
   home_cards: string;
   home_cards_view: string;
   home_cards_desc: string;

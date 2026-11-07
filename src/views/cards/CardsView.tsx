@@ -1,8 +1,11 @@
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { Button } from '../../components/ui';
 import { BottomSheet } from '../../components/BottomSheet';
+import { Ilustracion3D } from '@/components/arte3d/Arte3D';
+import { CaraDeTarjeta, MiniaturaDeTarjeta } from '@/components/tarjetas/CaraDeTarjeta';
+import { agruparNumero, NOMBRE_DE_RED, redDeLaTarjeta } from '@/components/tarjetas/redDeTarjeta';
 import { getApiLayer } from '@/api';
 import type { VirtualCard } from '@/api/repositories/cards.repository';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
@@ -14,33 +17,6 @@ import { formatMoney } from '@/utils/money';
 // servidor va en ingles y, ante un fallo, puede traer el de la base de datos.
 const CLAVES_DE_CREAR: Record<string, string> = { CARDHOLDER_NAME_MISSING: 'card_err_no_name' };
 const SIN_CLAVES_PROPIAS: Record<string, string> = {};
-
-/**
- * Chip de contacto dibujado: oro con las placas de contacto. El rectangulo
- * amarillo plano de antes no se leia como chip. Colores fijos: la tarjeta es
- * la misma en los dos temas.
- */
-const ChipDeTarjeta: React.FC<{ className?: string }> = ({ className }) => {
-  const id = useId();
-  return (
-    <svg width="44" height="34" viewBox="0 0 44 34" aria-hidden="true" focusable="false" className={`block drop-shadow-sm ${className ?? ''}`}>
-      <defs>
-        <linearGradient id={`${id}-oro`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#F7E7B0" />
-          <stop offset="0.5" stopColor="#DDB866" />
-          <stop offset="1" stopColor="#B8893A" />
-        </linearGradient>
-      </defs>
-      <rect x="0.5" y="0.5" width="43" height="33" rx="6.5" fill={`url(#${id}-oro)`} stroke="rgba(92,64,16,0.4)" />
-      <path
-        d="M14.5 0.5v33M29.5 0.5v33M0.5 11.5h14M0.5 22.5h14M29.5 11.5h14M29.5 22.5h14M14.5 17h15"
-        fill="none"
-        stroke="rgba(92,64,16,0.45)"
-        strokeWidth="1"
-      />
-    </svg>
-  );
-};
 
 export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans }) => {
   const { t } = useLanguage();
@@ -223,7 +199,9 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
     }
   };
 
-  const groupPan = (pan: string) => pan.replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim();
+  // La red del numero completo, que solo existe al crear la tarjeta: agrupa
+  // 4-6-5 si es American Express y nombra su codigo como lo imprime (CID).
+  const redRevelada = revealed ? redDeLaTarjeta(revealed) : 'kiramopay';
 
   return (
     <div className="pt-4 px-4 pb-24 space-y-6">
@@ -245,9 +223,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
       ) : !card ? (
         /* Empty state — no active card yet */
         <div className="uv-surface-1 rounded-3xl p-8 text-center uv-shadow-soft">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex items-center justify-center mx-auto mb-4">
-            <Icons.Card size={32} />
-          </div>
+          <Ilustracion3D nombre="sinTarjetas" tamano={136} prioritaria className="mx-auto mb-3" />
           <h3 className="text-lg font-bold uv-text-primary mb-1">{t('card_no_cards_title')}</h3>
           <p className="uv-text-muted text-sm mb-6">{t('card_no_cards_desc')}</p>
           {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-4">{error}</p>}
@@ -274,72 +250,55 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
 
           {cards.length > 1 && (
             <div
-              className="flex gap-2 overflow-x-auto pb-1 max-w-md mx-auto"
+              /* En telefono se desliza; desde tablet hay lugar para todas
+                 (Pro permite 5) y se reparten centradas en vez de cortarse.
+                 El p-1 deja lugar al anillo de foco, que el desplazamiento
+                 recortaba arriba y a los lados. */
+              className="flex gap-2 overflow-x-auto p-1 max-w-md mx-auto md:max-w-none md:flex-wrap md:justify-center md:overflow-visible"
               role="group"
               aria-label={t('cards_pick_label')}
             >
-              {cards.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSeleccion(c.id)}
-                  aria-pressed={c.id === card.id}
-                  className={`shrink-0 h-9 px-3.5 rounded-full inline-flex items-center gap-1.5 text-sm font-bold tabular-nums transition-colors uv-focus-ring ${
-                    c.id === card.id
-                      ? 'bg-[var(--color-primary-fill)] text-white'
-                      : 'uv-surface-1 uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
-                  }`}
-                >
-                  •••• {c.last4}
-                  {c.status === 'frozen' && <Icons.Lock size={12} aria-label={t('card_frozen_label')} />}
-                </button>
-              ))}
+              {cards.map((c) => {
+                const red = redDeLaTarjeta(c);
+                const congeladaC = c.status === 'frozen';
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSeleccion(c.id)}
+                    aria-pressed={c.id === card.id}
+                    // La miniatura es solo color: la red va en el nombre, que
+                    // contiene lo que se ve ("•••• 1113") para el control por voz.
+                    aria-label={`${NOMBRE_DE_RED[red]} •••• ${c.last4}${congeladaC ? `, ${t('card_frozen_label')}` : ''}`}
+                    className={`shrink-0 h-9 px-3.5 rounded-full inline-flex items-center gap-1.5 text-sm font-bold tabular-nums transition-colors uv-focus-ring ${
+                      c.id === card.id
+                        ? 'bg-[var(--color-primary-fill)] text-white'
+                        : 'uv-surface-1 uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
+                    }`}
+                  >
+                    <MiniaturaDeTarjeta red={red} />
+                    •••• {c.last4}
+                    {congeladaC && <Icons.Lock size={12} aria-hidden="true" />}
+                  </button>
+                );
+              })}
             </div>
           )}
 
-          {/* Card Visual */}
-          <div className="relative h-56 w-full max-w-md mx-auto perspective-1000">
-            <div className={`relative w-full h-full rounded-3xl p-6 text-white uv-shadow-floating overflow-hidden uv-gradient-brand ${frozen ? 'grayscale opacity-90' : ''}`}>
-              <div
-                className="absolute -right-12 -top-12 w-48 h-48 rounded-full opacity-30 pointer-events-none"
-                style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,0.6), transparent)' }}
-              />
-              {frozen && (
-                <div className="absolute inset-0 bg-[var(--color-navy-950)]/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center rounded-3xl">
-                  <Icons.Lock size={48} className="text-white/60 mb-2" />
-                  <span className="font-bold text-white/85 tracking-widest">{t('card_frozen_label')}</span>
-                </div>
-              )}
-
-              {/* Los margenes eran mb-8 y mb-8: el contenido sumaba unos 204px
-                  en una tarjeta que deja 176 por dentro, y la fila de abajo
-                  (titular y marca) quedaba cortada por el borde. */}
-              <div className="relative flex justify-between items-start mb-4 z-10">
-                <span className="font-bold text-lg tracking-wide opacity-90">KiramoPay</span>
-                {/* Ondas de pago sin contacto; eran las barras de senal de un telefono. */}
-                <Icons.Nfc size={24} strokeWidth={1.75} className="opacity-80" aria-hidden="true" />
-              </div>
-
-              <div className="relative mb-4 z-10">
-                <ChipDeTarjeta className="mb-2" />
-                <div className="font-mono text-2xl tracking-widest drop-shadow-md tabular-nums">
-                  •••• •••• •••• {card.last4}
-                </div>
-              </div>
-
-              <div className="relative flex justify-between items-end gap-3 z-10">
-                <div className="min-w-0">
-                  <div className="text-[11px] font-medium opacity-75 mb-0.5">{t('card_holder')}</div>
-                  <div className="font-medium tracking-wide uppercase truncate">{card.cardholderName}</div>
-                </div>
-                {/* Decia VISA: prometia una red de pago a la que la tarjeta no
-                    pertenece. Es una tarjeta de KiramoPay y se dice. */}
-                <div className="shrink-0 whitespace-nowrap text-[11px] font-semibold opacity-85">
-                  {t('card_only_in_app')}
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* La cara cambia con la red del numero. Hoy toda tarjeta es de
+              KiramoPay: el servidor guarda solo los ultimos cuatro, y la red
+              no se adivina de ellos (ver redDeLaTarjeta). */}
+          <CaraDeTarjeta
+            key={card.id}
+            className="kp-voltea"
+            red={redDeLaTarjeta(card)}
+            ultimos4={card.last4}
+            titular={card.cardholderName}
+            venceMes={card.expiryMonth}
+            venceAnio={card.expiryYear}
+            tipo={card.type}
+            congelada={frozen}
+          />
 
           {/* Controls */}
           <div>
@@ -489,7 +448,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
               <div>
                 <div className="text-xs uv-text-muted mb-1">{t('card_number_label')}</div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono text-lg tracking-wider uv-text-primary tabular-nums">{groupPan(revealed.cardNumber)}</span>
+                  <span className="font-mono text-lg tracking-wider uv-text-primary tabular-nums">{agruparNumero(revealed.cardNumber, redRevelada)}</span>
                   <button onClick={copyNumber} aria-label={t('copy')} className="uv-text-secondary shrink-0">
                     <Icons.Copy size={18} />
                   </button>
@@ -503,8 +462,8 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs uv-text-muted mb-1">{t('card_cvv_label')}</div>
-                  <div className="font-mono uv-text-primary tabular-nums">{revealed.cvv || '•••'}</div>
+                  <div className="text-xs uv-text-muted mb-1">{redRevelada === 'amex' ? t('card_cid_label') : t('card_cvv_label')}</div>
+                  <div className="font-mono uv-text-primary tabular-nums">{revealed.cvv || (redRevelada === 'amex' ? '••••' : '•••')}</div>
                 </div>
               </div>
             </div>

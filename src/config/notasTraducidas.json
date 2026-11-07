@@ -1,4 +1,48 @@
 {
+  "2.13.0": {
+    "en": [
+      "Redesign, phase 4: a new Cards screen",
+      "Your KiramoPay card has a new face, with the proportions of a real card, the orange edge and the brand's K",
+      "The selector shows a thumbnail of each card, and when you switch cards the card comes in with a short turn. If you have reduced motion turned on, it does not turn",
+      "On tablets and desktops, the cards in the selector are centered and no longer cut off on the right",
+      "If you have no cards yet, the screen shows it with a new illustration"
+    ],
+    "fr": [
+      "Refonte, phase 4 : un nouvel écran Cartes",
+      "Votre carte KiramoPay a un nouveau visuel, aux proportions d’une vraie carte, avec la bordure orange et le K de la marque",
+      "Le sélecteur affiche une miniature de chaque carte, et quand vous changez de carte, elle arrive avec une courte rotation. Si vous avez activé la réduction des animations, elle ne tourne pas",
+      "Sur tablette et ordinateur, les cartes du sélecteur sont centrées et ne sont plus coupées à droite",
+      "Si vous n’avez pas encore de carte, l’écran l’indique avec une nouvelle illustration"
+    ],
+    "pt": [
+      "Redesenho, fase 4: nova tela de Cartões",
+      "Seu cartão KiramoPay tem uma nova face, com as proporções de um cartão real, a borda laranja e o K da marca",
+      "O seletor mostra uma miniatura de cada cartão e, ao trocar de cartão, ele entra com um giro curto. Se você ativou a redução de movimento, ele não gira",
+      "Em tablet e computador, os cartões do seletor ficam centralizados e não aparecem mais cortados à direita",
+      "Se você ainda não tem cartões, a tela mostra isso com uma nova ilustração"
+    ],
+    "zh-cn": [
+      "重新设计，第四阶段：全新的卡片页面",
+      "你的 KiramoPay 卡换上了新卡面：采用真实卡片的比例，带有橙色边框和品牌的 K",
+      "选择器会显示每张卡的缩略图，切换卡片时卡片会短暂翻转进入。如果你开启了减弱动态效果，则不会翻转",
+      "在平板和电脑上，选择器中的卡片会居中排列，不再在右侧被截断",
+      "如果你还没有卡片，页面会用一幅新插图来提示"
+    ],
+    "ja": [
+      "リデザイン第4弾：カード画面を一新しました",
+      "KiramoPay カードの券面が新しくなりました。実際のカードと同じ比率で、オレンジの縁取りとブランドの K が入っています",
+      "セレクターに各カードのサムネイルが表示され、カードを切り替えると短く回転して表示されます。動きを減らす設定がオンの場合は回転しません",
+      "タブレットとパソコンでは、セレクターのカードが中央に並び、右側で切れなくなりました",
+      "まだカードがない場合は、新しいイラストでお知らせします"
+    ],
+    "hi": [
+      "नया डिज़ाइन, चरण 4: नई कार्ड स्क्रीन",
+      "आपके KiramoPay कार्ड का नया रूप है, असली कार्ड जैसे अनुपात, नारंगी किनारे और ब्रांड के K के साथ",
+      "चयनकर्ता हर कार्ड का छोटा चित्र दिखाता है, और कार्ड बदलने पर कार्ड हल्का सा घूमकर आता है। अगर आपने मोशन कम करने की सेटिंग चालू की है, तो वह नहीं घूमता",
+      "टैबलेट और कंप्यूटर पर चयनकर्ता के कार्ड बीच में दिखते हैं और अब दाईं ओर कटते नहीं हैं",
+      "अगर आपके पास अभी कोई कार्ड नहीं है, तो स्क्रीन एक नए चित्र के साथ यह बताती है"
+    ]
+  },
   "2.12.0": {
     "en": [
       "Redesign, phase 3: a new Home, a new SINPE transfer flow and a new receipt",

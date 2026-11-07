@@ -42,20 +42,32 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.12.0',
-    buildNumber: 22,
+    version: '2.13.0',
+    buildNumber: 23,
     releaseDate: '2026-11-07',
     changes: [
-      'Rediseño, fase 3: nuevo Inicio, nuevo envío por SINPE y nuevo comprobante',
-      'Tu saldo vive en una tarjeta con pestañas Total, Colones, Dólares y Cripto, y lo puedes ocultar con un toque',
-      'Enviar, Recibir, Escanear y Cobrar quedan a un toque, y tu actividad reciente se agrupa por día con un icono para cada categoría',
-      'En pantallas anchas, el Inicio se ordena en dos columnas: tus cuentas y accesos a la izquierda, tu actividad y tu gasto del mes a la derecha',
-      'Antes de enviar por SINPE revisas a quién le llega, cuánto recibe, la comisión, tu saldo antes y después, y que llega al instante',
-      'Si tecleas un número, la revisión te muestra el nombre que esa persona tiene en su perfil de KiramoPay, y Enviar espera a saberlo',
-      'El comprobante dice a quién le llegó el dinero, y puedes compartirlo',
+      'Rediseño, fase 4: nueva pantalla de Tarjetas',
+      'Tu tarjeta de KiramoPay tiene una cara nueva, con las proporciones de una tarjeta real, el filo naranja y la K de la marca',
+      'El selector muestra una miniatura de cada tarjeta, y al cambiar de una a otra la tarjeta entra con un giro corto. Si tienes activado reducir el movimiento, no gira',
+      'En tablet y escritorio, las tarjetas del selector se reparten centradas y ya no quedan cortadas a la derecha',
+      'Si todavía no tienes tarjetas, la pantalla lo muestra con una ilustración nueva',
     ],
   },
   history: [
+    {
+      version: '2.12.0',
+      buildNumber: 22,
+      releaseDate: '2026-11-07',
+      changes: [
+        'Rediseño, fase 3: nuevo Inicio, nuevo envío por SINPE y nuevo comprobante',
+        'Tu saldo vive en una tarjeta con pestañas Total, Colones, Dólares y Cripto, y lo puedes ocultar con un toque',
+        'Enviar, Recibir, Escanear y Cobrar quedan a un toque, y tu actividad reciente se agrupa por día con un icono para cada categoría',
+        'En pantallas anchas, el Inicio se ordena en dos columnas: tus cuentas y accesos a la izquierda, tu actividad y tu gasto del mes a la derecha',
+        'Antes de enviar por SINPE revisas a quién le llega, cuánto recibe, la comisión, tu saldo antes y después, y que llega al instante',
+        'Si tecleas un número, la revisión te muestra el nombre que esa persona tiene en su perfil de KiramoPay, y Enviar espera a saberlo',
+        'El comprobante dice a quién le llegó el dinero, y puedes compartirlo',
+      ],
+    },
     {
       version: '2.11.0',
       buildNumber: 21,

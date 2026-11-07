@@ -58,6 +58,8 @@ import e2_480 from '@/assets/arte-3d/ilustraciones/e2-pagado-480.webp';
 import e2_960 from '@/assets/arte-3d/ilustraciones/e2-pagado-960.webp';
 import v1_480 from '@/assets/arte-3d/ilustraciones/v1-movimientos-480.webp';
 import v1_960 from '@/assets/arte-3d/ilustraciones/v1-movimientos-960.webp';
+import v4_480 from '@/assets/arte-3d/ilustraciones/v4-tarjetas-480.webp';
+import v4_960 from '@/assets/arte-3d/ilustraciones/v4-tarjetas-960.webp';
 
 /** Ancho real en px de cada archivo -> su URL en el build. */
 export type Fuentes = Readonly<Record<number, string>>;
@@ -91,6 +93,7 @@ export const ILUSTRACIONES_3D = {
   envioListo: { 480: e1_480, 960: e1_960 },
   pagoListo: { 480: e2_480, 960: e2_960 },
   sinMovimientos: { 480: v1_480, 960: v1_960 },
+  sinTarjetas: { 480: v4_480, 960: v4_960 },
 } as const satisfies Record<string, Fuentes>;
 
 export type NombreIcono3D = keyof typeof ICONOS_3D;
