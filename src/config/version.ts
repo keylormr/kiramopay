@@ -42,16 +42,70 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.8.0',
-    buildNumber: 18,
-    releaseDate: '2026-10-18',
+    version: '2.12.0',
+    buildNumber: 22,
+    releaseDate: '2026-11-07',
     changes: [
-      'Cuando sale una versión nueva, la aplicación te pide instalarla antes de seguir y te cuenta qué trae',
-      'Si en "Último acceso" aparece una cuenta que entra sin contraseña, entras de un toque, sin escribir tu usuario',
-      'Al entrar con tu huella, si no tienes una contraseña guardada, la aplicación revisa primero si tu cuenta la necesita',
+      'Rediseño, fase 3: nuevo Inicio, nuevo envío por SINPE y nuevo comprobante',
+      'Tu saldo vive en una tarjeta con pestañas Total, Colones, Dólares y Cripto, y lo puedes ocultar con un toque',
+      'Enviar, Recibir, Escanear y Cobrar quedan a un toque, y tu actividad reciente se agrupa por día con un icono para cada categoría',
+      'En pantallas anchas, el Inicio se ordena en dos columnas: tus cuentas y accesos a la izquierda, tu actividad y tu gasto del mes a la derecha',
+      'Antes de enviar por SINPE revisas a quién le llega, cuánto recibe, la comisión, tu saldo antes y después, y que llega al instante',
+      'Si tecleas un número, la revisión te muestra el nombre que esa persona tiene en su perfil de KiramoPay, y Enviar espera a saberlo',
+      'El comprobante dice a quién le llegó el dinero, y puedes compartirlo',
     ],
   },
   history: [
+    {
+      version: '2.11.0',
+      buildNumber: 21,
+      releaseDate: '2026-11-06',
+      changes: [
+        'Rediseño, fase 2: renovamos Dispositivos conectados y el panel de usuarios',
+        'En Dispositivos conectados, cada sesión muestra el icono de su plataforma y un nombre claro, como "Chrome en Windows" o "App KiramoPay en Android"',
+        'El dispositivo que estás usando aparece aparte, con la marca "En uso", y arriba ves cuántas sesiones tienes abiertas',
+        'Puedes cerrar las demás sesiones de una vez, y la aplicación te confirma cuántas se van a cerrar',
+        'Las fechas y horas de tus sesiones salen en tu idioma y ya no se parten en pantallas angostas',
+        'Si administras la plataforma, el panel de usuarios se adapta al teléfono, la tablet y el escritorio, y la ficha de cada cuenta muestra sus sesiones y su historial de bloqueos y cambios',
+      ],
+    },
+    {
+      version: '2.10.0',
+      buildNumber: 20,
+      releaseDate: '2026-11-06',
+      changes: [
+        'Rediseño, fase 1: nueva apariencia oscura y premium, con letra nueva, iconos de línea y movimiento cuidado. El oscuro es ahora el tema por defecto y el claro sigue disponible en Perfil',
+        'Los botones y los textos azules y rojos se leen con más contraste, tanto en el tema oscuro como en el claro',
+        'En pantallas anchas puedes plegar el menú lateral a una columna de iconos con el botón de arriba a la izquierda o con Ctrl + B; en pantallas medianas se abre como un cajón',
+        'En el menú, "Ahorro" ahora se llama "Metas"',
+        'Cuando abres una pantalla completa queda una sola barra de desplazamiento, y la página de atrás ya no se mueve',
+        'Tu tarjeta virtual luce un chip dorado y el símbolo de pago sin contacto',
+      ],
+    },
+    {
+      version: '2.9.0',
+      buildNumber: 19,
+      releaseDate: '2026-11-05',
+      changes: [
+        'Puedes eliminar tu cuenta desde la aplicación o desde la web, y recibes por escrito qué se borra, qué se conserva y por cuánto tiempo. La política de privacidad ya tiene una dirección pública',
+        'En el escáner puedes elegir una imagen para pagar un QR que te llegó por chat. Si el código no es de KiramoPay, el escáner te lo dice y sigue listo para el siguiente',
+        'Puedes compartir como imagen tu QR de cobro, tu QR de contacto y el de tu comercio, con el marco completo y listo para enviar',
+        'Al escanear un contacto ves el nombre que esa persona tiene en su perfil de KiramoPay antes de enviar o guardar, y Pagar espera a saber a quién le pagas',
+        'El tipo de cambio del dólar sale del Banco Central de Costa Rica. Si no hay un tipo de cambio disponible, la aplicación lo dice en vez de mostrar un valor inventado',
+        'Tu comercio muestra el detalle de cada cobro, los movimientos por día y por periodo, el resumen de ventas en el inicio y tu rol en los ajustes',
+        'El saldo total y el gasto del mes coinciden en Inicio y Perfil, el asistente responde solo sobre KiramoPay y con tus saldos por moneda, y para escribir a soporte tienes su correo en la aplicación',
+      ],
+    },
+    {
+      version: '2.8.0',
+      buildNumber: 18,
+      releaseDate: '2026-10-18',
+      changes: [
+        'Cuando sale una versión nueva, la aplicación te pide instalarla antes de seguir y te cuenta qué trae',
+        'Si en "Último acceso" aparece una cuenta que entra sin contraseña, entras de un toque, sin escribir tu usuario',
+        'Al entrar con tu huella, si no tienes una contraseña guardada, la aplicación revisa primero si tu cuenta la necesita',
+      ],
+    },
     {
       version: '2.7.0',
       buildNumber: 17,

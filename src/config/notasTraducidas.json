@@ -1,4 +1,216 @@
 {
+  "2.12.0": {
+    "en": [
+      "Redesign, phase 3: a new Home, a new SINPE transfer flow and a new receipt",
+      "Your balance lives on a card with Total, Colones, Dollars and Crypto tabs, and you can hide it with one tap",
+      "Send, Receive, Scan and Charge are one tap away, and your recent activity is grouped by day with an icon for each category",
+      "On wide screens, Home is laid out in two columns: your accounts and shortcuts on the left, your activity and monthly spending on the right",
+      "Before sending by SINPE you review who gets it, how much they receive, the fee, your balance before and after, and that it arrives instantly",
+      "If you type a number, the review shows the name that person has on their KiramoPay profile, and Send waits until it knows",
+      "The receipt says who the money reached, and you can share it"
+    ],
+    "fr": [
+      "Refonte, phase 3 : un nouvel Accueil, un nouvel envoi par SINPE et un nouveau reçu",
+      "Votre solde tient sur une carte avec les onglets Total, Colones, Dollars et Crypto, et vous pouvez le masquer d’un toucher",
+      "Envoyer, Recevoir, Scanner et Encaisser sont à portée d’un toucher, et votre activité récente est regroupée par jour avec une icône pour chaque catégorie",
+      "Sur les grands écrans, l’Accueil s’organise en deux colonnes : vos comptes et accès à gauche, votre activité et vos dépenses du mois à droite",
+      "Avant d’envoyer par SINPE, vous vérifiez qui reçoit, combien, les frais, votre solde avant et après, et que l’envoi arrive instantanément",
+      "Si vous saisissez un numéro, la vérification affiche le nom que cette personne a sur son profil KiramoPay, et Envoyer attend de le connaître",
+      "Le reçu indique à qui l’argent est arrivé, et vous pouvez le partager"
+    ],
+    "pt": [
+      "Redesign, fase 3: um novo Início, um novo envio por SINPE e um novo comprovante",
+      "Seu saldo fica em um cartão com as abas Total, Colones, Dólares e Cripto, e você pode escondê-lo com um toque",
+      "Enviar, Receber, Escanear e Cobrar ficam a um toque, e sua atividade recente é agrupada por dia, com um ícone para cada categoria",
+      "Em telas largas, o Início se organiza em duas colunas: suas contas e atalhos à esquerda, sua atividade e seus gastos do mês à direita",
+      "Antes de enviar por SINPE você revisa quem recebe, quanto recebe, a tarifa, seu saldo antes e depois, e que chega na hora",
+      "Se você digitar um número, a revisão mostra o nome que essa pessoa tem no perfil do KiramoPay, e Enviar espera até saber",
+      "O comprovante diz para quem o dinheiro chegou, e você pode compartilhá-lo"
+    ],
+    "zh-cn": [
+      "全新设计，第 3 阶段：全新的首页、全新的 SINPE 转账流程和全新的回执",
+      "您的余额显示在带有“总计”“科朗”“美元”和“加密货币”标签的卡片上，轻点一下即可隐藏",
+      "发送、接收、扫码和收款只需轻点一下，最近的动态按日期分组，每个类别都有对应的图标",
+      "在宽屏上，首页分为两列：左侧是您的账户和快捷入口，右侧是您的动态和本月支出",
+      "通过 SINPE 发送前，您可以核对收款人、收到的金额、手续费、发送前后的余额，以及资金即时到账",
+      "如果您输入手机号码，核对页面会显示对方在 KiramoPay 个人资料中的姓名，在查到之前“发送”会保持等待",
+      "回执会显示款项到了谁那里，您还可以分享回执"
+    ],
+    "ja": [
+      "リデザイン第3弾：新しいホーム、新しいSINPE送金、新しいレシート",
+      "残高は「合計」「コロン」「ドル」「暗号資産」のタブ付きカードに表示され、ワンタップで非表示にできます",
+      "送る・受け取る・スキャン・請求がワンタップで使え、最近のアクティビティは日ごとにまとめられ、カテゴリごとのアイコンが付きます",
+      "広い画面では、ホームが2列で表示されます。左にアカウントとショートカット、右にアクティビティと今月の支出が並びます",
+      "SINPEで送る前に、受取人、受取額、手数料、送金前後の残高、そして即時に届くことを確認できます",
+      "電話番号を入力した場合、確認画面にその人のKiramoPayプロフィールの名前が表示され、確認できるまで「送る」は待機します",
+      "レシートには誰にお金が届いたかが表示され、共有もできます"
+    ],
+    "hi": [
+      "रीडिज़ाइन, चरण 3: नया होम, SINPE से भेजने का नया तरीका और नई रसीद",
+      "आपका बैलेंस कुल, कोलोन, डॉलर और क्रिप्टो टैब वाले कार्ड में दिखता है, और आप उसे एक टैप से छिपा सकते हैं",
+      "भेजें, प्राप्त करें, स्कैन करें और वसूली एक टैप पर हैं, और आपकी हाल की गतिविधि दिन के हिसाब से, हर श्रेणी के आइकन के साथ दिखती है",
+      "चौड़ी स्क्रीन पर होम दो कॉलम में बँटा होता है: बाईं ओर आपके खाते और शॉर्टकट, दाईं ओर आपकी गतिविधि और इस महीने का खर्च",
+      "SINPE से भेजने से पहले आप देखते हैं कि किसे जा रहा है, उसे कितना मिलेगा, शुल्क, भेजने से पहले और बाद का आपका बैलेंस, और यह कि पैसा तुरंत पहुँचता है",
+      "अगर आप कोई नंबर टाइप करते हैं, तो समीक्षा में उस व्यक्ति का KiramoPay प्रोफ़ाइल वाला नाम दिखता है, और भेजें तब तक रुका रहता है जब तक नाम पता न चल जाए",
+      "रसीद बताती है कि पैसा किसे मिला, और आप उसे साझा कर सकते हैं"
+    ]
+  },
+  "2.11.0": {
+    "en": [
+      "Redesign, phase 2: we renewed Connected devices and the users panel",
+      "In Connected devices, each session shows its platform icon and a clear name, such as \"Chrome on Windows\" or \"KiramoPay app on Android\"",
+      "The device you are using appears separately, marked \"In use\", and at the top you see how many sessions you have open",
+      "You can close all your other sessions at once, and the app confirms how many will be closed",
+      "The dates and times of your sessions appear in your language and no longer split across lines on narrow screens",
+      "If you administer the platform, the users panel adapts to phone, tablet and desktop, and each account’s record shows its sessions and its history of blocks and changes"
+    ],
+    "fr": [
+      "Refonte, phase 2 : nous avons renouvelé Appareils connectés et le panneau des utilisateurs",
+      "Dans Appareils connectés, chaque session affiche l’icône de sa plateforme et un nom clair, comme « Chrome sur Windows » ou « Application KiramoPay sur Android »",
+      "L’appareil que vous utilisez apparaît à part, avec la mention « En cours », et en haut vous voyez combien de sessions sont ouvertes",
+      "Vous pouvez fermer toutes les autres sessions d’un coup, et l’application vous confirme combien vont être fermées",
+      "Les dates et heures de vos sessions s’affichent dans votre langue et ne se coupent plus sur les écrans étroits",
+      "Si vous administrez la plateforme, le panneau des utilisateurs s’adapte au téléphone, à la tablette et à l’ordinateur, et la fiche de chaque compte montre ses sessions et son historique de blocages et de modifications"
+    ],
+    "pt": [
+      "Redesign, fase 2: renovamos Dispositivos conectados e o painel de usuários",
+      "Em Dispositivos conectados, cada sessão mostra o ícone da sua plataforma e um nome claro, como \"Chrome no Windows\" ou \"App KiramoPay no Android\"",
+      "O dispositivo que você está usando aparece à parte, com a marca \"Em uso\", e no topo você vê quantas sessões tem abertas",
+      "Você pode encerrar as demais sessões de uma vez, e o app confirma quantas serão encerradas",
+      "As datas e horas das suas sessões aparecem no seu idioma e não se quebram mais em telas estreitas",
+      "Se você administra a plataforma, o painel de usuários se adapta ao celular, ao tablet e ao computador, e a ficha de cada conta mostra suas sessões e seu histórico de bloqueios e alterações"
+    ],
+    "zh-cn": [
+      "全新设计，第 2 阶段：我们更新了“已连接设备”和用户管理面板",
+      "在“已连接设备”中，每个会话都会显示所属平台的图标和清晰的名称，例如“Windows 上的 Chrome”或“Android 上的 KiramoPay 应用”",
+      "您正在使用的设备会单独显示，并标有“使用中”，顶部会显示您已打开的会话数量",
+      "您可以一次性关闭其余所有会话，应用会先确认将关闭多少个",
+      "会话的日期和时间以您的语言显示，在窄屏上也不再被拆成两行",
+      "如果您管理平台，用户面板会适配手机、平板和桌面，每个账户的详情页会显示其会话以及封锁和变更的历史记录"
+    ],
+    "ja": [
+      "リデザイン第2弾：接続中のデバイスとユーザー管理パネルを刷新しました",
+      "接続中のデバイスでは、各セッションにプラットフォームのアイコンと「Windows の Chrome」「Android の KiramoPay アプリ」のようなわかりやすい名前が表示されます",
+      "使用中のデバイスは別枠で「使用中」と表示され、上部には開いているセッションの数が表示されます",
+      "他のセッションをまとめて終了でき、終了する件数を確認してから実行されます",
+      "セッションの日付と時刻はお使いの言語で表示され、狭い画面でも途中で折り返されなくなりました",
+      "プラットフォームの管理者向けに、ユーザーパネルはスマートフォン、タブレット、デスクトップに合わせて表示され、各アカウントの詳細にセッションとブロックや変更の履歴が表示されます"
+    ],
+    "hi": [
+      "रीडिज़ाइन, चरण 2: हमने जुड़े हुए डिवाइस और उपयोगकर्ता पैनल को नया रूप दिया है",
+      "जुड़े हुए डिवाइस में हर सत्र अपने प्लेटफ़ॉर्म का आइकन और साफ़ नाम दिखाता है, जैसे \"Windows पर Chrome\" या \"Android पर KiramoPay ऐप\"",
+      "जो डिवाइस आप इस्तेमाल कर रहे हैं वह अलग से \"उपयोग में\" के निशान के साथ दिखता है, और ऊपर आपको खुले सत्रों की संख्या दिखती है",
+      "आप बाकी सभी सत्र एक साथ बंद कर सकते हैं, और ऐप बताता है कि कितने सत्र बंद होंगे",
+      "आपके सत्रों की तारीख़ें और समय आपकी भाषा में दिखते हैं और संकरी स्क्रीन पर अब दो पंक्तियों में नहीं बँटते",
+      "अगर आप प्लेटफ़ॉर्म का प्रबंधन करते हैं, तो उपयोगकर्ता पैनल फ़ोन, टैबलेट और डेस्कटॉप के हिसाब से ढलता है, और हर खाते की प्रोफ़ाइल में उसके सत्र और ब्लॉक व बदलावों का इतिहास दिखता है"
+    ]
+  },
+  "2.10.0": {
+    "en": [
+      "Redesign, phase 1: a new dark, premium look, with a new typeface, line icons and polished motion. Dark is now the default theme, and light is still available in Profile",
+      "Buttons and blue and red text are easier to read, with higher contrast in both the dark and the light theme",
+      "On wide screens you can fold the side menu into a column of icons with the button at the top left or with Ctrl + B; on medium screens it opens as a drawer",
+      "In the menu, \"Savings\" is now called \"Goals\"",
+      "When you open a full screen there is only one scroll bar, and the page behind it no longer moves",
+      "Your virtual card now shows a gold chip and the contactless payment symbol"
+    ],
+    "fr": [
+      "Refonte, phase 1 : une nouvelle apparence sombre et haut de gamme, avec une nouvelle police, des icônes au trait et des animations soignées. Le thème sombre devient le thème par défaut, et le thème clair reste disponible dans Profil",
+      "Les boutons et les textes bleus et rouges se lisent avec plus de contraste, dans le thème sombre comme dans le thème clair",
+      "Sur les grands écrans, vous pouvez replier le menu latéral en une colonne d’icônes avec le bouton en haut à gauche ou avec Ctrl + B ; sur les écrans moyens, il s’ouvre comme un tiroir",
+      "Dans le menu, « Épargne » s’appelle désormais « Objectifs »",
+      "Quand vous ouvrez un écran plein format, il n’y a plus qu’une seule barre de défilement, et la page en arrière-plan ne bouge plus",
+      "Votre carte virtuelle affiche une puce dorée et le symbole du paiement sans contact"
+    ],
+    "pt": [
+      "Redesign, fase 1: um novo visual escuro e premium, com fonte nova, ícones de linha e movimento cuidadoso. O escuro agora é o tema padrão, e o claro continua disponível em Perfil",
+      "Os botões e os textos azuis e vermelhos se leem com mais contraste, tanto no tema escuro quanto no claro",
+      "Em telas largas você pode recolher o menu lateral em uma coluna de ícones com o botão do canto superior esquerdo ou com Ctrl + B; em telas médias ele abre como uma gaveta",
+      "No menu, \"Poupança\" agora se chama \"Metas\"",
+      "Ao abrir uma tela cheia, há uma única barra de rolagem, e a página de trás não se move mais",
+      "Seu cartão virtual agora tem um chip dourado e o símbolo de pagamento por aproximação"
+    ],
+    "zh-cn": [
+      "全新设计，第 1 阶段：全新的深色高端外观，换用新字体、线性图标和更精致的动效。深色现在是默认主题，浅色仍可在“个人资料”中选择",
+      "按钮以及蓝色和红色文字的对比度更高，在深色和浅色主题下都更易阅读",
+      "在宽屏上，您可以用左上角的按钮或 Ctrl + B 把侧边菜单收起为一列图标；在中等屏幕上，菜单以抽屉形式打开",
+      "菜单中的“储蓄”现在叫“目标”",
+      "打开全屏页面时只剩一条滚动条，后面的页面不会再跟着滚动",
+      "您的虚拟卡现在带有金色芯片和非接触支付标志"
+    ],
+    "ja": [
+      "リデザイン第1弾：新しいダークでプレミアムな外観。新しい書体、線のアイコン、丁寧な動きを採用しました。ダークがデフォルトのテーマになり、ライトはプロフィールから引き続き選べます",
+      "ボタンや青・赤の文字は、ダークでもライトでもコントラストが高くなり、読みやすくなりました",
+      "広い画面では、左上のボタンまたは Ctrl + B でサイドメニューをアイコンだけの列に折りたためます。中くらいの画面ではドロワーとして開きます",
+      "メニューの「貯蓄」は「目標」という名前になりました",
+      "フルスクリーンの画面を開くとスクロールバーは1本だけになり、背後のページは動かなくなりました",
+      "バーチャルカードに金色のチップと非接触決済のマークが付きました"
+    ],
+    "hi": [
+      "रीडिज़ाइन, चरण 1: गहरा और प्रीमियम नया रूप, नया फ़ॉन्ट, रेखा वाले आइकन और सलीकेदार गति। गहरा अब डिफ़ॉल्ट थीम है, और हल्की थीम प्रोफ़ाइल में अब भी उपलब्ध है",
+      "बटन और नीले व लाल टेक्स्ट अब ज़्यादा कंट्रास्ट के साथ पढ़ने में आसान हैं, गहरी और हल्की दोनों थीम में",
+      "चौड़ी स्क्रीन पर आप ऊपर बाईं ओर के बटन या Ctrl + B से साइड मेन्यू को आइकन के एक स्तंभ में समेट सकते हैं; मध्यम स्क्रीन पर वह एक दराज़ की तरह खुलता है",
+      "मेन्यू में \"बचत\" का नाम अब \"लक्ष्य\" है",
+      "जब आप पूरी स्क्रीन वाला पेज खोलते हैं तो सिर्फ़ एक स्क्रॉल बार रहता है, और पीछे का पेज अब नहीं हिलता",
+      "आपके वर्चुअल कार्ड पर अब सुनहरी चिप और कॉन्टैक्टलेस भुगतान का चिह्न दिखता है"
+    ]
+  },
+  "2.9.0": {
+    "en": [
+      "You can delete your account from the app or from the web, and you receive in writing what is deleted, what is kept and for how long. The privacy policy now has a public address",
+      "In the scanner you can choose an image to pay a QR that reached you in a chat. If the code is not from KiramoPay, the scanner tells you and stays ready for the next one",
+      "You can share your payment QR, your contact QR and your business QR as an image, with the full frame and ready to send",
+      "When you scan a contact you see the name that person has on their KiramoPay profile before sending or saving, and Pay waits until it knows who you are paying",
+      "The dollar exchange rate comes from the Central Bank of Costa Rica. If no exchange rate is available, the app says so instead of showing a made-up value",
+      "Your business shows the detail of each charge, movements by day and by period, the sales summary on the home screen and your role in settings",
+      "Your total balance and monthly spending match on Home and Profile, the assistant answers only about KiramoPay and with your balances by currency, and the support email is now in the app"
+    ],
+    "fr": [
+      "Vous pouvez supprimer votre compte depuis l’application ou depuis le web, et vous recevez par écrit ce qui est supprimé, ce qui est conservé et pour combien de temps. La politique de confidentialité a désormais une adresse publique",
+      "Dans le scanner, vous pouvez choisir une image pour payer un QR reçu par messagerie. Si le code n’est pas de KiramoPay, le scanner vous le dit et reste prêt pour le suivant",
+      "Vous pouvez partager en image votre QR d’encaissement, votre QR de contact et celui de votre commerce, avec le cadre complet et prêt à envoyer",
+      "Quand vous scannez un contact, vous voyez le nom que cette personne a sur son profil KiramoPay avant d’envoyer ou d’enregistrer, et Payer attend de savoir à qui vous payez",
+      "Le taux de change du dollar provient de la Banque centrale du Costa Rica. S’il n’y a pas de taux disponible, l’application le dit au lieu d’afficher une valeur inventée",
+      "Votre commerce affiche le détail de chaque encaissement, les mouvements par jour et par période, le résumé des ventes sur l’accueil et votre rôle dans les réglages",
+      "Le solde total et les dépenses du mois concordent entre Accueil et Profil, l’assistant répond uniquement sur KiramoPay et avec vos soldes par devise, et l’e-mail du support est maintenant dans l’application"
+    ],
+    "pt": [
+      "Você pode excluir sua conta pelo app ou pela web, e recebe por escrito o que é apagado, o que é guardado e por quanto tempo. A política de privacidade agora tem um endereço público",
+      "No scanner você pode escolher uma imagem para pagar um QR que chegou por chat. Se o código não for do KiramoPay, o scanner avisa e continua pronto para o próximo",
+      "Você pode compartilhar como imagem seu QR de cobrança, seu QR de contato e o do seu comércio, com a moldura completa e pronto para enviar",
+      "Ao escanear um contato, você vê o nome que essa pessoa tem no perfil do KiramoPay antes de enviar ou salvar, e Pagar espera até saber a quem você está pagando",
+      "A taxa de câmbio do dólar vem do Banco Central da Costa Rica. Se não houver taxa disponível, o app avisa em vez de mostrar um valor inventado",
+      "Seu comércio mostra o detalhe de cada cobrança, as movimentações por dia e por período, o resumo de vendas no início e o seu papel nos ajustes",
+      "O saldo total e o gasto do mês coincidem no Início e no Perfil, o assistente responde apenas sobre o KiramoPay e com seus saldos por moeda, e o e-mail de suporte agora está no app"
+    ],
+    "zh-cn": [
+      "您可以在应用或网页上删除账户，并以书面形式收到哪些数据会被删除、哪些会被保留以及保留多久。隐私政策现在有了公开网址",
+      "在扫码器中，您可以选择一张图片来支付通过聊天收到的二维码。如果该码不是 KiramoPay 的，扫码器会告诉您，并继续保持待扫状态",
+      "您可以把收款二维码、联系人二维码和商户二维码保存为图片分享，带完整边框，可直接发送",
+      "扫描联系人时，在发送或保存之前，您会看到对方在 KiramoPay 个人资料中的姓名，“支付”也会等到确认收款人后再继续",
+      "美元汇率来自哥斯达黎加中央银行。如果暂时没有可用汇率，应用会如实告知，而不是显示编造的数值",
+      "您的商户会显示每笔收款的详情、按日和按时间段的流水、首页的销售汇总，以及您在设置中的角色",
+      "首页和个人资料中的总余额和本月支出保持一致，助手只回答与 KiramoPay 有关的问题，并按币种给出您的余额，支持邮箱现在也在应用里"
+    ],
+    "ja": [
+      "アプリまたはウェブからアカウントを削除でき、何が削除され、何が保管され、どれくらいの期間保管されるかを書面で受け取れます。プライバシーポリシーは公開アドレスで見られるようになりました",
+      "スキャナーで画像を選んで、チャットで届いた QR を支払えます。KiramoPay のコードでない場合はスキャナーがそう知らせ、次のコードを読み取れる状態のままです",
+      "請求用 QR、連絡先用 QR、お店の QR を画像として共有できます。枠まで含めて、そのまま送れます",
+      "連絡先をスキャンすると、送金や保存の前に、その人の KiramoPay プロフィールの名前が表示されます。また「支払う」は、誰に払うかがわかるまで待機します",
+      "ドルの為替レートはコスタリカ中央銀行から取得します。レートがない場合は、作り値を表示する代わりにその旨をお知らせします",
+      "お店では、各請求の詳細、日別・期間別の取引、ホームの売上サマリー、設定での自分の役割を確認できます",
+      "合計残高と今月の支出がホームとプロフィールで一致し、アシスタントは KiramoPay についてだけ、通貨ごとの残高で答えます。サポートのメールアドレスもアプリ内に載りました"
+    ],
+    "hi": [
+      "आप ऐप या वेब से अपना खाता हटा सकते हैं, और आपको लिखित में मिलता है कि क्या मिटाया जाता है, क्या रखा जाता है और कितने समय तक। गोपनीयता नीति का अब एक सार्वजनिक पता है",
+      "स्कैनर में आप चैट में मिला QR चुकाने के लिए कोई तस्वीर चुन सकते हैं। अगर कोड KiramoPay का नहीं है, तो स्कैनर बता देता है और अगले कोड के लिए तैयार रहता है",
+      "आप अपना वसूली QR, संपर्क QR और अपने कारोबार का QR तस्वीर के रूप में साझा कर सकते हैं, पूरे फ़्रेम के साथ और भेजने के लिए तैयार",
+      "किसी संपर्क को स्कैन करने पर, भेजने या सहेजने से पहले आपको उस व्यक्ति का KiramoPay प्रोफ़ाइल वाला नाम दिखता है, और भुगतान तब तक रुका रहता है जब तक पता न चल जाए कि आप किसे भुगतान कर रहे हैं",
+      "डॉलर की विनिमय दर कोस्टा रिका के केंद्रीय बैंक से आती है। अगर कोई दर उपलब्ध नहीं है, तो ऐप गढ़ा हुआ मान दिखाने के बजाय यही बताता है",
+      "आपका कारोबार हर वसूली का ब्योरा, दिन और अवधि के हिसाब से लेन-देन, होम पर बिक्री का सारांश और सेटिंग में आपकी भूमिका दिखाता है",
+      "कुल बैलेंस और महीने का खर्च होम और प्रोफ़ाइल में एक जैसे दिखते हैं, असिस्टेंट सिर्फ़ KiramoPay के बारे में और मुद्रा के हिसाब से आपके बैलेंस के साथ जवाब देता है, और सपोर्ट का ईमेल अब ऐप में है"
+    ]
+  },
   "2.8.0": {
     "en": [
       "When a new version comes out, the app asks you to install it before you continue and tells you what it brings",

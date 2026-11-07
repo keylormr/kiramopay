@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
-import { HistorialDeVersiones } from '../HistorialDeVersiones';
+import { HistorialDeVersiones, fechaDeVersion } from '../HistorialDeVersiones';
 import notasTraducidas from '@/config/notasTraducidas.json';
 import { APP_VERSION, getAllVersions } from '@/config/version';
 
@@ -55,5 +56,68 @@ describe('HistorialDeVersiones', () => {
     pintar();
     const titulos = screen.getAllByText(/^v\d+\.\d+\.\d+$/).map((el) => el.textContent);
     expect(titulos).toEqual(getAllVersions().map((v) => `v${v.version}`));
+  });
+});
+
+describe('HistorialDeVersiones: vigente completa, anteriores plegadas', () => {
+  it('las anteriores empiezan plegadas y cada boton declara aria-expanded', () => {
+    localStorage.setItem('kiramopay_language', 'es');
+    pintar();
+    const anteriores = getAllVersions().slice(1);
+    const botones = screen.getAllByRole('button', { expanded: false });
+    expect(botones).toHaveLength(anteriores.length);
+    for (const b of botones) expect(b).toHaveAttribute('aria-controls');
+  });
+
+  it('el boton despliega y vuelve a plegar las notas de su version', async () => {
+    localStorage.setItem('kiramopay_language', 'es');
+    const user = userEvent.setup();
+    pintar();
+    const previa = getAllVersions()[1];
+    const boton = screen.getByRole('button', { name: new RegExp(`v${previa.version.replace(/\./g, '\\.')},`) });
+    const panel = document.getElementById(boton.getAttribute('aria-controls') as string) as HTMLElement;
+    expect(panel).toHaveAttribute('inert');
+    await user.click(boton);
+    expect(boton).toHaveAttribute('aria-expanded', 'true');
+    expect(panel).not.toHaveAttribute('inert');
+    await user.click(boton);
+    expect(boton).toHaveAttribute('aria-expanded', 'false');
+    expect(panel).toHaveAttribute('inert');
+  });
+
+  it('la fecha sale legible en el idioma de la persona y sin correrse de dia', () => {
+    expect(fechaDeVersion('2026-11-05', 'es')).toMatch(/5.*noviembre.*2026/);
+    expect(fechaDeVersion('2026-11-05', 'en')).toMatch(/November.*5.*2026|5.*November.*2026/);
+    expect(fechaDeVersion('2026-11-05', 'ja')).toContain('2026');
+    expect(fechaDeVersion('sin fecha', 'es')).toBe('sin fecha');
+  });
+});
+
+describe('changelog del rediseno', () => {
+  const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0'];
+  const por = (v: string) => getAllVersions().find((x) => x.version === v)!;
+
+  it('una version por fase, con buildNumber consecutivo y la 2.12.0 vigente', () => {
+    expect(APP_VERSION.current.version).toBe('2.12.0');
+    nuevas.forEach((v, i) => expect(por(v).buildNumber).toBe(19 + i));
+  });
+
+  it('entre 3 y 7 cambios por version, sin emojis y con su traduccion', () => {
+    for (const v of nuevas) {
+      const cambios = por(v).changes;
+      expect(cambios.length, v).toBeGreaterThanOrEqual(3);
+      expect(cambios.length, v).toBeLessThanOrEqual(7);
+      for (const idioma of ['en', 'fr', 'pt', 'zh-cn', 'ja', 'hi']) {
+        const textos = traducidas[v][idioma];
+        expect(textos, `${v} ${idioma}`).toHaveLength(cambios.length);
+        for (const c of [...cambios, ...textos]) expect(c).not.toMatch(/\p{Extended_Pictographic}/u);
+      }
+    }
+  });
+
+  it('las tres fases se reconocen como tal en su primer cambio', () => {
+    expect(por('2.10.0').changes[0]).toMatch(/fase 1/);
+    expect(por('2.11.0').changes[0]).toMatch(/fase 2/);
+    expect(por('2.12.0').changes[0]).toMatch(/fase 3/);
   });
 });
