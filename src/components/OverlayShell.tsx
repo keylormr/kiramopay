@@ -32,7 +32,12 @@ export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, chil
         <span className="font-bold text-lg tracking-tight uv-text-primary">{title}</span>
         {accessory && <div className="ml-auto flex items-center pr-1">{accessory}</div>}
       </div>
-      <div className="flex-1 overflow-y-auto max-w-2xl mx-auto w-full">
+      {/* Lo que se desplaza ocupa todo el ancho, como en las demas capas: la
+          barra queda en el borde de la ventana y la rueda funciona tambien en
+          los costados. La columna la pone la regla de .kp-capa (index.css);
+          con max-w-2xl aqui, la barra de desplazamiento quedaba en medio de
+          la pantalla. */}
+      <div className="flex-1 overflow-y-auto">
         {children}
       </div>
     </div>

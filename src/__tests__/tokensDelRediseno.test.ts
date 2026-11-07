@@ -216,3 +216,19 @@ describe('pantallas completas en pantalla ancha', () => {
     expect(regla).toContain(":not([data-ancho='libre'])");
   });
 });
+
+describe('una sola barra de desplazamiento con una pantalla completa abierta', () => {
+  it('la pagina de abajo no se desplaza mientras haya una capa montada', () => {
+    expect(css).toMatch(/html:has\(\.kp-capa\)\s*{\s*overflow: hidden;\s*}/);
+  });
+
+  it('el contenedor de la capa no le pasa el gesto a la raiz al llegar al final', () => {
+    expect(css).toMatch(/\.kp-capa \.overflow-y-auto\s*{\s*overscroll-behavior-y: contain;\s*}/);
+  });
+
+  it('la pista no usa translate de -50 %: la animacion de entrada lo pisaba', () => {
+    const pista = /@keyframes kp-pista-entra\s*{([\s\S]*?)\n}/.exec(css)?.[1] ?? '';
+    expect(pista).not.toContain('-50%');
+    expect(css).toMatch(/\[data-lado='abajo'\] > \.kp-pista\s*{\s*animation-name: kp-pista-baja;/);
+  });
+});

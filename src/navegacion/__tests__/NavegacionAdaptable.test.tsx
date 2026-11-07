@@ -9,6 +9,7 @@ import {
   NavegacionLateral,
   useAtajoDelMenu,
   useClaseDeVentana,
+  type ControlDelMenu,
   type ElementoDeNavegacion,
   type PieDeNavegacion,
 } from '../NavegacionAdaptable';
@@ -300,6 +301,95 @@ describe('BotonDelMenu', () => {
     expect(boton.getAttribute('aria-expanded')).toBe('false');
     expect(boton.getAttribute('aria-controls')).toBe(ID_MENU_MODAL);
     expect(boton.getAttribute('aria-haspopup')).toBe('dialog');
+  });
+});
+
+// El boton vivia en la barra superior de las pestanas, y las pantallas
+// completas tapan esa barra: en Tarjetas o Metas solo quedaba Ctrl+B. Ahora
+// vive en la navegacion, que ninguna pantalla tapa.
+describe('boton del menu dentro de la navegacion', () => {
+  const control = (extra: Partial<ControlDelMenu> = {}): ControlDelMenu => ({
+    modalAbierto: false,
+    onAlternar: vi.fn(),
+    etiquetas: ETIQUETAS,
+    ...extra,
+  });
+  const lateral = (clase: 'mediana' | 'expandida', plegado: boolean, c: ControlDelMenu, ref?: React.Ref<HTMLButtonElement>) => (
+    <NavegacionLateral clase={clase} plegado={plegado} elementos={ELEMENTOS} atajos={ATAJOS} actual="home" onElegir={() => {}} ariaLabel="n" nombreDeLaApp="KiramoPay" pie={PIE} control={c} refDelBoton={ref} />
+  );
+
+  it('con el menu abierto: arriba a la izquierda, controla el menu y lo pliega', () => {
+    const c = control();
+    const ref = createRef<HTMLButtonElement>();
+    render(lateral('expandida', false, c, ref));
+    const nav = screen.getByRole('navigation');
+    const boton = screen.getByRole('button', { name: 'Contraer el menú' });
+    expect(nav.contains(boton)).toBe(true);
+    // Primero en el orden de tabulacion de la navegacion.
+    expect(nav.querySelector('button')).toBe(boton);
+    expect(boton.getAttribute('aria-controls')).toBe(ID_MENU_LATERAL);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(ref.current).toBe(boton);
+    fireEvent.click(boton);
+    expect(c.onAlternar).toHaveBeenCalledTimes(1);
+  });
+
+  it('plegado, el riel empieza con el boton y la marca se va', () => {
+    render(lateral('expandida', true, control()));
+    const boton = screen.getByRole('button', { name: 'Expandir el menú' });
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByText('KiramoPay').closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it('su pista dice la accion y el atajo: debajo con el menu abierto, al lado plegado', () => {
+    const { rerender } = render(lateral('expandida', false, control()));
+    entra(screen.getByRole('button', { name: 'Contraer el menú' }));
+    let pista = document.querySelector('[data-pista]');
+    expect(pista?.textContent).toBe('Contraer el menúCtrl+B');
+    expect(pista?.querySelector('kbd')?.textContent).toBe('Ctrl+B');
+    // Debajo: a la derecha taparia la marca.
+    expect(pista?.getAttribute('data-lado')).toBe('abajo');
+
+    rerender(lateral('expandida', true, control()));
+    entra(screen.getByRole('button', { name: 'Expandir el menú' }));
+    pista = document.querySelector('[data-pista]');
+    expect(pista?.textContent).toBe('Expandir el menúCtrl+B');
+    expect(pista?.getAttribute('data-lado')).toBe('derecha');
+  });
+
+  it('tocarlo quita la pista: el menu cambia de forma debajo de ella', () => {
+    render(lateral('expandida', true, control()));
+    const boton = screen.getByRole('button', { name: 'Expandir el menú' });
+    entra(boton);
+    expect(document.querySelector('[data-pista]')).not.toBeNull();
+    fireEvent.click(boton);
+    expect(document.querySelector('[data-pista]')).toBeNull();
+  });
+
+  it('con el dedo no hay pista', () => {
+    render(lateral('expandida', false, control()));
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Contraer el menú' }), { pointerType: 'touch' });
+    expect(document.querySelector('[data-pista]')).toBeNull();
+  });
+
+  it('en el riel (mediana) reemplaza a la marca y abre el cajon', () => {
+    const c = control();
+    render(lateral('mediana', false, c));
+    const boton = screen.getByRole('button', { name: 'Abrir el menú' });
+    expect(boton.getAttribute('aria-controls')).toBe(ID_MENU_MODAL);
+    expect(boton.getAttribute('aria-haspopup')).toBe('dialog');
+    entra(boton);
+    expect(document.querySelector('[data-pista]')?.getAttribute('data-lado')).toBe('derecha');
+    fireEvent.click(boton);
+    expect(c.onAlternar).toHaveBeenCalledTimes(1);
+  });
+
+  it('el cajon pone su boton de cerrar en el mismo punto, antes de la marca', () => {
+    render(
+      <MenuModal abierto onCerrar={() => {}} elementos={ELEMENTOS} actual="home" onElegir={() => {}} ariaLabel="n" nombreDeLaApp="KiramoPay" etiquetaCerrar="Cerrar el menú" />,
+    );
+    const dialogo = screen.getByRole('dialog');
+    expect(dialogo.querySelector('button')?.getAttribute('aria-label')).toBe('Cerrar el menú');
   });
 });
 

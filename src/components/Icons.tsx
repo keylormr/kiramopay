@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   LogOut,
   SignalHigh,
+  Nfc,
   Bitcoin,
   Plus,
   Minus,
@@ -186,6 +187,8 @@ export const Icons = {
 
   // Status
   SignalHigh,
+  // Pago sin contacto (las ondas de la cara de la tarjeta).
+  Nfc,
   Wifi,
   Battery,
   Clock,
