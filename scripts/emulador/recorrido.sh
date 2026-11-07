@@ -38,7 +38,8 @@ adb install -r -g "$APK"
 # captura hasta unos segundos despues de que el splash da paso a la primera
 # pantalla (con un tope de tiempo) y falla si no llego a verla, si despues del
 # splash aparece un cuadro mayormente blanco o si hay una franja clara en las
-# barras.
+# barras (la de abajo no cuenta con el teclado a la vista: el login enfoca el
+# campo de usuario al abrir).
 adb shell am start -n "$PAQUETE/.MainActivity"
 if ! node scripts/emulador/sin-destello.mjs --capturar "$SALIDA/arranque"; then
   fallas+=("el arranque no paso la revision de destellos (ver arranque/resumen.json)")
