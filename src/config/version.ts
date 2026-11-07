@@ -42,18 +42,32 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.13.0',
-    buildNumber: 23,
+    version: '2.14.0',
+    buildNumber: 24,
     releaseDate: '2026-11-07',
     changes: [
-      'Rediseño, fase 4: nueva pantalla de Tarjetas',
-      'Tu tarjeta de KiramoPay tiene una cara nueva, con las proporciones de una tarjeta real, el filo naranja y la K de la marca',
-      'El selector muestra una miniatura de cada tarjeta, y al cambiar de una a otra la tarjeta entra con un giro corto. Si tienes activado reducir el movimiento, no gira',
-      'En tablet y escritorio, las tarjetas del selector se reparten centradas y ya no quedan cortadas a la derecha',
-      'Si todavía no tienes tarjetas, la pantalla lo muestra con una ilustración nueva',
+      'Rediseño, fase 5: el resto de la aplicación estrena el estilo nuevo',
+      'Antes de pagar con QR o de enviar cripto revisas a quién le llega, cuánto, la comisión y tu saldo, igual que al enviar por SINPE',
+      'Cripto muestra los logos de Bitcoin y Ethereum, y tu cartera, SINPE y tu perfil viven en la misma tarjeta oscura del Inicio',
+      'El ojo que oculta tu saldo en el Inicio ahora también tapa los montos de Movimientos, Metas, Cripto, SINPE, Servicios, Dividir y tu perfil',
+      'La bienvenida, Servicios, el Mercado y las pantallas vacías tienen ilustraciones nuevas',
+      'En tablet y escritorio, SINPE, Cripto, Servicios, Perfil y el Mercado se ordenan en columnas',
+      'Los títulos de las secciones ya no van en mayúsculas, y donde decía "ahorro" ahora dice "Metas"',
     ],
   },
   history: [
+    {
+      version: '2.13.0',
+      buildNumber: 23,
+      releaseDate: '2026-11-07',
+      changes: [
+        'Rediseño, fase 4: nueva pantalla de Tarjetas',
+        'Tu tarjeta de KiramoPay tiene una cara nueva, con las proporciones de una tarjeta real, el filo naranja y la K de la marca',
+        'El selector muestra una miniatura de cada tarjeta, y al cambiar de una a otra la tarjeta entra con un giro corto. Si tienes activado reducir el movimiento, no gira',
+        'En tablet y escritorio, las tarjetas del selector se reparten centradas y ya no quedan cortadas a la derecha',
+        'Si todavía no tienes tarjetas, la pantalla lo muestra con una ilustración nueva',
+      ],
+    },
     {
       version: '2.12.0',
       buildNumber: 22,

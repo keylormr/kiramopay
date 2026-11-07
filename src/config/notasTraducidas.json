@@ -1,4 +1,60 @@
 {
+  "2.14.0": {
+    "en": [
+      "Redesign, phase 5: the rest of the app gets the new style",
+      "Before you pay with QR or send crypto, you review who gets it, how much, the fee and your balance, just like when you send by SINPE",
+      "Crypto shows the Bitcoin and Ethereum logos, and your portfolio, SINPE and your profile live on the same dark card as Home",
+      "The eye that hides your balance on Home now also hides the amounts in Transactions, Goals, Crypto, SINPE, Services, Split and your profile",
+      "The welcome screens, Services, the Marketplace and the empty screens have new illustrations",
+      "On tablets and desktops, SINPE, Crypto, Services, Profile and the Marketplace are laid out in columns",
+      "Section titles are no longer in capital letters, and where it said \"savings\" it now says \"Goals\""
+    ],
+    "fr": [
+      "Refonte, phase 5 : le reste de l’application adopte le nouveau style",
+      "Avant de payer par QR ou d’envoyer des cryptos, vous vérifiez qui reçoit, combien, les frais et votre solde, comme pour un envoi SINPE",
+      "Crypto affiche les logos de Bitcoin et d’Ethereum, et votre portefeuille, SINPE et votre profil sont sur la même carte sombre que l’Accueil",
+      "L’œil qui masque votre solde sur l’Accueil masque aussi les montants dans Mouvements, Objectifs, Crypto, SINPE, Services, Partager et votre profil",
+      "L’accueil, Services, le Marché et les écrans vides ont de nouvelles illustrations",
+      "Sur tablette et ordinateur, SINPE, Crypto, Services, Profil et le Marché s’organisent en colonnes",
+      "Les titres des sections ne sont plus en majuscules, et là où il était écrit « épargne », il est maintenant écrit « Objectifs »"
+    ],
+    "pt": [
+      "Redesenho, fase 5: o resto do aplicativo ganha o novo estilo",
+      "Antes de pagar com QR ou enviar cripto, você revisa quem recebe, quanto, a taxa e seu saldo, como ao enviar por SINPE",
+      "Cripto mostra os logos do Bitcoin e do Ethereum, e sua carteira, o SINPE e seu perfil ficam no mesmo cartão escuro do Início",
+      "O olho que oculta seu saldo no Início agora também oculta os valores em Movimentos, Metas, Cripto, SINPE, Serviços, Dividir e seu perfil",
+      "As boas-vindas, Serviços, o Mercado e as telas vazias têm novas ilustrações",
+      "Em tablet e computador, SINPE, Cripto, Serviços, Perfil e o Mercado se organizam em colunas",
+      "Os títulos das seções não estão mais em maiúsculas, e onde dizia \"poupança\" agora diz \"Metas\""
+    ],
+    "zh-cn": [
+      "重新设计，第 5 阶段：应用的其余部分换上新风格",
+      "用二维码付款或发送加密货币前，您会核对收款人、金额、手续费和您的余额，与 SINPE 转账时一样",
+      "加密货币页面显示比特币和以太坊的标志，您的投资组合、SINPE 和个人资料都放在与首页相同的深色卡片上",
+      "首页上隐藏余额的眼睛图标，现在也会隐藏交易记录、目标、加密货币、SINPE、服务、分账和个人资料中的金额",
+      "欢迎页、服务、市场和空白页面都有新的插图",
+      "在平板和电脑上，SINPE、加密货币、服务、个人资料和市场会分栏排列",
+      "各部分的标题不再全部大写，原来写着“储蓄”的地方现在写着“目标”"
+    ],
+    "ja": [
+      "リデザイン第5弾：アプリのほかの画面も新しいスタイルに",
+      "QRで支払う前や暗号資産を送る前に、受け取る人、金額、手数料、残高を確認できます。SINPEで送るときと同じです",
+      "暗号資産の画面にビットコインとイーサリアムのロゴが表示され、ポートフォリオ、SINPE、プロフィールはホームと同じダークカードにまとまりました",
+      "ホームで残高を隠す目のアイコンが、取引履歴、目標、暗号資産、SINPE、サービス、割り勘、プロフィールの金額も隠すようになりました",
+      "ようこそ画面、サービス、マーケット、空の画面に新しいイラストが入りました",
+      "タブレットとパソコンでは、SINPE、暗号資産、サービス、プロフィール、マーケットが列に分かれて表示されます",
+      "セクションの見出しはすべて大文字ではなくなり、「貯蓄」と書かれていた所は「目標」になりました"
+    ],
+    "hi": [
+      "नया डिज़ाइन, चरण 5: ऐप के बाकी हिस्सों को भी नया रूप मिला",
+      "QR से भुगतान करने या क्रिप्टो भेजने से पहले आप देखते हैं कि किसे मिलेगा, कितना, शुल्क और आपका बैलेंस, ठीक वैसे ही जैसे SINPE से भेजते समय",
+      "क्रिप्टो में Bitcoin और Ethereum के लोगो दिखते हैं, और आपका पोर्टफोलियो, SINPE और आपकी प्रोफ़ाइल होम जैसे ही गहरे कार्ड पर हैं",
+      "होम पर बैलेंस छिपाने वाली आंख अब लेन-देन, लक्ष्य, क्रिप्टो, SINPE, सेवाएं, बंटवारा और आपकी प्रोफ़ाइल की राशियां भी छिपाती है",
+      "स्वागत स्क्रीन, सेवाएं, मार्केट और खाली स्क्रीनों में नए चित्र हैं",
+      "टैबलेट और कंप्यूटर पर SINPE, क्रिप्टो, सेवाएं, प्रोफ़ाइल और मार्केट कॉलम में दिखते हैं",
+      "सेक्शन के शीर्षक अब बड़े अक्षरों में नहीं हैं, और जहां \"बचत\" लिखा था वहां अब \"लक्ष्य\" लिखा है"
+    ]
+  },
   "2.13.0": {
     "en": [
       "Redesign, phase 4: a new Cards screen",
