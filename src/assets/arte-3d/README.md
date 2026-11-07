@@ -50,8 +50,9 @@ adelante hace falta, se agrega como otra fuente sin tocar las pantallas.
 | Ilustraciones 960 px | 15 | 1.145 KB |
 | **Total en el repo** | **126** | **2,2 MB** |
 
-En el build entran solo los del catálogo (fase 3: 50 archivos, 481 KB). El
-navegador baja uno de los dos tamaños de cada imagen visible, no los dos.
+En el build entran solo los del catálogo (fase 3: 50 archivos, 481 KB; fase 4:
+52 archivos, 568 KB). El navegador baja uno de los dos tamaños de cada imagen
+visible, no los dos.
 
 ## Inventario
 
@@ -104,7 +105,7 @@ demás están convertidos y listos para las fases siguientes.
 | `b4-metas` | diana junto a barras | — | Pendiente: bienvenida o carrusel |
 | `v2-contactos` | libreta vacía | — | Pendiente: sin contactos |
 | `v3-notificaciones` | campana con luna | — | Pendiente: sin avisos |
-| `v4-tarjetas` | tarjeta con un más | — | Pendiente: sin tarjetas |
+| `v4-tarjetas` | tarjeta con un más | `sinTarjetas` | Tarjetas, sin tarjetas todavía |
 | `v5-metas` | bandera sobre monedas | — | Pendiente: primera meta |
 | `v6-pagos-fijos` | calendario con flecha | — | Pendiente: sin pagos fijos |
 | `v7-cripto` | cubos sobre un pedestal | — | Pendiente: sin cripto |

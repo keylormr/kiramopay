@@ -814,3 +814,55 @@ input[type='number']::-webkit-inner-spin-button {
   .kp-cifra-entra,
   .kp-aparece { animation: none; }
 }
+
+/* Tarjetas por red (rediseno fase 4) ────────────────────────────────────────
+   Una cara por red, oscura en los dos temas como la tarjeta de saldo. El
+   fondo (.kp-cara-<red>) es de cada red; el brillo de 1 px arriba y la sombra
+   (.kp-cara), de todas. Los colores son de ambiente, no de marca: los
+   oficiales llegan con los logos. */
+.kp-cara {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 26px 40px -18px rgba(0, 0, 0, 0.85);
+}
+:root:not(.dark) .kp-cara {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 18px 36px -14px rgba(7, 13, 28, 0.45);
+}
+/* Los fondos van aparte de la sombra: la miniatura del selector usa el fondo
+   y no la sombra, que a 22 px solo ensucia. */
+.kp-cara-kiramopay {
+  background: linear-gradient(155deg, #18294F 0%, #0D1833 45%, #070F22 100%);
+}
+/* Azul profundo con una banda de luz en diagonal. */
+.kp-cara-visa {
+  background:
+    linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.07) 50%, transparent 62%),
+    linear-gradient(135deg, #1A2A8C 0%, #14217A 40%, #0C1655 100%);
+}
+/* Grafito con un calor tenue abajo a la derecha. */
+.kp-cara-mastercard {
+  background:
+    radial-gradient(120% 90% at 100% 100%, rgba(255, 138, 43, 0.12), transparent 60%),
+    linear-gradient(135deg, #2E2F38 0%, #1D1E25 50%, #121318 100%);
+}
+/* Azul acero con un guilloche fino. Mas oscuro que el del concepto: con el
+   #2B7AC7 de arriba a la izquierda, la letra blanca no llegaba a 4,5:1. */
+.kp-cara-amex {
+  background:
+    repeating-radial-gradient(circle at 18% 120%, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 7px),
+    linear-gradient(135deg, #1F64A8 0%, #18548F 50%, #0F3A70 100%);
+}
+
+/* Al cambiar de tarjeta la cara entra con un giro corto. */
+@keyframes kp-voltea {
+  from { opacity: 0.2; transform: perspective(900px) rotateY(-14deg) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.kp-voltea { animation: kp-voltea var(--kp-mov-hoja) var(--kp-curva) both; }
+@media (prefers-reduced-motion: reduce) {
+  .kp-voltea { animation: none; }
+}
