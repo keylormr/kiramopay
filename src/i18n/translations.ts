@@ -2065,6 +2065,11 @@ export type TranslationKeys = {
   sessions_this_device: string;
   sessions_other_devices: string;
   sessions_current_chip: string;
+  version_changes_one: string;
+  version_changes_many: string;
+  version_previous: string;
+  version_show_changes: string;
+  version_hide_changes: string;
   sessions_current_hint: string;
   sessions_opened: string;
   sessions_expires: string;
