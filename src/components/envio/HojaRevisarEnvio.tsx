@@ -1,6 +1,8 @@
 import React from 'react';
 import { BottomSheet } from '@/components/BottomSheet';
 import { IconosLinea } from '@/components/Icons';
+import { AvisoDelDestinatario, LineaDelDestinatario } from '@/components/DestinatarioRegistrado';
+import type { DestinatarioRegistrado } from '@/hooks/useDestinatarioRegistrado';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { formatMoney } from '@/utils/money';
 import { partesDelMonto } from '@/utils/partesDelMonto';
@@ -14,6 +16,12 @@ import { rellenar } from '@/utils/planes';
 // Lo que dice es lo que hace el servidor hoy (backend/internal/sinpe/service.go):
 // solo se envia a cuentas de KiramoPay, sin comision (`const fee int64 = 0`) y
 // con el credito en la misma transaccion. Si eso cambia, cambia esta hoja.
+//
+// A un numero tecleado se le pregunta al servidor el nombre de su perfil
+// (`destinatario`). Se dice "En su perfil de KiramoPay: X" y nunca
+// "registrado" ni "verificado": es texto que su titular puede editar. Mientras
+// se consulta, Enviar espera; sin cuenta, el aviso y Enviar bloqueado; si la
+// consulta falla, no se dice nada y se puede enviar.
 
 interface HojaRevisarEnvioProps {
   isOpen: boolean;
@@ -28,6 +36,8 @@ interface HojaRevisarEnvioProps {
   /** Saldo en colones antes de enviar. */
   saldo: number;
   referencia?: string;
+  /** Lo que se sabe del perfil de KiramoPay del numero (solo uno tecleado). */
+  destinatario?: DestinatarioRegistrado;
 }
 
 export const HojaRevisarEnvio: React.FC<HojaRevisarEnvioProps> = ({
@@ -40,6 +50,7 @@ export const HojaRevisarEnvio: React.FC<HojaRevisarEnvioProps> = ({
   monto,
   saldo,
   referencia,
+  destinatario = { fase: 'no_aplica' },
 }) => {
   const { t } = useLanguage();
   const partes = partesDelMonto(monto, 'CRC');
@@ -47,6 +58,8 @@ export const HojaRevisarEnvio: React.FC<HojaRevisarEnvioProps> = ({
   const esTelefono = nombre === telefono;
   const cara = esTelefono ? '' : iniciales(nombre);
   const primerNombre = esTelefono ? nombre : nombre.trim().split(/\s+/)[0];
+  const consultando = destinatario.fase === 'consultando';
+  const sinCuenta = destinatario.fase === 'sin_cuenta';
 
   const filas: { clave: string; etiqueta: string; valor: string; nota?: string; tono?: 'exito' }[] = [
     {
@@ -71,12 +84,17 @@ export const HojaRevisarEnvio: React.FC<HojaRevisarEnvioProps> = ({
           <p className="mt-3 max-w-full break-words text-[17px] font-semibold uv-text-primary">{nombre}</p>
           {!esTelefono && <p className="kp-num mt-1 text-[13px] uv-text-secondary">{telefono}</p>}
           <p className="mt-0.5 text-[13px] uv-text-muted">{t('sinpe_mobile')}</p>
+          {(consultando || destinatario.fase === 'registrado') && (
+            <LineaDelDestinatario estado={destinatario} porDefecto={null} className="mt-2 justify-center text-[13px] uv-text-secondary" />
+          )}
           <p className="kp-num mt-5 whitespace-nowrap font-semibold leading-none tracking-[-0.035em] uv-text-primary">
             <span className="mr-0.5 align-[0.4em] text-[26px] uv-text-secondary">{partes.simbolo}</span>
             <span className="text-5xl">{partes.entero}</span>
             <span className="text-[26px] uv-text-muted">{partes.decimales}</span>
           </p>
         </div>
+
+        {sinCuenta && <AvisoDelDestinatario tipo="sin_cuenta" />}
 
         <dl className="rounded-[20px] border border-[var(--color-border)] uv-surface-2 px-4 py-1.5 dark:border-[var(--color-border-dark)]">
           {filas.map((f, i) => (
@@ -102,9 +120,13 @@ export const HojaRevisarEnvio: React.FC<HojaRevisarEnvioProps> = ({
         <button
           type="button"
           onClick={onConfirm}
-          disabled={procesando}
+          disabled={procesando || consultando || sinCuenta}
           aria-busy={procesando}
-          className="kp-toque kp-foco flex h-14 w-full items-center justify-center gap-2.5 rounded-[18px] bg-[var(--color-primary-fill)] text-base font-semibold text-white shadow-[0_10px_22px_-10px_rgba(45,123,255,0.75)] hover:bg-[var(--color-primary-hover)] disabled:opacity-80"
+          // Enviando se ve casi entero (es el mismo envio en curso); bloqueado
+          // por la consulta o por un numero sin cuenta se ve apagado.
+          className={`kp-toque kp-foco flex h-14 w-full items-center justify-center gap-2.5 rounded-[18px] bg-[var(--color-primary-fill)] text-base font-semibold text-white shadow-[0_10px_22px_-10px_rgba(45,123,255,0.75)] hover:bg-[var(--color-primary-hover)] disabled:cursor-not-allowed ${
+            procesando ? 'disabled:opacity-80' : 'disabled:opacity-45 disabled:shadow-none'
+          }`}
         >
           {procesando ? (
             <>

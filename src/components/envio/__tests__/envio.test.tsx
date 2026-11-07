@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { LanguageProvider } from '@/i18n/LanguageContext';
 import type { SinpeTransaction } from '@/types';
+import type { DestinatarioRegistrado } from '@/hooks/useDestinatarioRegistrado';
 import { HojaRevisarEnvio } from '../HojaRevisarEnvio';
 import { ComprobanteDeEnvio } from '../ComprobanteDeEnvio';
 import { Icono3D, Ilustracion3D } from '@/components/arte3d/Arte3D';
@@ -72,6 +73,52 @@ describe('HojaRevisarEnvio', () => {
     // El avatar lleva el icono de telefono en vez de iniciales.
     const avatar = screen.getByText('Recibe').closest('[role="dialog"]') ?? baseElement;
     expect(avatar.querySelector('div.h-16 svg')).not.toBeNull();
+  });
+
+  describe('nombre del perfil de un numero tecleado', () => {
+    const conDestinatario = (destinatario: DestinatarioRegistrado) =>
+      render(
+        <LanguageProvider>
+          <HojaRevisarEnvio
+            isOpen
+            onClose={vi.fn()}
+            onConfirm={vi.fn()}
+            procesando={false}
+            nombre="8812-4471"
+            telefono="8812-4471"
+            monto={25000}
+            saldo={572078.95}
+            destinatario={destinatario}
+          />
+        </LanguageProvider>,
+      );
+    const enviar = () => screen.getByRole('button', { name: /^Enviar ₡/ });
+
+    it('con nombre: "En su perfil de KiramoPay", y se puede enviar', () => {
+      conDestinatario({ fase: 'registrado', nombre: 'Ana S.' });
+      expect(screen.getByText('En su perfil de KiramoPay: Ana S.')).toBeInTheDocument();
+      expect(enviar()).toBeEnabled();
+    });
+
+    it('consultando: lo dice y Enviar espera', () => {
+      conDestinatario({ fase: 'consultando' });
+      expect(screen.getByRole('status')).toHaveTextContent('Verificando el nombre del perfil…');
+      expect(enviar()).toBeDisabled();
+    });
+
+    it('sin cuenta: el aviso, ningun nombre y Enviar bloqueado', () => {
+      conDestinatario({ fase: 'sin_cuenta' });
+      expect(screen.getByRole('alert')).toHaveTextContent(/no tiene cuenta de KiramoPay/);
+      expect(screen.queryByText(/En su perfil/)).not.toBeInTheDocument();
+      expect(enviar()).toBeDisabled();
+    });
+
+    it('si la consulta fallo: nada de mas y se puede enviar', () => {
+      conDestinatario({ fase: 'no_se_pudo' });
+      expect(screen.queryByText(/En su perfil/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(enviar()).toBeEnabled();
+    });
   });
 
   it('enviando: el boton lo dice y no se puede tocar otra vez', () => {

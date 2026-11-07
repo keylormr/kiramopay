@@ -190,6 +190,16 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
   // contacto elegido el numero ya viene completo.
   const telefonoIncompleto = !selectedContact && phone.length > 0 && normalizarTelefonoCR(phone) === null;
 
+  // El nombre del perfil de KiramoPay del numero TECLEADO, en la hoja de
+  // revisar (decision del dueno del 2026-11-05: si para enviar basta el
+  // telefono, se muestra el nombre de la persona). Se pregunta al revisar,
+  // cuando la persona ya va a enviar a ese numero, y no mientras teclea: cada
+  // consulta es un dato personal. Un contacto guardado no se consulta: su
+  // nombre lo puso la persona (igual que en Inicio). La respuesta de un numero
+  // anterior que llega tarde la descarta el hook.
+  const telefonoARevisar = showConfirm && !selectedContact ? normalizarTelefonoCR(phone) : null;
+  const destinatarioDelEnvio = useDestinatarioRegistrado(telefonoARevisar);
+
   const handleSelectContact = (contact: SinpeContact) => {
     setSelectedContact(contact);
     setPhone(contact.phone.replace(/-/g, ''));
@@ -198,6 +208,11 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
 
   const handleSendMoney = async () => {
     if (!amount || !phone) return;
+    // Mientras se consulta de quien es el numero no se envia (seria una
+    // ventana para saltarse la consulta), y a un numero sin cuenta tampoco: el
+    // servidor lo rechazaria. El boton de la hoja ya lo bloquea; esto es el
+    // segundo cerrojo.
+    if (destinatarioDelEnvio.fase === 'consultando' || destinatarioDelEnvio.fase === 'sin_cuenta') return;
 
     const numAmount = parseFloat(amount);
     // El boton del formulario ya bloquea estos casos, pero el saldo puede
@@ -1328,6 +1343,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
         monto={parseFloat(amount || '0')}
         saldo={balance}
         referencia={reference || undefined}
+        destinatario={destinatarioDelEnvio}
       />
 
       {/* Receive Money Sheet */}
