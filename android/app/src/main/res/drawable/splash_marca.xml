@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marca del splash de Android 12+ (windowSplashScreenAnimatedIcon) y de la compat de
+     androidx.core.splashscreen en Android 7 a 11: lienzo de 288 dp sin fondo de icono, la K
+     dentro del circulo de 192 dp, al 70 % de la zona segura.
+     Generado por kiramopay-iconos/aplicar-icono.py desde icono-final.svg: no editar a mano. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.658"
+        android:scaleY="0.658">
+        <path
+            android:pathData="M178.5,256L322.3,112.3L371.7,161.7L277.5,256L371.7,350.3L322.3,399.7Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="220" android:startY="256" android:endX="371.7" android:endY="256">
+                    <item android:offset="0" android:color="#FFEDF2FC" />
+                    <item android:offset="0.5" android:color="#FFF8FAFF" />
+                    <item android:offset="1" android:color="#FFFFFFFF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M261.4,173.1L322.3,112.3L371.7,161.7L310.9,222.6Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="286.2" android:startY="197.8" android:endX="347" android:endY="137">
+                    <item android:offset="0" android:color="#FFF07518" />
+                    <item android:offset="0.35" android:color="#FFFF8A2B" />
+                    <item android:offset="1" android:color="#FFFFA04A" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M220,214.5L236,198.5L236,313.5L220,297.5Z"
+            android:fillColor="#FFDCE6F5" />
+        <path
+            android:pathData="M150,137L220,137L220,375L150,375Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="150" android:startY="137" android:endX="220" android:endY="375">
+                    <item android:offset="0" android:color="#FFFFFFFF" />
+                    <item android:offset="1" android:color="#FFE6EDFA" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>

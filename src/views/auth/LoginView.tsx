@@ -22,6 +22,7 @@ import { resolveApiBaseUrl } from '@/api/baseUrl';
 import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
 import { fechaLarga } from '@/utils/planes';
 import { TextoConCorreo } from '@/components/TextoConCorreo';
+import { useSuperficieOscura } from '@/hooks/useBarrasDelSistema';
 
 // Where the signed Android APK lives. Overridable via env; defaults to the
 // GitHub Releases "latest" asset published by the android-apk CI workflow.
@@ -106,6 +107,8 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => {
+  // Oscura con cualquier tema: las barras del sistema tambien.
+  useSuperficieOscura();
   const { t, language } = useLanguage();
   // Expulsion remota: si la sesion anterior se cerro porque un administrador
   // bloqueo la cuenta, esta pantalla lo dice en vez de parecer un logout mudo.

@@ -45,6 +45,8 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
 	<key>NSCameraUsageDescription</key>
 	<string>KiramoPay usa la camara para leer codigos QR de pago y de contacto. Nunca se graba ni se envia video.</string>
 	<key>NSFaceIDUsageDescription</key>

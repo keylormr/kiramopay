@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Capa monocroma del icono adaptativo (iconos tematicos de Android 13+): la K en una tinta,
+     con la misma geometria y escala que ic_launcher_foreground.
+     Generado por kiramopay-iconos/aplicar-icono.py desde icono-final.svg: no editar a mano. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.94"
+        android:scaleY="0.94">
+        <path
+            android:pathData="M178.5,256L254.3,180.2L303.8,229.7L277.5,256L371.7,350.3L322.3,399.7Z"
+            android:fillColor="#FFFFFFFF" />
+        <path
+            android:pathData="M261.4,173.1L322.3,112.3L371.7,161.7L310.9,222.6Z"
+            android:fillColor="#FFFFFFFF" />
+        <path
+            android:pathData="M220,214.5L236,198.5L236,313.5L220,297.5Z"
+            android:fillColor="#FFFFFFFF" />
+        <path
+            android:pathData="M150,137L220,137L220,375L150,375Z"
+            android:fillColor="#FFFFFFFF" />
+    </group>
+</vector>

@@ -20,6 +20,7 @@ import { BarreraDeActualizacion } from './components/ActualizacionObligatoria';
 import { useGuardiaDeVersion, useRecargaAutomaticaDeVersion } from './hooks/useGuardiaDeVersion';
 import { asegurarArranque } from './hooks/useActualizacion';
 import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
+import { useBarrasDelSistema, useSuperficieOscura } from './hooks/useBarrasDelSistema';
 import { LoginView } from './views/auth/LoginView';
 import { Icons, IconosLinea } from './components/Icons';
 import { biometricService } from './services/biometric';
@@ -94,6 +95,8 @@ const BusinessSettingsView = lazyConRecarga(() => import('./views/business/Busin
 // MAX_PIN_FAILS failed attempts the user is forcibly logged out and must
 // re-enter their full password (online auth round-trip).
 const LockScreen = () => {
+  // Oscura con cualquier tema: las barras del sistema tambien.
+  useSuperficieOscura();
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
   const logout = useAuthStore((s) => s.logout);
@@ -960,6 +963,8 @@ const AppContainer = () => {
   // request (which counts against the auth rate limit). Block the first paint
   // only while that restore is in flight.
   const [booting, setBooting] = useState(() => hasBackend && useAuthStore.getState().sessionHint);
+  // La pantalla de arranque es oscura con cualquier tema.
+  useSuperficieOscura(booting);
   // Pasados unos segundos de espera, la pantalla de arranque explica que el
   // servidor esta despertando (Render Free tarda 30-90s en frio) en vez de
   // dejar un esqueleto mudo que parece una app rota.
@@ -1084,6 +1089,9 @@ const AppInit = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
+
+  // Barras del sistema y theme-color con el tema de la app, no el del telefono.
+  useBarrasDelSistema(darkMode);
 
   // Theme auto-scheduling: check every minute and toggle dark mode based on time
   useEffect(() => {

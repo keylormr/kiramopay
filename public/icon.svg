@@ -2,19 +2,14 @@
   <defs><clipPath id="esquinas"><rect width="512" height="512" rx="112"/></clipPath></defs>
   <g clip-path="url(#esquinas)">
   <defs>
-    <linearGradient id="kp-fondo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="512" y2="512">
-      <stop offset="0" stop-color="#2D7BFF"/>
-      <stop offset="0.5" stop-color="#2562DA"/>
-      <stop offset="1" stop-color="#1B294A"/>
+    <linearGradient id="kp-fondo" gradientUnits="userSpaceOnUse" x1="112.2" y1="-52.3" x2="399.8" y2="564.3">
+      <stop offset="0" stop-color="#18294F"/>
+      <stop offset="0.45" stop-color="#0D1833"/>
+      <stop offset="1" stop-color="#070F22"/>
     </linearGradient>
-    <radialGradient id="kp-luz" gradientUnits="userSpaceOnUse" cx="128" cy="112" r="330">
-      <stop offset="0" stop-color="#6FD0FF" stop-opacity="0.16"/>
-      <stop offset="0.55" stop-color="#4FA6FF" stop-opacity="0.05"/>
-      <stop offset="1" stop-color="#4FA6FF" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="kp-hondo" gradientUnits="userSpaceOnUse" cx="440" cy="450" r="320">
-      <stop offset="0" stop-color="#0C1730" stop-opacity="0.42"/>
-      <stop offset="1" stop-color="#0C1730" stop-opacity="0"/>
+    <radialGradient id="kp-brillo" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate(512 0) scale(614.4 460.8)">
+      <stop offset="0" stop-color="#2D7BFF" stop-opacity="0.34"/>
+      <stop offset="0.58" stop-color="#2D7BFF" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="kp-cinta" gradientUnits="userSpaceOnUse" x1="220" y1="256" x2="371.7" y2="256">
       <stop offset="0" stop-color="#EDF2FC"/>
@@ -33,8 +28,7 @@
   </defs>
   <g id="fondo">
     <rect x="0" y="0" width="512" height="512" fill="url(#kp-fondo)"/>
-    <rect x="0" y="0" width="512" height="512" fill="url(#kp-luz)"/>
-    <rect x="0" y="0" width="512" height="512" fill="url(#kp-hondo)"/>
+    <rect x="0" y="0" width="512" height="512" fill="url(#kp-brillo)"/>
   </g>
   <g id="frente" transform="translate(256 256) scale(0.94) translate(-256 -256)">
     <polygon points="178.5,256 322.3,112.3 371.7,161.7 277.5,256 371.7,350.3 322.3,399.7" fill="url(#kp-cinta)"/>
