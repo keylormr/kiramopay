@@ -210,7 +210,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   const SIN_DATO = '—';
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors" aria-label={t('back')}>
@@ -303,7 +303,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                   onClick={onOpenPlans}
                   className="w-full flex items-center gap-3 uv-surface-1 rounded-2xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4 text-left hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors uv-focus-ring"
                 >
-                  <span className="w-10 h-10 rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center shrink-0">
+                  <span className="w-10 h-10 rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex items-center justify-center shrink-0">
                     <Icons.Star size={18} aria-hidden="true" />
                   </span>
                   <span className="flex-1 min-w-0">
@@ -331,7 +331,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
             {activeTab === 'rewards' && (
               <div className="px-4 py-2 space-y-3">
                 {redeemError && (
-                  <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{redeemError}</p>
+                  <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{redeemError}</p>
                 )}
                 {redeemOk && (
                   <p className="text-[var(--color-success)] text-sm font-semibold" aria-live="polite">{redeemOk}</p>
@@ -357,7 +357,7 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                         style={{ animationDelay: `${i * 60}ms` }}>
                         <div className="flex items-start gap-3">
                           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center flex-shrink-0">
-                            {reward.category === 'discount' && <Icons.Percent size={22} className="text-[var(--color-primary)]" />}
+                            {reward.category === 'discount' && <Icons.Percent size={22} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />}
                             {reward.category === 'voucher' && <Icons.Tag size={22} className="text-accent" />}
                             {reward.category === 'gift_card' && <Icons.Gift size={22} className="text-green-600" />}
                             {reward.category === 'experience' && <Icons.Star size={22} className="text-purple-600" />}
@@ -366,13 +366,13 @@ export const LoyaltyView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                             <h3 className="font-bold uv-text-primary text-sm">{nombreDelPremio(reward, t)}</h3>
                             <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{descripcionDelPremio(reward, t)}</p>
                             <div className="flex items-center justify-between mt-2">
-                              <span className="text-sm font-extrabold text-[var(--color-primary)]">{formatPoints(reward.pointsCost)} pts</span>
+                              <span className="text-sm font-extrabold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">{formatPoints(reward.pointsCost)} pts</span>
                               <button
                                 onClick={() => handleRedeem(reward.id)}
                                 disabled={!canAfford || sinFondo || redeeming === reward.id}
                                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 ${
                                   canAfford && !sinFondo
-                                    ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                                    ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
                                     : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] text-gray-400'
                                 }`}>
                                 {redeeming === reward.id ? '...' : t('loyalty_redeem')}

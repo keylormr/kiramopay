@@ -459,7 +459,7 @@ export const ServicesView: React.FC = () => {
       {actionError}
     </div>
   ) : (
-    <p role="alert" className="text-[var(--color-danger)] text-sm mb-3 text-center">
+    <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-3 text-center">
       {actionError}
     </p>
   );
@@ -626,7 +626,7 @@ export const ServicesView: React.FC = () => {
                       aria-selected={categoriaActiva === cat.id}
                       className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
                         categoriaActiva === cat.id
-                          ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                          ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
                           : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
                       }`}
                     >
@@ -924,7 +924,7 @@ export const ServicesView: React.FC = () => {
                   onClick={() => setRechargeAmount(amt)}
                   className={`py-3 rounded-xl font-bold transition-all ${
                     rechargeAmount === amt
-                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                      ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
                       : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary'
                   }`}
                 >

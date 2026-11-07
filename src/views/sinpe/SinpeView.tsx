@@ -702,7 +702,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     pestaña Solicitar lo volvía invisible justo aquí. */}
                 <button
                   onClick={() => setShowMyQrSheet(true)}
-                  className="text-[var(--color-primary)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
+                  className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
                 >
                   <Icons.QrCode size={16} />
                   {t('my_qr_short')}
@@ -712,14 +712,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     para recién ahí descubrir que se podía escanear. */}
                 <button
                   onClick={openContactScanner}
-                  className="text-[var(--color-primary)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
+                  className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
                 >
                   <Icons.Scan size={16} />
                   {t('scan_qr')}
                 </button>
                 <button
                   onClick={() => setShowAddContactSheet(true)}
-                  className="text-[var(--color-primary)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
+                  className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-sm font-semibold whitespace-nowrap flex items-center gap-1 hover:underline"
                 >
                   <Icons.Plus size={16} />
                   {t('new_contact')}
@@ -734,14 +734,14 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                   <div className="flex flex-col items-center gap-3">
                     <button
                       onClick={openContactScanner}
-                      className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 active:scale-[0.98] transition-transform"
+                      className="bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 active:scale-[0.98] transition-transform"
                     >
                       <Icons.Scan size={18} />
                       {t('scan_contact_cta')}
                     </button>
                     <button
                       onClick={() => setShowAddContactSheet(true)}
-                      className="text-[var(--color-primary)] font-semibold hover:underline"
+                      className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] font-semibold hover:underline"
                     >
                       {t('add_contact')}
                     </button>
@@ -826,7 +826,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             {/* Share your KiramoPay contact as a QR others can scan to add you */}
             <button
               onClick={() => setShowMyQrSheet(true)}
-              className="mt-2.5 w-full bg-[var(--color-primary)] text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              className="mt-2.5 w-full bg-[var(--color-primary-fill)] text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
               <Icons.QrCode size={16} />
               {t('contact_qr_button')}
@@ -861,7 +861,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                     <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${
                       incoming
                         ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]'
-                        : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'
+                        : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]'
                     }`}>
                       {incoming ? <Icons.ArrowDownLeft size={20} /> : <Icons.ArrowUpRight size={20} />}
                     </div>
@@ -931,7 +931,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           // que guardar de nuevo lo pise en silencio.
           <div className="text-center py-6" aria-live="polite">
             <div className="w-20 h-20 bg-[var(--color-primary-soft)] rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-glow">
-              <Icons.Users size={36} className="text-[var(--color-primary)]" />
+              <Icons.Users size={36} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
             </div>
             <h2 className="text-xl font-black uv-text-primary mb-4 tracking-tight">
               {t('contact_already_exists')}
@@ -951,7 +951,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             <div className="flex gap-2.5">
               <button
                 onClick={handleGoToDuplicate}
-                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
               >
                 <Icons.Send size={18} />
                 {t('contact_duplicate_send')}
@@ -981,7 +981,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                 resetContactForm();
                 setShowMyQrSheet(true);
               }}
-              className="w-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+              className="w-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
             >
               <Icons.QrCode size={18} />
               {t('contact_qr_button')}
@@ -1005,7 +1005,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               setContactScanError('');
               setContactSheetMode('scan');
             }}
-            className="w-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] py-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            className="w-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] py-4 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
           >
             <Icons.Scan size={20} />
             {t('scan_contact_cta')}
@@ -1048,7 +1048,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                   <button
                     type="button"
                     onClick={() => setHomonimoConfirmado(true)}
-                    className="mt-2 text-sm font-bold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                    className="mt-2 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline uv-focus-ring rounded-md"
                   >
                     {t('contact_homonym_confirm')}
                   </button>
@@ -1130,7 +1130,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           <button
             onClick={handleAddContact}
             disabled={!newContactName || newContactPhone.length < 8 || bloqueadoPorHomonimo}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
           >
             <Icons.Plus size={20} />
             {t('save_contact')}
@@ -1231,7 +1231,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               </div>
             )}
             {telefonoTocado && telefonoIncompleto && (
-              <p id="sinpe-telefono-aviso" role="alert" className="mt-2 text-sm text-[var(--color-danger)]">
+              <p id="sinpe-telefono-aviso" role="alert" className="mt-2 text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
                 {t('sinpe_phone_incomplete')}
               </p>
             )}
@@ -1299,7 +1299,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
               setShowConfirm(true);
             }}
             disabled={!phone || !amount || !(parseFloat(amount) > 0) || parseFloat(amount) > balance || isProcessing}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary"
           >
             {isProcessing ? (
               <>
@@ -1370,7 +1370,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
             <div className="flex gap-3">
               <button
                 onClick={handleShareRequest}
-                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
               >
                 <Icons.Share size={18} />
                 {copiedText === 'request' ? t('copied') : t('share')}
@@ -1462,7 +1462,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                       <button
                         onClick={() => void cancelarPedido(pd.id)}
                         aria-label={t('cancel')}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--color-danger)]"
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]"
                       >
                         {t('cancel')}
                       </button>
@@ -1556,7 +1556,7 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
                   );
                 }
               }}
-              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
+              className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               <Icons.Share size={18} />
               {t('share')}

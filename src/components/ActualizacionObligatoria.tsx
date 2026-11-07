@@ -62,7 +62,7 @@ const Avance: React.FC<{ estado: EstadoInterno; onReintentar?: () => void }> = (
         <button
           type="button"
           onClick={onReintentar}
-          className="flex w-full items-center justify-center gap-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+          className="flex w-full items-center justify-center gap-2 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
         >
           <Icons.RefreshCw size={18} aria-hidden="true" />
           {t('update_internal_retry')}
@@ -201,7 +201,7 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
           <button
             type="button"
             onClick={onActualizar}
-            className="mx-auto block w-full max-w-sm bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+            className="mx-auto block w-full max-w-sm bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
           >
             {t(ios ? 'update_open' : 'update_download')}
           </button>

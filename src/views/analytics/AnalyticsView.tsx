@@ -231,7 +231,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const anteriorIncompleto = !!anteriorListo && primeraFecha !== null && primeraFecha > anteriorListo.rango.desde;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
@@ -297,7 +297,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               <button
                 type="button"
                 onClick={() => setIntento((n) => n + 1)}
-                className="mt-5 h-11 px-5 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold uv-focus-ring"
+                className="mt-5 h-11 px-5 rounded-full bg-[var(--color-primary-fill)] text-white text-sm font-bold uv-focus-ring"
               >
                 {t('error_retry')}
               </button>
@@ -307,7 +307,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               className={`${TARJETA} mt-4 flex flex-col items-center text-center py-10 transition-opacity duration-200 ${desactualizada ? 'opacity-50' : ''}`}
               aria-busy={cargando}
             >
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[var(--color-primary-soft)] text-[var(--color-primary)] mb-4">
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] mb-4">
                 <Icons.Calendar size={26} aria-hidden="true" />
               </div>
               <h2 className="text-base font-bold uv-text-primary">{t('analytics_no_moves')}</h2>
@@ -316,7 +316,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                 <button
                   type="button"
                   onClick={() => setRango(rangoPreset('este_ano', hoy))}
-                  className="mt-5 h-11 px-5 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold uv-focus-ring"
+                  className="mt-5 h-11 px-5 rounded-full bg-[var(--color-primary-fill)] text-white text-sm font-bold uv-focus-ring"
                 >
                   {t('analytics_preset_this_year')}
                 </button>

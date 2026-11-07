@@ -166,7 +166,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
             </div>
 
             {error && (
-              <p role="alert" className="text-[var(--color-danger)] text-sm mb-2 flex items-center gap-1 animate-shake">
+              <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-2 flex items-center gap-1 animate-shake">
                 <Icons.AlertCircle size={14} />
                 {error}
               </p>
@@ -296,7 +296,7 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
               />
 
               {error && (
-                <p role="alert" className="text-[var(--color-danger)] text-sm mt-3 flex items-center gap-1 animate-shake">
+                <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mt-3 flex items-center gap-1 animate-shake">
                   <Icons.AlertCircle size={14} />
                   {error}
                 </p>

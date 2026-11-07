@@ -1,4 +1,5 @@
 import React from 'react';
+import { IconosLinea } from './Icons';
 
 /**
  * Banderas como SVG en linea.
@@ -10,8 +11,10 @@ import React from 'react';
  *
  * Los datos de la app guardan la bandera como emoji (el idioma, la cuenta, el
  * pais del backend): el componente acepta ese emoji o el codigo del pais ISO
- * ("CR"). Lo que no es una bandera —el edificio de una cuenta sin pais, el
- * circulo de una moneda cripto— se escribe tal cual, que esos emojis si se ven.
+ * ("CR"). Lo que no es una bandera (una cuenta sin pais, que los datos marcan
+ * con el emoji del banco) se dibuja con el icono de linea del banco: un emoji
+ * cambia de dibujo en cada sistema y no sigue el color del tema. Las monedas
+ * cripto no pasan por aqui: tienen su logo oficial en LogoCripto.
  *
  * Son aproximaciones a 24 px, no escudos: lo justo para reconocer el pais.
  */
@@ -157,8 +160,18 @@ interface BanderaProps {
 
 export const Bandera: React.FC<BanderaProps> = ({ pais, titulo, className = '' }) => {
   const codigo = codigoDePais(pais);
-  // Lo que no es una bandera (🏦, 🟠...) se escribe tal cual.
-  if (codigo === null) return <span className={className}>{pais}</span>;
+  // Lo que no es una bandera es una cuenta sin pais: el banco, en linea.
+  if (codigo === null) {
+    const accesibleBanco = titulo ? { role: 'img' as const, 'aria-label': titulo } : {};
+    return (
+      <IconosLinea.Banco
+        size="1em"
+        data-pais="banco"
+        className={`inline-block shrink-0 align-[-0.125em] ${className}`.trim()}
+        {...accesibleBanco}
+      />
+    );
+  }
 
   const dibujo = BANDERAS[codigo];
   const accesible = titulo ? { role: 'img' as const, 'aria-label': titulo } : { 'aria-hidden': true as const };

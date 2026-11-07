@@ -485,12 +485,12 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             <span className="uv-text-muted">{t('business_balance')}</span>
             <button
               onClick={() => setWdAmount(String(balance ?? 0))}
-              className="font-semibold text-[var(--color-primary)] tabular-nums"
+              className="font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] tabular-nums"
             >
               {balance === null ? '—' : money(balance)}
             </button>
           </div>
-          {wdError && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{wdError}</p>}
+          {wdError && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{wdError}</p>}
           <Button
             onClick={withdraw}
             loading={withdrawing}
@@ -509,7 +509,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
         <div className="space-y-4">
           {/* ── El rotulo ─────────────────────────────────────────────── */}
           <div className="flex flex-col items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-primary)]">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
               {cobro ? t('qr_cobrando').replace('{amount}', money(cobro.amount, cobro.currency)) : t('qr_rotulo_mostrador')}
             </span>
             <div ref={qrRef} className="bg-white p-4 rounded-2xl border border-gray-200">
@@ -629,7 +629,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
                 </div>
               )}
 
-              {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+              {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
               <Button
                 onClick={charge}

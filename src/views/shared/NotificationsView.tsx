@@ -15,15 +15,15 @@ const getNotificationIcon = (type: Notification['type']) => {
     case 'transaction':
       return <Icons.Banknote size={20} className="text-[var(--color-success)]" />;
     case 'security':
-      return <Icons.Shield size={20} className="text-[var(--color-danger)]" />;
+      return <Icons.Shield size={20} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" />;
     case 'promo':
       return <Icons.Gift size={20} className="text-[var(--color-accent)]" />;
     case 'warning':
       return <Icons.AlertCircle size={20} className="text-[var(--color-warning)]" />;
     case 'price_alert':
-      return <Icons.BellRing size={20} className="text-[var(--color-primary)]" />;
+      return <Icons.BellRing size={20} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />;
     default:
-      return <Icons.Info size={20} className="text-[var(--color-primary)]" />;
+      return <Icons.Info size={20} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />;
   }
 };
 
@@ -75,7 +75,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
             <button
               type="button"
               onClick={handleMarkAllAsRead}
-              className="text-sm text-[var(--color-primary)] font-medium rounded-lg px-2 py-1 hover:bg-[var(--color-primary-soft)] transition-colors"
+              className="text-sm text-[var(--color-primary)] dark:text-[var(--color-primary-light)] font-medium rounded-lg px-2 py-1 hover:bg-[var(--color-primary-soft)] transition-colors"
             >
               {t('notif_mark_all_read')}
             </button>

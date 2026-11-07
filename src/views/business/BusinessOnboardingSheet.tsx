@@ -122,7 +122,7 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
                     : 'border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
                 }`}
               >
-                <Icons.Shield size={20} className={cedulaType === typ ? 'text-[var(--color-primary)]' : 'uv-text-muted'} />
+                <Icons.Shield size={20} className={cedulaType === typ ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'uv-text-muted'} />
                 <span className="font-semibold uv-text-primary">
                   {typ === 'fisica' ? t('merchant_cedula_fisica') : t('merchant_cedula_juridica')}
                 </span>
@@ -182,7 +182,7 @@ export const BusinessOnboardingSheet: React.FC<Props> = ({ isOpen, onClose, onCr
           </div>
         )}
 
-        {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+        {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
         <div className="flex gap-2.5">
           {step > 0 && (

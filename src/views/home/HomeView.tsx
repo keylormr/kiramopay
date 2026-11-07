@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { Icons } from '../../components/Icons';
 import { Bandera } from '../../components/Bandera';
+import { LogoCripto, tieneLogoCripto } from '../../components/LogoCripto';
 import { BottomSheet } from '../../components/BottomSheet';
 import { BotonCompartirQr } from '../../components/BotonCompartirQr';
 import { MfaChallengeSheet } from '../../components/MfaChallengeSheet';
@@ -231,7 +232,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       ccy: state.baseCurrency || 'CRC',
       balance: 0,
       symbol: state.baseCurrency === 'USD' ? '$' : '₡',
-      flag: '🏦',
+      // Cuenta sin pais: Bandera la dibuja como el banco en linea.
+      flag: 'banco',
       iban: '',
       name: state.baseCurrency || 'CRC',
       type: 'fiat' as const,
@@ -600,9 +602,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   };
 
   const getCurrencyInfo = (ccy: QRCurrency) => {
+    // BTC y ETH no llevan bandera: se dibujan con su logo oficial (LogoCripto).
     const info: Record<QRCurrency, { symbol: string; flag: string; name: string }> = {
-      BTC: { symbol: '₿', flag: '🟠', name: 'Bitcoin' },
-      ETH: { symbol: 'Ξ', flag: '🔷', name: 'Ethereum' },
+      BTC: { symbol: '₿', flag: 'BTC', name: 'Bitcoin' },
+      ETH: { symbol: 'Ξ', flag: 'ETH', name: 'Ethereum' },
       CRC: { symbol: '₡', flag: 'CR', name: 'Colones' },
       USD: { symbol: '$', flag: 'US', name: 'Dolares' },
     };
@@ -667,7 +670,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         <h3 className="text-base font-bold uv-text-primary mb-3 tracking-tight">{t('quick_actions')}</h3>
         <div className="grid grid-cols-4 gap-3">
           {[
-            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]', action: () => onNavigateToSinpe?.('send') },
+            { icon: Icons.Send, label: t('send'), color: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)]', action: () => onNavigateToSinpe?.('send') },
             { icon: Icons.Receive, label: t('receive'), color: 'bg-[var(--color-success-soft)] text-[var(--color-success)]', action: () => onNavigateToSinpe?.('receive') },
             { icon: Icons.Scan, label: t('scan_qr'), color: 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]', action: startQRScan },
             { icon: Icons.QrCode, label: t('charge_qr'), color: 'bg-[var(--color-warning-soft)] text-[var(--color-warning)]', action: () => setActiveSheet('cobrar') },
@@ -689,7 +692,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
           <h3 className="text-base font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h3>
           <button
             onClick={onViewAllTransactions}
-            className="text-[var(--color-primary)] text-sm font-semibold hover:underline"
+            className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-sm font-semibold hover:underline"
           >
             {t('view_all')}
           </button>
@@ -709,7 +712,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 onClick={() => { setSelectedTx(tx); setActiveSheet('txDetail'); }}
                 className="flex items-center px-4 py-3.5 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors cursor-pointer"
               >
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)]'}`}>
+                <div className={`w-11 h-11 rounded-full flex items-center justify-center mr-3.5 shrink-0 ${incoming ? 'bg-[var(--color-success-soft)] text-[var(--color-success)]' : 'bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]'}`}>
                   {incoming ? <Icons.ArrowDownLeft size={18} /> : <Icons.ArrowUpRight size={18} />}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -784,7 +787,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                    <Icons.Users size={16} className="text-[var(--color-primary)]" />
+                    <Icons.Users size={16} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
                   </div>
                   <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_split')}</span>
                 </div>
@@ -818,7 +821,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               >
                 <div className="flex items-center gap-2 mb-2">
                   <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-soft)] flex items-center justify-center">
-                    <Icons.ShoppingCart size={16} className="text-[var(--color-primary)]" />
+                    <Icons.ShoppingCart size={16} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
                   </div>
                   <span className="text-[10px] font-bold uv-text-muted uppercase tracking-wider">{t('home_marketplace')}</span>
                 </div>
@@ -977,7 +980,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         title={t('charge_qr')}
       >
         <div className="p-2 space-y-5">
-          <ErrorALaVista mensaje={cobrarError} className="text-[var(--color-danger)] text-sm text-center" />
+          <ErrorALaVista mensaje={cobrarError} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center" />
 
           {!cobrarCode ? (
             <div className="flex items-center justify-center py-16">
@@ -1029,7 +1032,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 <button
                   onClick={handleCobrarMonto}
                   disabled={cobrarLoading || !(parseFloat(cobrarAmount) > 0)}
-                  className="flex-1 min-w-0 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 px-3 rounded-xl font-bold leading-tight disabled:opacity-50"
+                  className="flex-1 min-w-0 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3 px-3 rounded-xl font-bold leading-tight disabled:opacity-50"
                 >
                   {cobrarLoading ? t('loading') : cobrarCharge ? t('qr_cambiar_monto') : t('qr_cobrar_monto')}
                 </button>
@@ -1115,7 +1118,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       <BottomSheet isOpen={activeSheet === 'addAccount'} onClose={() => setActiveSheet('none')} title={t('open_new_account')}>
         <div className="flex flex-col items-center text-center py-6 px-2 gap-3">
           <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center">
-            <Icons.Wallet size={30} className="text-[var(--color-primary)]" aria-hidden="true" />
+            <Icons.Wallet size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
           </div>
           <h3 className="text-lg font-bold uv-text-primary text-balance">{t('accounts_other_ccy_title')}</h3>
           <p className="text-sm uv-text-secondary max-w-[320px] leading-relaxed">{t('accounts_other_ccy_desc')}</p>
@@ -1154,9 +1157,13 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               const info = getCurrencyInfo(ccy);
               return (
                 <div key={ccy} className="flex flex-col items-center">
-                  <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-lg mb-1">
-                    <Bandera pais={info.flag} />
-                  </div>
+                  {tieneLogoCripto(ccy) ? (
+                    <LogoCripto simbolo={ccy} size={40} className="mb-1" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center text-lg mb-1">
+                      <Bandera pais={info.flag} />
+                    </div>
+                  )}
                   <span className="text-xs text-gray-500">{ccy}</span>
                 </div>
               );
@@ -1188,7 +1195,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               )}
               <button
                 onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayResult(null); }}
-                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"
+                className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"
               >
                 {t('done')}
               </button>
@@ -1224,11 +1231,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     <p className="text-sm uv-text-muted">{t('qr_verificando')}</p>
                   ) : resolverFallo ? (
                     <div className="mt-1 flex flex-col items-center gap-1.5" aria-live="polite">
-                      <p id="pago-sin-verificar" className="text-sm text-[var(--color-danger)]">{t('qr_err_no_se_pudo_verificar')}</p>
+                      <p id="pago-sin-verificar" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('qr_err_no_se_pudo_verificar')}</p>
                       <button
                         type="button"
                         onClick={() => setIntentoResolver((n) => n + 1)}
-                        className="inline-flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                        className="inline-flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline uv-focus-ring rounded-md"
                       >
                         <Icons.RefreshCw size={14} aria-hidden="true" />
                         {t('error_retry')}
@@ -1286,7 +1293,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                     </div>
                   </div>
                 ) : payError ? (
-                  <ErrorALaVista mensaje={payError} className="text-[var(--color-danger)] text-sm text-center" />
+                  <ErrorALaVista mensaje={payError} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center" />
                 ) : null}
 
                 {cobroCerrado || codigoRechazado ? (
@@ -1308,7 +1315,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                       onClick={handleScannedPayment}
                       disabled={payLoading || sinSaberAQuienSePaga || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
                       aria-describedby={resolverFallo ? 'pago-sin-verificar' : undefined}
-                      className="flex-1 py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="flex-1 py-4 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
                       {payLoading ? t('paying') : t('pay')}
@@ -1364,7 +1371,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 )}
                 <button
                   onClick={() => { setActiveSheet('none'); setScannedContact(null); }}
-                  className="mt-2 w-full py-3.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold"
+                  className="mt-2 w-full py-3.5 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white font-bold"
                 >
                   {t('done')}
                 </button>
@@ -1385,7 +1392,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                         <button
                           type="button"
                           onClick={() => setHomonimoConfirmado(true)}
-                          className="mt-2 text-sm font-bold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+                          className="mt-2 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline uv-focus-ring rounded-md"
                         >
                           {t('contact_homonym_confirm')}
                         </button>
@@ -1430,7 +1437,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 />
 
                 {envioError && (
-                  <p className="text-[var(--color-danger)] text-sm flex items-start gap-1.5">
+                  <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm flex items-start gap-1.5">
                     {/* Con un texto de varias lineas, items-center dejaba el
                         icono a media altura y el flex lo encogia a un punto. */}
                     <Icons.AlertCircle size={14} className="shrink-0 mt-0.5" /> {envioError}
@@ -1440,7 +1447,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 <button
                   onClick={handleEnviarAEscaneado}
                   disabled={enviando || bloqueadoPorHomonimo || sinCuentaDelContacto || !(parseFloat(envioMonto) > 0)}
-                  className="w-full py-4 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-4 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {enviando ? (
                     <>
@@ -1457,7 +1464,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 <button
                   onClick={handleAddScannedContact}
                   disabled={contactoGuardado || bloqueadoPorHomonimo || (!!scannedContact && !!buscarContactoPorTelefono(scannedContact.phone))}
-                  className="w-full py-2.5 text-sm font-semibold text-[var(--color-primary)] disabled:opacity-50"
+                  className="w-full py-2.5 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] disabled:opacity-50"
                 >
                   {contactoGuardado || (scannedContact && buscarContactoPorTelefono(scannedContact.phone))
                     ? t('sinpe_contact_saved')

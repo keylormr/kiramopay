@@ -26,6 +26,8 @@ interface Tarjeta {
   colorTexto: string;
   colorFondo: string;
   colorBoton: string;
+  /** Letra del boton: blanca sobre azul; medianoche sobre naranja o verde, donde el blanco no llega a 4,5:1. */
+  colorLetraBoton: string;
   titulo: string;
   cuerpo: string;
   ctaLabel: string;
@@ -111,7 +113,8 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
         icono: Icons.Zap,
         colorTexto: 'var(--color-primary)',
         colorFondo: 'var(--color-primary-soft)',
-        colorBoton: 'var(--color-primary)',
+        colorBoton: 'var(--color-primary-fill)',
+        colorLetraBoton: '#FFFFFF',
         titulo: t('banner_plans_title'),
         cuerpo: t('banner_plans_body'),
         ctaLabel: t('banner_plans_cta'),
@@ -128,6 +131,7 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
         colorTexto: 'var(--color-accent)',
         colorFondo: 'var(--color-accent-soft)',
         colorBoton: 'var(--color-accent)',
+        colorLetraBoton: 'var(--color-navy-950)',
         titulo: t('banner_referral_title'),
         cuerpo: t('banner_referral_body').replace('{puntos}', String(referidos.bonusPoints)),
         ctaLabel: enlaceCopiado ? t('promo_copied') : t('banner_referral_cta'),
@@ -141,6 +145,7 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
         colorTexto: 'var(--color-success)',
         colorFondo: 'var(--color-success-soft)',
         colorBoton: 'var(--color-success)',
+        colorLetraBoton: 'var(--color-navy-950)',
         titulo: t('banner_qr_title'),
         cuerpo: t('banner_qr_body'),
         ctaLabel: t('banner_qr_cta'),
@@ -287,8 +292,8 @@ export const BannerInicio: React.FC<BannerInicioProps> = ({ onAbrirPlanes, onCob
                   type="button"
                   onClick={tarjeta.onCta}
                   disabled={tarjeta.id === 'referral' && compartiendo}
-                  className="mt-auto pt-3 self-start inline-flex items-center gap-1.5 text-[13px] font-bold text-white rounded-xl px-4 py-2 disabled:opacity-60 uv-focus-ring"
-                  style={{ backgroundColor: tarjeta.colorBoton }}
+                  className="mt-auto pt-3 self-start inline-flex items-center gap-1.5 text-[13px] font-bold rounded-xl px-4 py-2 disabled:opacity-60 uv-focus-ring kp-toque"
+                  style={{ backgroundColor: tarjeta.colorBoton, color: tarjeta.colorLetraBoton }}
                 >
                   {tarjeta.ctaLabel}
                   <Icons.ChevronRight size={14} />

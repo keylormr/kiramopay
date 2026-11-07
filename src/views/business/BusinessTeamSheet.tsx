@@ -132,7 +132,7 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
                   <button
                     onClick={() => void revoke(s.id)}
                     disabled={busyId !== null}
-                    className="text-[11px] font-bold text-[var(--color-danger)] shrink-0 disabled:opacity-50"
+                    className="text-[11px] font-bold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] shrink-0 disabled:opacity-50"
                   >
                     {busyId === s.id ? t('processing') : t('business_revoke')}
                   </button>
@@ -142,7 +142,7 @@ export const BusinessTeamSheet: React.FC<Props> = ({ isOpen, onClose, merchantId
           </div>
         )}
 
-        {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+        {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
         {!showAdd ? (
           <Button onClick={() => setShowAdd(true)} fullWidth leftIcon={<Icons.Plus size={18} />}>

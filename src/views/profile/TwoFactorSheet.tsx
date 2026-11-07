@@ -149,7 +149,7 @@ export const TwoFactorSheet: React.FC<TwoFactorSheetProps> = ({
             <button
               onClick={startEnroll}
               disabled={loading}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               {loading ? t('loading') : t('twofa_enable_btn')}
             </button>
@@ -180,7 +180,7 @@ export const TwoFactorSheet: React.FC<TwoFactorSheetProps> = ({
             <button
               onClick={confirmEnroll}
               disabled={loading || code.length !== 6}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
             >
               {loading ? t('loading') : t('twofa_verify')}
             </button>
@@ -212,7 +212,7 @@ export const TwoFactorSheet: React.FC<TwoFactorSheetProps> = ({
             </button>
             <button
               onClick={finishRecovery}
-              className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all"
+              className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold uv-shadow-primary active:scale-[0.98] transition-all"
             >
               {t('twofa_recovery_done')}
             </button>

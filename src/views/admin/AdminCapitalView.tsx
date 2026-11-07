@@ -59,7 +59,7 @@ export const AdminCapitalView: React.FC<{ onClose: () => void }> = ({ onClose })
   }, [recarga]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]" aria-label={t('back')}>
           <Icons.ChevronLeft size={20} />
@@ -76,10 +76,10 @@ export const AdminCapitalView: React.FC<{ onClose: () => void }> = ({ onClose })
         {!cargando && fallo && (
           // Un dato que no cargo no es un cero: se dice, y se deja reintentar.
           <div className="uv-surface-1 rounded-2xl uv-shadow-soft p-5">
-            <p className="text-sm text-[var(--color-danger)]" aria-live="polite">
+            <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-live="polite">
               {mensajeDeRechazo(fallo, SIN_CLAVES_PROPIAS, 'admin_capital_failed', t)}
             </p>
-            <button onClick={() => setRecarga((n) => n + 1)} className="mt-2 text-sm font-bold text-[var(--color-primary)]">
+            <button onClick={() => setRecarga((n) => n + 1)} className="mt-2 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
               {t('error_retry')}
             </button>
           </div>
@@ -93,12 +93,12 @@ export const AdminCapitalView: React.FC<{ onClose: () => void }> = ({ onClose })
           <section key={m.moneda} aria-label={m.moneda} className="uv-surface-1 rounded-2xl uv-shadow-soft p-5">
             <p className="text-xs font-semibold uv-text-muted uppercase tracking-wider">{m.moneda}</p>
             <p
-              className={`mt-1 text-3xl font-extrabold tabular-nums ${m.enNegativo ? 'text-[var(--color-danger)]' : 'uv-text-primary'}`}
+              className={`mt-1 text-3xl font-extrabold tabular-nums ${m.enNegativo ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-primary'}`}
             >
               {dinero(m.saldoMinor, m.moneda)}
             </p>
             {m.enNegativo ? (
-              <p role="status" className="mt-3 rounded-xl px-3 py-2 text-sm font-semibold bg-[var(--color-danger-soft)] text-[var(--color-danger)]">
+              <p role="status" className="mt-3 rounded-xl px-3 py-2 text-sm font-semibold bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
                 {t('admin_capital_shortfall').replace('{monto}', dinero(m.faltanteMinor, m.moneda))}
               </p>
             ) : (

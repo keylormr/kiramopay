@@ -87,3 +87,33 @@ describe('useSettingsStore', () => {
     expect(state.isLocked).toBe(false);
   });
 });
+
+// El rediseno de 2026-11 es oscuro: la app arranca en oscuro y quien tenia
+// guardado el `false` de antes (el valor por defecto, nadie lo eligio) pasa a
+// oscuro una sola vez. Quien vuelva al claro despues lo conserva.
+describe('useSettingsStore: tema oscuro por defecto (version 2)', () => {
+  const migrar = (estado: Record<string, unknown>, version: number) =>
+    useSettingsStore.persist.getOptions().migrate!(estado, version) as Record<string, unknown>;
+
+  it('la version guardada es la 2', () => {
+    expect(useSettingsStore.persist.getOptions().version).toBe(2);
+  });
+
+  it('desde la version 1, el claro guardado pasa a oscuro y lo demas queda igual', () => {
+    const migrado = migrar({ darkMode: false, biometricEnabled: true, language: 'en' }, 1);
+    expect(migrado.darkMode).toBe(true);
+    expect(migrado.biometricEnabled).toBe(true);
+    expect(migrado.language).toBe('en');
+  });
+
+  it('desde la version 0, aplica las dos migraciones', () => {
+    const migrado = migrar({ darkMode: false, biometricEnabled: true }, 0);
+    expect(migrado.darkMode).toBe(true);
+    expect(migrado.biometricEnabled).toBe(false);
+  });
+
+  it('ya en la version 2, una eleccion del claro se respeta', () => {
+    const migrado = migrar({ darkMode: false }, 2);
+    expect(migrado.darkMode).toBe(false);
+  });
+});

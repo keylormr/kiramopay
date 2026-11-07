@@ -67,7 +67,7 @@ const CAMPO =
   'w-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary px-4 py-3 rounded-xl outline-none focus:border-[var(--color-danger)] focus:ring-[3px] focus:ring-[var(--color-danger)]/20 transition-all';
 
 const BOTON_PELIGRO =
-  'w-full bg-[var(--color-danger)] hover:brightness-95 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2';
+  'w-full bg-[var(--color-danger-fill)] hover:brightness-95 text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2';
 
 const BOTON_SECUNDARIO =
   'w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-primary py-3.5 rounded-xl font-semibold hover:bg-[var(--color-border)] dark:hover:bg-[var(--color-border-dark)] transition-colors';
@@ -203,7 +203,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
     <button
       type="button"
       onClick={() => abrirPublico(RUTA_PRIVACIDAD)}
-      className="text-sm font-semibold text-[var(--color-primary)] hover:underline inline-flex items-center gap-1.5"
+      className="text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline inline-flex items-center gap-1.5"
     >
       <Icons.FileText size={15} aria-hidden="true" />
       {t('del_policy_link')}
@@ -213,7 +213,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
   const cabecera = (titulo: string, subtitulo?: string) => (
     <div className="flex items-start gap-3">
       <div className="w-11 h-11 shrink-0 bg-red-100 dark:bg-red-900/30 rounded-xl flex items-center justify-center">
-        <Icons.AlertTriangle size={22} className="text-[var(--color-danger)]" aria-hidden="true" />
+        <Icons.AlertTriangle size={22} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-hidden="true" />
       </div>
       <div className="min-w-0">
         <p className="font-bold uv-text-primary text-lg leading-snug">{titulo}</p>
@@ -245,7 +245,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
 
         {fase.tipo === 'falla' && (
           <>
-            <p role="alert" className="text-sm text-[var(--color-danger)]">{t('del_check_failed')}</p>
+            <p role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('del_check_failed')}</p>
             <button
               type="button"
               onClick={() => {
@@ -266,7 +266,7 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
               <button
                 type="button"
                 onClick={() => abrirPublico(RUTA_ELIMINAR_CUENTA)}
-                className="text-sm font-semibold text-[var(--color-primary)] hover:underline"
+                className="text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline"
               >
                 {t('del_web_link')}
               </button>
@@ -432,14 +432,14 @@ const Contenido: React.FC<ContenidoProps> = ({ onClose, onEnviando }) => {
                   className={CAMPO}
                 />
                 {noCoinciden && (
-                  <p id={`${idRepetido}-error`} role="alert" className="mt-1.5 text-xs text-[var(--color-danger)]">
+                  <p id={`${idRepetido}-error`} role="alert" className="mt-1.5 text-xs text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
                     {t('del_err_response_email_mismatch')}
                   </p>
                 )}
               </div>
             )}
 
-            {error && <p id={idError} role="alert" className="text-sm text-[var(--color-danger)]"><TextoConCorreo texto={error} /></p>}
+            {error && <p id={idError} role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]"><TextoConCorreo texto={error} /></p>}
 
             <div className="space-y-2.5 pt-1">
               <button type="submit" disabled={!puedeEnviar} className={BOTON_PELIGRO}>

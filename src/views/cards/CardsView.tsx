@@ -116,7 +116,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
       className="flex gap-3 rounded-2xl uv-surface-1 uv-shadow-soft p-4 text-left"
       role={delServidor ? 'status' : undefined}
     >
-      <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+      <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
       <div className="min-w-0">
         <p className="text-sm font-semibold leading-relaxed uv-text-primary">
           {mensajeDeTope(t, 'cards', datos.plan, datos.limite, tarifas)}
@@ -131,7 +131,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
           <button
             type="button"
             onClick={onOpenPlans}
-            className="mt-2 inline-flex items-center gap-1 rounded text-sm font-bold text-[var(--color-primary)] uv-focus-ring"
+            className="mt-2 inline-flex items-center gap-1 rounded text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] uv-focus-ring"
           >
             {t('plans_limit_see_plans')}
             <Icons.ChevronRight size={16} aria-hidden="true" />
@@ -204,7 +204,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
         /* No se pudo consultar. Ofrecer "crear tarjeta" aqui seria empujar a
            crear una segunda a quien ya tiene la suya. */
         <div className="uv-surface-1 rounded-3xl p-8 text-center uv-shadow-soft">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-danger-soft,var(--color-surface-muted))] text-[var(--color-danger)] flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-danger-soft,var(--color-surface-muted))] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] flex items-center justify-center mx-auto mb-4">
             <Icons.AlertCircle size={32} />
           </div>
           <h3 className="text-lg font-bold uv-text-primary mb-1">{t('cards_load_failed_title')}</h3>
@@ -216,12 +216,12 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
       ) : !card ? (
         /* Empty state — no active card yet */
         <div className="uv-surface-1 rounded-3xl p-8 text-center uv-shadow-soft">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex items-center justify-center mx-auto mb-4">
             <Icons.Card size={32} />
           </div>
           <h3 className="text-lg font-bold uv-text-primary mb-1">{t('card_no_cards_title')}</h3>
           <p className="uv-text-muted text-sm mb-6">{t('card_no_cards_desc')}</p>
-          {error && <p className="text-[var(--color-danger)] text-sm mb-4">{error}</p>}
+          {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-4">{error}</p>}
           {topeServidor ? (
             avisoTope(topeServidor, true)
           ) : (
@@ -238,7 +238,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
               decir: justo las acciones que solo existen teniendo una tarjeta
               fallaban en silencio. */}
           {error && (
-            <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">
+            <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center" aria-live="polite">
               {error}
             </p>
           )}
@@ -257,7 +257,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
                   aria-pressed={c.id === card.id}
                   className={`shrink-0 h-9 px-3.5 rounded-full inline-flex items-center gap-1.5 text-sm font-bold tabular-nums transition-colors uv-focus-ring ${
                     c.id === card.id
-                      ? 'bg-[var(--color-primary)] text-white'
+                      ? 'bg-[var(--color-primary-fill)] text-white'
                       : 'uv-surface-1 uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)]'
                   }`}
                 >
@@ -320,7 +320,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
                 disabled={busy}
                 className="w-full flex items-center px-4 py-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors active:scale-[0.997] disabled:opacity-60"
               >
-                <div className="w-10 h-10 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mr-4 shrink-0">
+                <div className="w-10 h-10 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex items-center justify-center mr-4 shrink-0">
                   <Icons.Freeze size={20} />
                 </div>
                 <div className="flex-1 text-left min-w-0">
@@ -350,7 +350,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
                 onClick={() => setShowCancel(true)}
                 className="w-full flex items-center px-4 py-4 hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors active:scale-[0.997]"
               >
-                <div className="w-10 h-10 rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] flex items-center justify-center mr-4 shrink-0">
+                <div className="w-10 h-10 rounded-full bg-[var(--color-danger-soft)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] flex items-center justify-center mr-4 shrink-0">
                   <Icons.XCircle size={20} />
                 </div>
                 <div className="flex-1 text-left min-w-0">
@@ -407,7 +407,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
           <div>
             <div className="flex justify-between mb-2">
               <label className="font-semibold uv-text-primary">{t('daily_limit')}</label>
-              <span className="text-[var(--color-primary)] font-bold tabular-nums">{formatCRC(tempDaily)}</span>
+              <span className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] font-bold tabular-nums">{formatCRC(tempDaily)}</span>
             </div>
             <input
               type="range" min={0} max={1000000} step={10000}
@@ -436,7 +436,7 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
             <button
               onClick={confirmCancel}
               disabled={busy}
-              className="flex-1 bg-[var(--color-danger)] text-white py-4 rounded-xl font-bold active:scale-[0.98] transition-transform disabled:opacity-60"
+              className="flex-1 bg-[var(--color-danger-fill)] text-white py-4 rounded-xl font-bold active:scale-[0.98] transition-transform disabled:opacity-60"
             >
               {busy ? t('processing') : t('card_cancel')}
             </button>

@@ -155,7 +155,10 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Con "reducir movimiento" salta sin animar: la regla de index.css no
+    // alcanza a un desplazamiento pedido desde JavaScript.
+    const quieto = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    bottomRef.current?.scrollIntoView({ behavior: quieto ? 'auto' : 'smooth' });
   }, [messages, sending]);
 
   const send = async (text: string) => {
@@ -287,7 +290,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const examples = [t('assistant_example_1'), t('assistant_example_2')];
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center gap-2 flex-shrink-0">
         <button
@@ -328,7 +331,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             <span className="text-xs font-semibold uv-text-muted">{t('assistant_history')}</span>
             <button
               onClick={newConversation}
-              className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)]"
+              className="flex items-center gap-1 text-xs font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
             >
               <Icons.Plus size={14} />
               {t('assistant_new_conversation')}
@@ -399,7 +402,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               <div
                 className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words ${
                   m.role === 'user'
-                    ? 'bg-[var(--color-primary)] text-white rounded-br-sm'
+                    ? 'bg-[var(--color-primary-fill)] text-white rounded-br-sm'
                     : 'uv-surface-2 uv-text-primary rounded-bl-sm'
                 }`}
               >
@@ -417,7 +420,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                   className="max-w-[90%] uv-surface-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] rounded-2xl p-4 shadow-sm"
                 >
                   <div className="flex items-center gap-2 mb-2">
-                    <Icons.Send size={16} className="text-[var(--color-primary)]" />
+                    <Icons.Send size={16} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
                     <span className="text-sm font-bold uv-text-primary">{p.summary}</span>
                   </div>
                   {st.status === 'done' ? (
@@ -461,7 +464,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                         <button
                           onClick={() => confirmProposal(key, p)}
                           disabled={st.status === 'pending'}
-                          className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                          className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
                         >
                           {st.status === 'pending' ? t('loading') : t('assistant_confirm')}
                         </button>
@@ -507,7 +510,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         <button
           onClick={() => send(input)}
           disabled={!input.trim() || sending || available === false}
-          className="w-11 h-11 shrink-0 rounded-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white flex items-center justify-center disabled:opacity-40 active:scale-95 transition-all"
+          className="w-11 h-11 shrink-0 rounded-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white flex items-center justify-center disabled:opacity-40 active:scale-95 transition-all"
           aria-label={t('assistant_send')}
         >
           <Icons.Send size={18} />

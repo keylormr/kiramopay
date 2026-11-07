@@ -62,7 +62,7 @@ export function AvisoDelDestinatario({ tipo, onConfirmar, confirmado }: AvisoPro
     >
       <Icons.AlertCircle
         size={20}
-        className={`mt-0.5 shrink-0 ${duro ? 'text-[var(--color-danger)]' : 'text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]'}`}
+        className={`mt-0.5 shrink-0 ${duro ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]'}`}
         aria-hidden="true"
       />
       <div className="min-w-0">
@@ -71,7 +71,7 @@ export function AvisoDelDestinatario({ tipo, onConfirmar, confirmado }: AvisoPro
           <button
             type="button"
             onClick={onConfirmar}
-            className="mt-2 min-h-11 text-sm font-bold text-[var(--color-primary)] hover:underline uv-focus-ring rounded-md"
+            className="mt-2 min-h-11 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline uv-focus-ring rounded-md"
           >
             {t('contact_homonym_confirm')}
           </button>

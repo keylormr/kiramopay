@@ -303,14 +303,14 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button onClick={onClose} className="p-2 -ml-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors" aria-label={t('back')}>
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('splitpay_title')}</h1>
-        <button onClick={() => setShowCreate(true)} aria-label={t('splitpay_create')} className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]">
+        <button onClick={() => setShowCreate(true)} aria-label={t('splitpay_create')} className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
           <Icons.Plus size={20} />
         </button>
       </div>
@@ -322,12 +322,12 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           </div>
         ) : errorCarga ? (
           <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
-            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] mb-3" aria-hidden="true" />
+            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] mb-3" aria-hidden="true" />
             <p className="font-semibold uv-text-primary" role="alert">{t('splitpay_err_load')}</p>
             <button
               type="button"
               onClick={() => setLoadTrigger((n) => n + 1)}
-              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
+              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
             >
               {t('error_retry')}
             </button>
@@ -413,7 +413,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           <div>
             <div className="flex justify-between items-center mb-2">
               <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t('splitpay_participants')}</label>
-              <button onClick={addParticipant} className="text-[var(--color-primary)] text-xs font-bold">+ {t('add')}</button>
+              <button onClick={addParticipant} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-xs font-bold">+ {t('add')}</button>
             </div>
             <div className="space-y-2">
               {participants.map((p, i) => (
@@ -440,14 +440,14 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </div>
             <p className="text-xs text-gray-400 mt-2">{t('splitpay_phone_hint')}</p>
             {totalAmount && participants.filter(p => p.userName).length > 0 && splitType === 'equal' && (
-              <p className="text-xs text-[var(--color-primary)] font-medium mt-2">
+              <p className="text-xs text-[var(--color-primary)] dark:text-[var(--color-primary-light)] font-medium mt-2">
                 {formatMoney(parseFloat(totalAmount) / (participants.filter(p => p.userName.trim() && p.userPhone.trim()).length + 1))} {t('splitpay_per_person')}
               </p>
             )}
           </div>
 
           {createError && (
-            <p className="text-sm text-[var(--color-danger)]" aria-live="polite">{createError}</p>
+            <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-live="polite">{createError}</p>
           )}
 
           <Button
@@ -530,7 +530,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </div>
 
             {errorDetalle && (
-              <p className="text-sm text-[var(--color-danger)]" aria-live="polite">{errorDetalle}</p>
+              <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-live="polite">{errorDetalle}</p>
             )}
 
             {confirmando ? (
@@ -573,7 +573,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                       <button
                         type="button"
                         onClick={() => setConfirmando('decline')}
-                        className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] hover:opacity-80"
+                        className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] hover:opacity-80"
                       >
                         {t('splitpay_decline_share')}
                       </button>
@@ -589,7 +589,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                     <button
                       type="button"
                       onClick={() => setConfirmando('cancel')}
-                      className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] hover:opacity-80"
+                      className="w-full py-2.5 text-sm font-bold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] hover:opacity-80"
                     >
                       {t('splitpay_cancel_split')}
                     </button>
@@ -599,7 +599,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             )}
           </div>
         ) : (
-          <p className="text-sm text-[var(--color-danger)] py-6" aria-live="polite">{errorDetalle}</p>
+          <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] py-6" aria-live="polite">{errorDetalle}</p>
         )}
       </BottomSheet>
     </div>

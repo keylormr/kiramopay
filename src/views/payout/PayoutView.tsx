@@ -146,7 +146,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
@@ -169,7 +169,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               setError('');
             }}
             disabled={rails.length === 0}
-            className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] disabled:opacity-40"
+            className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)] disabled:opacity-40"
             aria-label={t('payout_new')}
           >
             <Icons.Plus size={20} />
@@ -205,7 +205,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   setShowCreate(true);
                   setError('');
                 }}
-                className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
+                className="px-6 py-3 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white rounded-xl font-bold text-sm active:scale-95 transition-transform"
               >
                 {t('payout_new')}
               </button>
@@ -288,7 +288,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <button
             onClick={create}
             disabled={creating || !rail || !beneficiary.trim() || !account.trim() || !amount}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 uv-shadow-primary active:scale-[0.98] transition-all"
           >
             {creating ? t('loading') : t('payout_create_btn')}
           </button>
@@ -334,7 +334,7 @@ export const PayoutView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <button
                 onClick={runRefresh}
                 disabled={acting}
-                className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
+                className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 active:scale-[0.98] transition-all"
               >
                 {acting ? t('loading') : t('payout_refresh')}
               </button>

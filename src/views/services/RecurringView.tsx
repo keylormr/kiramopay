@@ -36,7 +36,7 @@ const CLAVE_FRECUENCIA: Record<Frecuencia, string> = {
 
 const ICONO_TIPO: Record<Tipo, { Icono: React.FC<{ size?: number; className?: string }>; tono: string }> = {
   service: { Icono: Icons.Zap, tono: 'bg-[var(--color-warning-soft)] text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]' },
-  sinpe: { Icono: Icons.Smartphone, tono: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]' },
+  sinpe: { Icono: Icons.Smartphone, tono: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' },
   recharge: { Icono: Icons.Phone, tono: 'bg-[var(--color-success-soft)] text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]' },
 };
 
@@ -158,7 +158,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               {p.enabled && (
                 <span
                   className={`text-xs font-semibold ${
-                    vencido ? 'text-[var(--color-danger)]' : 'uv-text-secondary'
+                    vencido ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-secondary'
                   }`}
                 >
                   {rellenar(t(vencido ? 'recurring_overdue' : 'recurring_next'), { fecha: fechaCorta(p.nextDate, language) })}
@@ -183,7 +183,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             <button
               type="button"
               onClick={() => setAMarcar(p)}
-              className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary-soft)] text-sm font-bold text-[var(--color-primary)] uv-focus-ring active:scale-[0.98]"
+              className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary-soft)] text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] uv-focus-ring active:scale-[0.98]"
             >
               <Icons.Check size={16} aria-hidden="true" />
               {t('recurring_mark_paid')}
@@ -213,13 +213,13 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             type="button"
             onClick={() => setAEliminar(p)}
             aria-label={`${t('delete')}: ${p.label}`}
-            className="flex h-11 w-11 items-center justify-center rounded-xl uv-surface-2 text-[var(--color-danger)] uv-focus-ring"
+            className="flex h-11 w-11 items-center justify-center rounded-xl uv-surface-2 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] uv-focus-ring"
           >
             <Trash2 size={17} aria-hidden />
           </button>
         </div>
         {errorTarjeta?.id === p.id && (
-          <p role="alert" className="mt-2 text-sm font-medium text-[var(--color-danger)]">
+          <p role="alert" className="mt-2 text-sm font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
             {errorTarjeta.texto}
           </p>
         )}
@@ -228,7 +228,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 flex h-14 flex-shrink-0 items-center justify-between border-b border-[var(--color-border)] bg-white/80 px-4 backdrop-blur-md dark:border-[var(--color-border-dark)] dark:bg-surface-dark/80">
         <button
           type="button"
@@ -244,7 +244,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           onClick={() => setVerNuevo(true)}
           disabled={cargando || errorCarga}
           aria-label={t('recurring_new')}
-          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-[var(--color-primary)] uv-focus-ring hover:bg-[var(--color-surface-muted)] disabled:opacity-40 dark:hover:bg-[var(--color-surface-muted-dark)]"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-[var(--color-primary)] dark:text-[var(--color-primary-light)] uv-focus-ring hover:bg-[var(--color-surface-muted)] disabled:opacity-40 dark:hover:bg-[var(--color-surface-muted-dark)]"
         >
           <Icons.Plus size={22} />
         </button>
@@ -257,7 +257,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </div>
         ) : errorCarga ? (
           <div className="flex flex-col items-center py-20 text-center">
-            <Icons.AlertCircle size={26} className="mb-3 text-[var(--color-danger)]" aria-hidden="true" />
+            <Icons.AlertCircle size={26} className="mb-3 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-hidden="true" />
             <p role="alert" className="font-semibold uv-text-primary">{t('recurring_err_load')}</p>
             <Button className="mt-4" onClick={() => void cargar()}>
               {t('error_retry')}
@@ -266,7 +266,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         ) : payments.length === 0 ? (
           <div className="mx-auto flex max-w-sm flex-col items-center py-16 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-primary-soft)]">
-              <Icons.Calendar size={30} className="text-[var(--color-primary)]" />
+              <Icons.Calendar size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
             </div>
             <h2 className="text-lg font-bold uv-text-primary">{t('recurring_empty_title')}</h2>
             <p className="mt-1.5 text-sm leading-relaxed uv-text-secondary">{t('recurring_empty_desc')}</p>
@@ -278,7 +278,7 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         ) : (
           <div className="space-y-6">
             <p className="flex gap-2 rounded-2xl border border-[var(--color-border)] p-3 text-xs leading-relaxed uv-text-secondary dark:border-[var(--color-border-dark)]">
-              <Icons.Info size={15} className="mt-px shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+              <Icons.Info size={15} className="mt-px shrink-0 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
               <span>{t('recurring_manual_note')}</span>
             </p>
             {activos.length > 0 && (
@@ -426,7 +426,7 @@ const HojaNuevo: React.FC<HojaNuevoProps> = ({ abierta, onClose, onCreado }) => 
   const segmento = (activo: boolean) =>
     `h-11 rounded-xl px-2 text-sm font-bold uv-focus-ring transition-colors ${
       activo
-        ? 'bg-[var(--color-primary)] text-white'
+        ? 'bg-[var(--color-primary-fill)] text-white'
         : 'bg-[var(--color-surface-muted)] uv-text-secondary dark:bg-[var(--color-surface-muted-dark)]'
     }`;
 
@@ -480,7 +480,7 @@ const HojaNuevo: React.FC<HojaNuevoProps> = ({ abierta, onClose, onCreado }) => 
             />
           </div>
           {avisoMonto && (
-            <p id="pago-monto-aviso" className="mt-1.5 text-xs font-medium text-[var(--color-danger)]">
+            <p id="pago-monto-aviso" className="mt-1.5 text-xs font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
               {t('recurring_err_amount')}
             </p>
           )}
@@ -511,7 +511,7 @@ const HojaNuevo: React.FC<HojaNuevoProps> = ({ abierta, onClose, onCreado }) => 
         </div>
 
         {error && (
-          <p role="alert" className="text-sm font-medium text-[var(--color-danger)]">
+          <p role="alert" className="text-sm font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
             {error}
           </p>
         )}
@@ -568,7 +568,7 @@ const HojaAccion: React.FC<HojaAccionProps> = ({ abierta, titulo, encabezado, te
         {encabezado && <p className="font-bold uv-text-primary">{encabezado}</p>}
         <p className="text-[15px] leading-relaxed uv-text-secondary">{texto}</p>
         {error && (
-          <p role="alert" className="text-sm font-medium text-[var(--color-danger)]">
+          <p role="alert" className="text-sm font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
             {error}
           </p>
         )}

@@ -41,7 +41,7 @@ const CLAVE_PRESET: Record<Preset, string> = {
 
 const chip =
   'shrink-0 h-10 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors duration-150 uv-focus-ring';
-const chipActivo = 'bg-[var(--color-primary)] text-white';
+const chipActivo = 'bg-[var(--color-primary-fill)] text-white';
 const chipInactivo =
   'uv-surface-1 uv-text-secondary hover:border-[var(--color-border-strong)] dark:hover:border-[var(--color-border-strong-dark)]';
 
@@ -225,7 +225,7 @@ const ElegirMes: React.FC<{ rango: Rango; hoy: FechaCivil; idioma: string; onEle
               onClick={() => onElegir(r)}
               className={`h-12 rounded-xl text-sm font-semibold capitalize transition-colors uv-focus-ring disabled:opacity-35 disabled:pointer-events-none ${
                 activo
-                  ? 'bg-[var(--color-primary)] text-white'
+                  ? 'bg-[var(--color-primary-fill)] text-white'
                   : 'uv-surface-2 uv-text-primary hover:border-[var(--color-primary-300)]'
               }`}
             >

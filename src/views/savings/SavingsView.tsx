@@ -445,7 +445,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
@@ -458,7 +458,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
         <h1 className="text-lg font-bold">{t('savings_title')}</h1>
         <button
           onClick={abrirNuevaMeta}
-          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)]"
+          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
           aria-label={t('savings_add_goal')}
         >
           <Icons.Plus size={20} />
@@ -472,12 +472,12 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
           </div>
         ) : errorCarga ? (
           <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
-            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] mb-3" aria-hidden="true" />
+            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] mb-3" aria-hidden="true" />
             <p className="font-semibold uv-text-primary" role="alert">{t('savings_err_load')}</p>
             <button
               type="button"
               onClick={() => void cargar()}
-              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
+              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
             >
               {t('error_retry')}
             </button>
@@ -509,14 +509,14 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                   <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
                     className="text-gray-200 dark:text-gray-700" />
                   <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4"
-                    className="text-[var(--color-primary)]"
+                    className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
                     strokeDasharray={`${overallProgress * 1.76} 176`}
                     strokeLinecap="round"
                     style={{ transition: 'stroke-dasharray 0.7s ease-out' }}
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-xs font-black text-[var(--color-primary)]">{Math.round(overallProgress)}%</span>
+                  <span className="text-xs font-black text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">{Math.round(overallProgress)}%</span>
                 </div>
               </div>
             </div>
@@ -530,7 +530,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
         {enTope && topeMetas !== null && (
           <div className="mx-4 mt-2 flex gap-3 rounded-2xl uv-surface-1 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-4">
-            <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+            <Icons.Info size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
             <div className="min-w-0">
               <p className="text-sm font-semibold leading-relaxed uv-text-primary">
                 {mensajeDeTope(t, 'goals', plan, topeMetas, tarifas)}
@@ -544,7 +544,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                 <button
                   type="button"
                   onClick={onOpenPlans}
-                  className="mt-2 inline-flex items-center gap-1 rounded text-sm font-bold text-[var(--color-primary)] uv-focus-ring"
+                  className="mt-2 inline-flex items-center gap-1 rounded text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] uv-focus-ring"
                 >
                   {t('plans_limit_see_plans')}
                   <Icons.ChevronRight size={16} aria-hidden="true" />
@@ -696,7 +696,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
               />
             </div>
             {avisoObjetivo && (
-              <p id="meta-objetivo-aviso" className="mt-1.5 text-xs font-medium text-[var(--color-danger)]">
+              <p id="meta-objetivo-aviso" className="mt-1.5 text-xs font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
                 {t('savings_err_target_invalid')}
               </p>
             )}
@@ -745,7 +745,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
           </div>
 
           {errorHoja && !showDepositSheet && (
-            <p className="text-sm text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+            <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{errorHoja}</p>
           )}
 
           {/* Create button */}
@@ -813,7 +813,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                 </div>
 
                 {errorHoja && (
-                  <p className="text-sm text-center text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+                  <p className="text-sm text-center text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{errorHoja}</p>
                 )}
 
                 <Button
@@ -890,7 +890,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                 </div>
 
                 {errorHoja && (
-                  <p className="text-sm text-center text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+                  <p className="text-sm text-center text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{errorHoja}</p>
                 )}
 
                 <Button
@@ -954,7 +954,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
               </p>
             )}
             {errorHoja && (
-              <p className="text-sm text-[var(--color-danger)]" role="alert">{errorHoja}</p>
+              <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{errorHoja}</p>
             )}
             <div className="flex gap-3">
               <button
@@ -969,7 +969,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                 type="button"
                 onClick={() => void confirmarBorrado()}
                 disabled={deletingId !== null}
-                className="flex-1 bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+                className="flex-1 bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
               >
                 {deletingId ? t('loading') : t('delete')}
               </button>

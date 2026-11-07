@@ -21,8 +21,7 @@ import { useGuardiaDeVersion, useRecargaAutomaticaDeVersion } from './hooks/useG
 import { asegurarArranque } from './hooks/useActualizacion';
 import { useSemillasDeLaDemo } from './hooks/useSemillasDeLaDemo';
 import { LoginView } from './views/auth/LoginView';
-import { Icons } from './components/Icons';
-import type { LucideIcon } from 'lucide-react';
+import { Icons, IconosLinea } from './components/Icons';
 import { biometricService } from './services/biometric';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { App as CapApp } from '@capacitor/app';
@@ -42,6 +41,7 @@ import { BusinessOnboardingSheet } from './views/business/BusinessOnboardingShee
 import { NegocioSinCargar } from './views/business/NegocioSinCargar';
 import { OfflineBanner } from './components/OfflineBanner';
 import { instalarNavegacionPorCapas, retroceder, useCapa } from './navegacion/pilaDeCapas';
+import { BarraInferior, NavegacionLateral, useClaseDeVentana, type ElementoDeNavegacion } from './navegacion/NavegacionAdaptable';
 
 // Lazy-loaded views (code splitting)
 const HomeView = lazyConRecarga(() => import('./views/home/HomeView').then(m => ({ default: m.HomeView })));
@@ -223,13 +223,13 @@ const LockScreen = () => {
         </div>
 
         {error && (
-          <p aria-live="polite" className="text-[var(--color-danger)] text-sm text-center animate-shake">{error}</p>
+          <p aria-live="polite" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center animate-shake">{error}</p>
         )}
 
         <button
           onClick={handleSubmit}
           disabled={pin.length < 4 || busy}
-          className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all uv-shadow-primary flex items-center justify-center gap-2"
+          className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-4 rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all uv-shadow-primary flex items-center justify-center gap-2"
         >
           {busy ? (
             <>
@@ -452,29 +452,78 @@ const Layout = () => {
     setActiveTab(target.tab);
   }), []);
 
-  const TABS: { id: TabId; icon: LucideIcon; label: string; }[] = [
-    { id: 'home', icon: Icons.Home, label: t('nav_home') },
-    { id: 'sinpe', icon: Icons.Smartphone, label: t('nav_sinpe') },
-    { id: 'crypto', icon: Icons.Bitcoin, label: t('nav_crypto') },
-    { id: 'services', icon: Icons.FileText, label: t('nav_services') },
-    { id: 'profile', icon: Icons.Profile, label: t('nav_profile') },
+  const TABS: (ElementoDeNavegacion & { id: TabId })[] = [
+    { id: 'home', Icono: IconosLinea.Inicio, etiqueta: t('nav_home') },
+    { id: 'sinpe', Icono: IconosLinea.Sinpe, etiqueta: t('nav_sinpe') },
+    { id: 'crypto', Icono: IconosLinea.Cripto, etiqueta: t('nav_crypto') },
+    { id: 'services', Icono: IconosLinea.Servicios, etiqueta: t('nav_services') },
+    { id: 'profile', Icono: IconosLinea.Perfil, etiqueta: t('nav_profile') },
   ];
 
   // In business mode the bottom bar swaps to the shop's own tabs. Reports are
   // the business's numbers, so a cashier does not get that tab.
   const canSeeReports = activeMerchant != null && activeMerchant.role !== 'cashier';
-  const BUSINESS_NAV: { id: string; icon: LucideIcon; label: string }[] = [
-    { id: 'home', icon: Icons.Home, label: t('nav_home') },
-    ...(canSeeReports ? [{ id: 'reports', icon: Icons.TrendingUp, label: t('business_reports') }] : []),
-    { id: 'movements', icon: Icons.Receipt, label: t('business_movements') },
-    { id: 'settings', icon: Icons.Settings, label: t('business_settings') },
+  const BUSINESS_NAV: ElementoDeNavegacion[] = [
+    { id: 'home', Icono: IconosLinea.Inicio, etiqueta: t('nav_home') },
+    ...(canSeeReports ? [{ id: 'reports', Icono: IconosLinea.Reportes, etiqueta: t('business_reports') }] : []),
+    { id: 'movements', Icono: IconosLinea.Movimientos, etiqueta: t('business_movements') },
+    { id: 'settings', Icono: IconosLinea.Ajustes, etiqueta: t('business_settings') },
   ];
-  const NAV_ITEMS: { id: string; icon: LucideIcon; label: string }[] = businessMode ? BUSINESS_NAV : TABS;
-  const currentNavId: string = businessMode ? bizTab : activeTab;
+  const NAV_ITEMS: ElementoDeNavegacion[] = businessMode ? BUSINESS_NAV : TABS;
+  // Accesos que solo caben en el menu lateral (ventana expandida): abren la
+  // misma pantalla que el mosaico de Inicio o la fila de Perfil.
+  const ATAJOS: (ElementoDeNavegacion & { id: 'savings' | 'cards' | 'sessions' })[] = businessMode ? [] : [
+    { id: 'savings', Icono: IconosLinea.Metas, etiqueta: t('home_savings') },
+    { id: 'cards', Icono: IconosLinea.Tarjeta, etiqueta: t('home_cards') },
+    { id: 'sessions', Icono: IconosLinea.Dispositivos, etiqueta: t('sessions_title') },
+  ];
+  const claseDeVentana = useClaseDeVentana();
+  const atajoAbierto = ATAJOS.find((a) => a.id === overlayView)?.id;
+  const currentNavId: string = atajoAbierto ?? (businessMode ? bizTab : activeTab);
   const onNavSelect = (id: string) => {
+    const atajo = ATAJOS.find((a) => a.id === id);
+    if (atajo) {
+      setVolverDePlanes(null);
+      setOverlayView(atajo.id);
+      return;
+    }
+    // En riel o menu lateral la navegacion sigue visible con una pantalla
+    // abierta: elegir una pestana la cierra, como volver y tocar la pestana.
+    if (overlayView !== null) {
+      setOverlayView(null);
+      setVolverDePlanes(null);
+    }
     if (businessMode) setBizTab(id as 'home' | 'reports' | 'movements' | 'settings');
     else setActiveTab(id as TabId);
   };
+  const tituloDeSeccion = [...NAV_ITEMS, ...ATAJOS].find((e) => e.id === currentNavId)?.etiqueta ?? t('app_name');
+  const iniciales = [state.user?.firstName, state.user?.lastName]
+    .map((parte) => parte?.trim().charAt(0) ?? '')
+    .join('')
+    .toUpperCase();
+  const nombreCompleto = [state.user?.firstName, state.user?.lastName].filter(Boolean).join(' ');
+  // Pie del riel y del menu lateral: la cuenta activa; tocarla cambia de perfil
+  // (personal o comercio), igual que el selector de la barra superior.
+  const pieDeNavegacion = (
+    <button
+      type="button"
+      onClick={() => setShowSwitcher(true)}
+      aria-label={t('business_switch')}
+      className={`kp-toque kp-foco flex items-center gap-2.5 rounded-xl text-left ${claseDeVentana === 'expandida' ? 'w-full p-2 hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)]' : 'p-1'}`}
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-surface-muted)] text-[13px] font-semibold uv-text-primary dark:bg-[var(--color-surface-2-dark)] dark:shadow-[inset_0_0_0_1px_var(--color-border-strong-dark)]">
+        {businessMode && activeMerchant ? <Icons.ShoppingCart size={18} aria-hidden="true" /> : (iniciales || <IconosLinea.Perfil size={20} aria-hidden="true" />)}
+      </span>
+      {claseDeVentana === 'expandida' && (
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold uv-text-primary">
+            {businessMode && activeMerchant ? activeMerchant.name : (nombreCompleto || t('app_name'))}
+          </span>
+          <span className="block truncate text-xs uv-text-secondary">{t('business_switch')}</span>
+        </span>
+      )}
+    </button>
+  );
 
   const notifications = state.notifications || [];
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -533,9 +582,29 @@ const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans">
+    <div className="kp-marco min-h-screen flex bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] uv-text-primary font-sans">
+      {/* Riel (600-839 px) o menu lateral fijo (840 px o mas). En telefono, la
+          barra inferior de mas abajo. */}
+      {claseDeVentana !== 'compacta' && (
+        <NavegacionLateral
+          clase={claseDeVentana}
+          elementos={NAV_ITEMS}
+          atajos={ATAJOS}
+          actual={currentNavId}
+          onElegir={onNavSelect}
+          ariaLabel={t('nav_main_aria')}
+          nombreDeLaApp={t('app_name')}
+          pie={pieDeNavegacion}
+        />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col">
       {/* Top Bar */}
-      <div className="sticky top-0 z-30 bg-white/75 dark:bg-[#121E3A]/75 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center justify-between">
+      <div className="sticky top-0 z-30 bg-white/75 dark:bg-[var(--color-background-dark)]/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center justify-between">
+        {claseDeVentana !== 'compacta' ? (
+          // Con riel o menu lateral, la marca y el cambio de perfil ya estan en
+          // la navegacion: la barra dice donde esta la persona.
+          <span className="text-lg font-semibold tracking-[-0.01em] uv-text-primary truncate">{tituloDeSeccion}</span>
+        ) : (
         <button
           onClick={() => setShowSwitcher(true)}
           aria-label={t('business_switch')}
@@ -552,14 +621,15 @@ const Layout = () => {
             </>
           ) : (
             <>
-              <div className="w-8 h-8 uv-gradient-brand rounded-lg flex items-center justify-center text-white font-black text-sm uv-shadow-soft">
-                K
+              <div className="w-8 h-8 uv-gradient-brand rounded-lg flex items-center justify-center uv-shadow-soft">
+                <MarcaKiramo size={18} />
               </div>
-              <span className="font-bold text-lg tracking-tight uv-text-primary">KiramoPay</span>
+              <span className="font-semibold text-lg tracking-[-0.01em] uv-text-primary">KiramoPay</span>
             </>
           )}
           <Icons.ChevronRight size={16} className="uv-text-muted shrink-0" />
         </button>
+        )}
         <div className="flex items-center gap-2">
           {state.settings.offlineMode && (
             <span aria-live="polite" className="px-2 py-0.5 uv-chip-danger text-[10px] font-bold uppercase tracking-wider rounded-md">
@@ -581,7 +651,7 @@ const Layout = () => {
           >
             <Icons.Bell size={20} />
             {unreadCount > 0 && (
-              <span aria-label={`${unreadCount} ${t('notif_unread')}`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[var(--color-danger)] rounded-full border-2 border-[var(--color-surface-1)] dark:border-[var(--color-surface-1-dark)] flex items-center justify-center text-[10px] font-bold text-white">
+              <span aria-label={`${unreadCount} ${t('notif_unread')}`} className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-[var(--color-accent)] rounded-full border-2 border-[var(--color-surface-1)] dark:border-[var(--color-background-dark)] flex items-center justify-center text-[10px] font-bold text-[var(--color-navy-950)] kp-num">
                 {unreadCount > 9 ? '9+' : unreadCount}
               </span>
             )}
@@ -589,52 +659,21 @@ const Layout = () => {
         </div>
       </div>
 
-      {/* Content Area */}
-      <main className="flex-1 relative max-w-2xl mx-auto w-full overflow-x-hidden">
+      {/* Content Area. En plegables a medio abrir, kp-contenido-segmentado
+          deja el contenido de un lado del pliegue (index.css). */}
+      <main className="kp-contenido-segmentado flex-1 relative max-w-2xl mx-auto w-full overflow-x-hidden">
         <Suspense fallback={<LoadingSkeleton />}>
           {renderContent()}
         </Suspense>
       </main>
+      </div>
 
-      {/* Bottom Navigation. Fondo OPACO: al 95 % con desenfoque se adivinaba el
-          texto de la lista que pasa por detrás ("-₡1.00" bajo "Inicio"). Una
-          barra fija no necesita transparencia. */}
-      <nav role="navigation" aria-label={t('nav_main_aria')} className="fixed bottom-0 left-0 right-0 z-40 bg-[var(--color-surface-1)] dark:bg-[var(--color-surface-1-dark)] border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] pb-safe">
-        <div className="max-w-2xl mx-auto flex justify-around items-center h-16 px-1">
-          {NAV_ITEMS.map((item) => {
-            const active = currentNavId === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavSelect(item.id)}
-                aria-current={active ? 'page' : undefined}
-                className="flex flex-col items-center justify-center w-16 h-full gap-1 relative group"
-              >
-                {/* Active indicator pill */}
-                <span
-                  className={`absolute top-2 w-9 h-1 rounded-full transition-all ${
-                    active ? 'bg-[var(--color-primary)]' : 'bg-transparent'
-                  }`}
-                />
-                <item.icon
-                  size={22}
-                  strokeWidth={active ? 2.5 : 2}
-                  className={`mt-1 transition-colors ${
-                    active ? 'text-[var(--color-primary)]' : 'uv-text-muted group-hover:uv-text-secondary'
-                  }`}
-                />
-                <span
-                  className={`text-[10px] font-semibold transition-colors ${
-                    active ? 'text-[var(--color-primary)]' : 'uv-text-muted group-hover:uv-text-secondary'
-                  }`}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Barra inferior, solo en telefono (clase compacta). Va opaca: al 95 %
+          con desenfoque se adivinaba el texto de la lista que pasa por detras
+          ("-₡1.00" bajo "Inicio"). */}
+      {claseDeVentana === 'compacta' && (
+        <BarraInferior elementos={NAV_ITEMS} actual={currentNavId} onElegir={onNavSelect} ariaLabel={t('nav_main_aria')} />
+      )}
 
       {/* Overlay Views */}
       <Suspense fallback={<LoadingSkeleton />}>
@@ -716,7 +755,7 @@ const Layout = () => {
       {/* Oferta de huella al primer ingreso en el APK (una sola vez). */}
       <BottomSheet isOpen={showBioOffer} onClose={() => cerrarOfertaBio(false)} title="">
         <div className="text-center py-4 px-2">
-          <div className="w-20 h-20 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-4">
+          <div className="w-20 h-20 rounded-full bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex items-center justify-center mx-auto mb-4">
             <Icons.Fingerprint size={40} />
           </div>
           <h3 className="text-xl font-black uv-text-primary mb-2">{t('bio_offer_title')}</h3>
@@ -730,7 +769,7 @@ const Layout = () => {
             </button>
             <button
               onClick={() => cerrarOfertaBio(true)}
-              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+              className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
             >
               {t('bio_offer_accept')}
             </button>
@@ -760,7 +799,7 @@ const Layout = () => {
               </button>
               <button
                 onClick={compartirCampana}
-                className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
+                className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
               >
                 {campanaCopiada ? t('promo_copied') : t(campana.ctaKey)}
               </button>

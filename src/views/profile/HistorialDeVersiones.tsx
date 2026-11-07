@@ -35,7 +35,7 @@ export const HistorialDeVersiones: React.FC = () => {
                 v{version.version}
               </span>
               {index === 0 && (
-                <span className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-xs px-2 py-0.5 rounded-full">
+                <span className="bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white text-xs px-2 py-0.5 rounded-full">
                   {t('current')}
                 </span>
               )}
@@ -45,7 +45,7 @@ export const HistorialDeVersiones: React.FC = () => {
           <ul className="space-y-1.5">
             {cambiosEn(version, language, traducidas).map((change, i) => (
               <li key={i} className="flex items-start gap-2 text-sm uv-text-secondary">
-                <span className="text-[var(--color-primary)] mt-0.5">•</span>
+                <span className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] mt-0.5">•</span>
                 {change}
               </li>
             ))}

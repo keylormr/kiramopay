@@ -79,7 +79,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, busy, locale, t, onC
         <div
           className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
             session.current
-              ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'
+              ? 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)]'
               : 'bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] uv-text-muted'
           }`}
         >
@@ -118,7 +118,7 @@ const SessionCard: React.FC<SessionCardProps> = ({ session, busy, locale, t, onC
           onClick={() => onCerrar(session)}
           disabled={busy}
           aria-label={`${t('sessions_close')}: ${nombre}`}
-          className="mt-3 w-full flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] py-2.5 rounded-xl font-bold disabled:opacity-50"
+          className="mt-3 w-full flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] py-2.5 rounded-xl font-bold disabled:opacity-50"
         >
           <Icons.LogOut size={16} aria-hidden="true" />
           {t('sessions_close')}
@@ -244,7 +244,7 @@ export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
@@ -264,14 +264,14 @@ export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           </div>
         ) : errorCarga ? (
           <div className="flex flex-col items-center justify-center px-6 py-20 text-center">
-            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] mb-3" aria-hidden="true" />
+            <Icons.AlertCircle size={26} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] mb-3" aria-hidden="true" />
             <p className="font-semibold uv-text-primary" role="alert">
               {t(claveError(errorCarga, 'sessions_err_load'))}
             </p>
             <button
               type="button"
               onClick={() => void cargar()}
-              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
+              className="mt-4 px-5 py-2.5 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white text-sm font-bold"
             >
               {t('error_retry')}
             </button>
@@ -285,7 +285,7 @@ export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 <button
                   type="button"
                   onClick={abrirCerrarDemas}
-                  className="w-full flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] py-3 rounded-xl font-bold"
+                  className="w-full flex items-center justify-center gap-2 border border-[var(--color-danger)] text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] py-3 rounded-xl font-bold"
                 >
                   <Icons.LogOut size={16} aria-hidden="true" />
                   {t('sessions_close_others')}
@@ -374,13 +374,13 @@ export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
               </p>
             </div>
             {errorHoja && (
-              <p className="text-sm text-[var(--color-danger)]" role="alert">{t(claveError(errorHoja))}</p>
+              <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{t(claveError(errorHoja))}</p>
             )}
             <button
               type="button"
               onClick={() => void confirmarCerrar()}
               disabled={enCurso}
-              className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+              className="w-full bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
             >
               {enCurso ? t('loading') : t('sessions_close_confirm')}
             </button>
@@ -404,13 +404,13 @@ export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </p>
           </div>
           {errorHoja && (
-            <p className="text-sm text-[var(--color-danger)]" role="alert">{t(claveError(errorHoja))}</p>
+            <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{t(claveError(errorHoja))}</p>
           )}
           <button
             type="button"
             onClick={() => void confirmarCerrarDemas()}
             disabled={enCurso}
-            className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+            className="w-full bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
           >
             {enCurso ? t('loading') : t('sessions_close_others_confirm')}
           </button>

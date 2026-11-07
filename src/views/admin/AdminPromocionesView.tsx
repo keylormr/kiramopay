@@ -78,7 +78,7 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]" aria-label={t('back')}>
           <Icons.ChevronLeft size={20} />
@@ -93,10 +93,10 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
           {errorSaldo ? (
             // Un saldo que no se pudo leer no es un saldo en cero: se dice.
             <div className="mt-2">
-              <p className="text-sm text-[var(--color-danger)]" aria-live="polite">
+              <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-live="polite">
                 {errorSaldo === 'ERROR' ? t('admin_promo_failed') : errorSaldo}
               </p>
-              <button onClick={() => setRecarga((n) => n + 1)} className="mt-2 text-sm font-bold text-[var(--color-primary)]">
+              <button onClick={() => setRecarga((n) => n + 1)} className="mt-2 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
                 {t('error_retry')}
               </button>
             </div>
@@ -133,7 +133,7 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
           <button
             onClick={() => { setErrorFondeo(''); setHecho(''); setConfirmando(true); }}
             disabled={!puedeFondear}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
+            className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50"
           >
             {t('admin_promo_fund_btn')}
           </button>
@@ -150,7 +150,7 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
           <p className="text-sm rounded-xl px-3 py-2 bg-[var(--color-warning-soft)] text-[var(--color-warning)]">
             {t('admin_promo_warning')}
           </p>
-          {errorFondeo && <p className="text-sm text-[var(--color-danger)]" aria-live="polite">{errorFondeo}</p>}
+          {errorFondeo && <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-live="polite">{errorFondeo}</p>}
           <div className="flex gap-2">
             <button onClick={() => setConfirmando(false)} className="flex-1 uv-surface-2 uv-text-primary py-3 rounded-xl font-bold">
               {t('cancel')}
@@ -158,7 +158,7 @@ export const AdminPromocionesView: React.FC<{ onClose: () => void }> = ({ onClos
             <button
               onClick={fondear}
               disabled={guardando}
-              className="flex-1 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold disabled:opacity-50"
+              className="flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold disabled:opacity-50"
             >
               {guardando ? t('loading') : t('confirm')}
             </button>

@@ -301,7 +301,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         {/* De una cuenta cerrada sale de lo que se conserva por ley: uso limitado. */}
         {r.cuentaCerrada && <p className="text-xs uv-text-muted">{t('admin_resp_contact_closed_hint')}</p>}
         {c === 'falla' ? (
-          <p role="alert" className="text-xs text-[var(--color-danger)]">{t('admin_resp_contact_failed')}</p>
+          <p role="alert" className="text-xs text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('admin_resp_contact_failed')}</p>
         ) : (
           <p className="text-xs uv-text-muted">{t('admin_resp_contact_hint')}</p>
         )}
@@ -318,7 +318,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
         </p>
       )}
       {aviso?.tipo === 'error' && (
-        <p role="alert" className="text-[var(--color-danger)] text-sm">{aviso.texto}</p>
+        <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{aviso.texto}</p>
       )}
       {aviso?.tipo === 'bloqueada' && (
         <div role="alert" className="rounded-xl bg-[var(--color-danger-soft)] p-3 space-y-1.5">
@@ -342,15 +342,15 @@ export const SolicitudesDeEliminacion: React.FC = () => {
       )}
 
       {!cargando && falla && (
-        <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_del_load_failed')}</p>
+        <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{t('admin_del_load_failed')}</p>
       )}
 
       {!cargando && fallaRespuestas && (
-        <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_resp_load_failed')}</p>
+        <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{t('admin_resp_load_failed')}</p>
       )}
 
       {!cargando && fallaEnviadas && (
-        <p role="alert" className="text-[var(--color-danger)] text-sm">{t('admin_sent_load_failed')}</p>
+        <p role="alert" className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{t('admin_sent_load_failed')}</p>
       )}
 
       {!cargando && respuestas.length > 0 && (
@@ -388,7 +388,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                   type="button"
                   onClick={() => abrirEntrega(r)}
                   disabled={actuando !== null}
-                  className="w-full bg-[var(--color-primary)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
+                  className="w-full bg-[var(--color-primary-fill)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
                 >
                   {t('admin_resp_mark')}
                 </button>
@@ -442,7 +442,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                   type="button"
                   onClick={() => setConfirmando(s)}
                   disabled={actuando !== null}
-                  className="flex-1 bg-[var(--color-danger)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
+                  className="flex-1 bg-[var(--color-danger-fill)] text-white py-2.5 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all"
                 >
                   {t('admin_del_process')}
                 </button>
@@ -503,7 +503,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
               type="button"
               onClick={() => void procesar(confirmando)}
               disabled={actuando !== null}
-              className="w-full bg-[var(--color-danger)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-danger-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               {actuando ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -534,7 +534,7 @@ export const SolicitudesDeEliminacion: React.FC = () => {
               type="button"
               onClick={() => void rechazar(rechazando)}
               disabled={actuando !== null}
-              className="w-full bg-[var(--color-primary)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-primary-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               {actuando ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -583,11 +583,11 @@ export const SolicitudesDeEliminacion: React.FC = () => {
                 <span className="tabular-nums shrink-0">{nota.length}/{NOTA_MAX}</span>
               </div>
             </div>
-            {errorNota && <p className="text-sm text-[var(--color-danger)]" role="alert">{errorNota}</p>}
+            {errorNota && <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" role="alert">{errorNota}</p>}
             <button
               type="submit"
               disabled={actuando !== null || nota.trim() === ''}
-              className="w-full bg-[var(--color-primary)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              className="w-full bg-[var(--color-primary-fill)] text-white py-3.5 rounded-xl font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               {actuando ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

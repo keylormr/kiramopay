@@ -92,7 +92,7 @@ export const ConfirmSendSheet: React.FC<ConfirmSendSheetProps> = ({
           <button
             onClick={onConfirm}
             disabled={processing}
-            className="flex-[1.5] py-4 rounded-xl font-bold text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary uv-focus-ring"
+            className="flex-[1.5] py-4 rounded-xl font-bold text-white bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary uv-focus-ring"
           >
             {processing ? (
               <>

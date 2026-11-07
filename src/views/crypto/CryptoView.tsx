@@ -1122,7 +1122,7 @@ export const CryptoView: React.FC = () => {
               <p className="text-gray-500 mb-4">{t('no_crypto_yet')}</p>
               <button
                 onClick={() => { setSelectedAsset(state.crypto.assets[0]); setActiveSheet('buy'); }}
-                className="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-2 rounded-xl font-bold"
+                className="bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white px-6 py-2 rounded-xl font-bold"
               >
                 {t('buy_crypto')}
               </button>
@@ -1245,12 +1245,12 @@ export const CryptoView: React.FC = () => {
               <button
                 onClick={() => abrirAlertas()}
                 aria-label={alertasActivas !== null ? t('crypto_alerts_open_aria').replace('{n}', String(alertasActivas)) : t('crypto_alerts_title')}
-                className="flex items-center gap-1 text-sm font-bold text-[var(--color-primary)] min-h-11"
+                className="flex items-center gap-1 text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] min-h-11"
               >
                 <Icons.Bell size={14} aria-hidden="true" />
                 {t('crypto_alerts_open')}
                 {alertasActivas !== null && alertasActivas > 0 && (
-                  <span aria-hidden="true" className="ml-0.5 min-w-5 h-5 px-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs leading-5 text-center tabular-nums">
+                  <span aria-hidden="true" className="ml-0.5 min-w-5 h-5 px-1.5 rounded-full bg-[var(--color-primary-fill)] text-white text-xs leading-5 text-center tabular-nums">
                     {alertasActivas}
                   </span>
                 )}
@@ -1258,7 +1258,7 @@ export const CryptoView: React.FC = () => {
               <button
                 onClick={() => { setIsLoading(true); fetchPrices(); }}
                 aria-label={t('crypto_refresh_prices')}
-                className="flex items-center gap-1 text-sm text-[var(--color-primary)] min-h-11"
+                className="flex items-center gap-1 text-sm text-[var(--color-primary)] dark:text-[var(--color-primary-light)] min-h-11"
               >
                 <Icons.RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
                 {t('crypto_refresh')}
@@ -1352,7 +1352,7 @@ export const CryptoView: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {stakingError && (
-                <p className="text-[var(--color-danger)] text-sm text-center" aria-live="polite">
+                <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center" aria-live="polite">
                   {stakingError}
                 </p>
               )}
@@ -1656,7 +1656,7 @@ export const CryptoView: React.FC = () => {
             ))}
           </div>
 
-          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm mb-3 text-center" />
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-3 text-center" />
           {sinPrecio(selectedAsset) && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
           )}
@@ -1672,7 +1672,7 @@ export const CryptoView: React.FC = () => {
               "Buy" above spends the in-app fiat balance; this routes to a provider. */}
           <button
             onClick={() => setActiveSheet('onramp')}
-            className="w-full border-2 border-[var(--color-primary)] text-[var(--color-primary)] py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
+            className="w-full border-2 border-[var(--color-primary)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] py-3.5 rounded-xl font-bold flex items-center justify-center gap-2"
           >
             <Icons.Card size={18} /> {t('crypto_onramp_cta')}
           </button>
@@ -1683,7 +1683,7 @@ export const CryptoView: React.FC = () => {
       <BottomSheet isOpen={activeSheet === 'onramp'} onClose={() => setActiveSheet('none')} title={t('crypto_onramp_cta')}>
         <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
           <div className="w-16 h-16 rounded-2xl uv-surface-2 flex items-center justify-center">
-            <Icons.Card size={30} className="text-[var(--color-primary)]" />
+            <Icons.Card size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
           </div>
           <h3 className="text-lg font-bold uv-text-primary">{t('crypto_onramp_soon_title')}</h3>
           <p className="text-sm text-gray-500 max-w-[320px]">{t('crypto_onramp_soon_desc')}</p>
@@ -1747,7 +1747,7 @@ export const CryptoView: React.FC = () => {
                 <button
                   key={ccy}
                   onClick={() => setConvertTo(ccy)}
-                  className={`flex-1 py-2 rounded-lg font-bold ${convertTo === ccy ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
+                  className={`flex-1 py-2 rounded-lg font-bold ${convertTo === ccy ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}
                 >
                   {ccy}
                 </button>
@@ -1755,7 +1755,7 @@ export const CryptoView: React.FC = () => {
             </div>
           </div>
 
-          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm mb-3 text-center" />
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-3 text-center" />
           {sinPrecio(selectedAsset) && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
           )}
@@ -1844,7 +1844,7 @@ export const CryptoView: React.FC = () => {
             </div>
           )}
 
-          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm text-center" />
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center" />
 
           {sinPrecioConversion && assetsWithBalance.length > 0 && (
             <p className="text-sm text-center uv-text-muted">{t('crypto_action_needs_price')}</p>
@@ -1888,7 +1888,7 @@ export const CryptoView: React.FC = () => {
               </div>
               <button
                 onClick={() => { setSendQr(''); setSendPreviewRes(null); setSendQrError(''); }}
-                className="text-sm font-bold text-[var(--color-primary)] flex-shrink-0 uv-focus-ring rounded-lg px-2 py-1"
+                className="text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] flex-shrink-0 uv-focus-ring rounded-lg px-2 py-1"
               >
                 {t('crypto_send_rescan')}
               </button>
@@ -1936,16 +1936,16 @@ export const CryptoView: React.FC = () => {
                 monto que cabe justo deja de caber. Se dice aqui y no al
                 confirmar. */}
             {sendPreview && sendPreview.total > (selectedAsset?.balance ?? 0) && (
-              <p className="text-sm text-[var(--color-danger)] text-center">{t('crypto_err_insufficient_asset')}</p>
+              <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-center">{t('crypto_err_insufficient_asset')}</p>
             )}
 
             {sendPreviewError && (
-              <p className="text-sm text-[var(--color-danger)] text-center" aria-live="polite">
+              <p className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-center" aria-live="polite">
                 {mensajeDeErrorCripto({ code: sendPreviewError }, t)}
               </p>
             )}
 
-            <ErrorALaVista mensaje={tradeError} className="text-sm text-[var(--color-danger)] text-center" />
+            <ErrorALaVista mensaje={tradeError} className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-center" />
 
             <button
               onClick={() => setShowSendConfirm(true)}
@@ -1993,7 +1993,7 @@ export const CryptoView: React.FC = () => {
       <BottomSheet isOpen={activeSheet === 'receive'} onClose={() => setActiveSheet('none')} title={`${t('receive')} ${selectedAsset?.symbol || ''}`}>
         <div className="flex flex-col items-center text-center py-8 px-4 gap-4">
           <div className="w-16 h-16 rounded-2xl uv-surface-2 flex items-center justify-center">
-            <Icons.Clock size={30} className="text-[var(--color-primary)]" />
+            <Icons.Clock size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
           </div>
           <h3 className="text-lg font-bold uv-text-primary">{t('crypto_deposit_unavailable_title')}</h3>
           <p className="text-sm text-gray-500 max-w-[300px]">{t('crypto_deposit_unavailable_desc')}</p>
@@ -2024,7 +2024,7 @@ export const CryptoView: React.FC = () => {
             <p className="text-sm text-gray-500 mt-2">{t('available')}: {formatCrypto(selectedAsset?.balance || 0)} {selectedAsset?.symbol}</p>
           </div>
 
-          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] text-sm text-center" />
+          <ErrorALaVista mensaje={tradeError} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm text-center" />
 
           <button
             onClick={handleStake}

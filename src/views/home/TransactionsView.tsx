@@ -332,7 +332,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
     // Inicio todavia montado detras, esos primeros cientos de milisegundos se
     // veian los dos a la vez, transparentados uno sobre el otro. Al quedar
     // opaca desde el primer frame, no hay nada detras que se pueda transparentar.
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200 flex flex-col">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200 flex flex-col">
       {/* Header */}
       <div className="sticky top-0 z-10 uv-surface-1/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
@@ -345,7 +345,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
         <h1 className="text-lg font-bold uv-text-primary tracking-tight">{t('recent_transactions')}</h1>
         <button
           onClick={() => setShowExportSheet(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-primary-soft)] text-[var(--color-primary)] rounded-lg text-sm font-semibold hover:bg-[var(--color-primary)] hover:text-white transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] rounded-lg text-sm font-semibold hover:bg-[var(--color-primary)] hover:text-white transition-colors"
           aria-label={t('export_options')}
         >
           <Icons.Download size={16} />
@@ -379,12 +379,12 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
             <div className="uv-surface-1 rounded-2xl p-2.5 uv-shadow-soft overflow-hidden">
               <div className="flex items-center gap-1.5 mb-2">
                 <div className="w-6 h-6 rounded-full bg-[var(--color-danger-soft)] flex items-center justify-center">
-                  <Icons.ArrowUpRight size={12} className="text-[var(--color-danger)]" />
+                  <Icons.ArrowUpRight size={12} className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" />
                 </div>
-                <span className="text-[10px] font-bold text-[var(--color-danger)] uppercase tracking-wider">{t('expenses')}</span>
+                <span className="text-[10px] font-bold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] uppercase tracking-wider">{t('expenses')}</span>
               </div>
               <div
-                className={`font-extrabold text-[var(--color-danger)] whitespace-nowrap tabular-nums ${claseDeMonto(
+                className={`font-extrabold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] whitespace-nowrap tabular-nums ${claseDeMonto(
                   `-${formatCurrency(totalExpenses, resumenCcy)}`,
                 )}`}
               >
@@ -398,15 +398,15 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
                   net >= 0 ? 'bg-[var(--color-primary-soft)]' : 'bg-[var(--color-warning-soft)]'
                 }`}>
-                  <Icons.TrendingUp size={12} className={net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'} />
+                  <Icons.TrendingUp size={12} className={net >= 0 ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'text-[var(--color-warning)]'} />
                 </div>
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                  net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'
+                  net >= 0 ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'text-[var(--color-warning)]'
                 }`}>{t('net_balance')}</span>
               </div>
               <div
                 className={`font-extrabold whitespace-nowrap tabular-nums ${
-                  net >= 0 ? 'text-[var(--color-primary)]' : 'text-[var(--color-warning)]'
+                  net >= 0 ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'text-[var(--color-warning)]'
                 } ${claseDeMonto(`${net >= 0 ? '+' : ''}${formatCurrency(net, resumenCcy)}`)}`}
               >
                 {net >= 0 ? '+' : ''}{formatCurrency(net, resumenCcy)}
@@ -436,7 +436,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
             <button
               onClick={cargarMas}
               disabled={cargando}
-              className="mt-2 px-3 py-1.5 rounded-lg bg-[var(--color-primary-soft)] text-[var(--color-primary)] text-xs font-bold disabled:opacity-60"
+              className="mt-2 px-3 py-1.5 rounded-lg bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-xs font-bold disabled:opacity-60"
             >
               {cargando ? t('loading') : t('tx_load_more')}
             </button>
@@ -478,7 +478,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                 onClick={() => setSelectedCategory(null)}
                 className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                   selectedCategory === null
-                    ? 'bg-[var(--color-primary)] text-white uv-shadow-primary'
+                    ? 'bg-[var(--color-primary-fill)] text-white uv-shadow-primary'
                     : 'uv-surface-1 uv-text-secondary uv-shadow-soft'
                 }`}
               >
@@ -494,7 +494,7 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
                     aria-pressed={isActive}
                     className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                       isActive
-                        ? 'bg-[var(--color-primary)] text-white uv-shadow-primary'
+                        ? 'bg-[var(--color-primary-fill)] text-white uv-shadow-primary'
                         : `${style.bg} ${style.text}`
                     }`}
                   >

@@ -364,7 +364,7 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
                   onClick={() => setCedula({ ...cedula, type: type.id })}
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
                     cedula.type === type.id
-                      ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white'
+                      ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
                       : 'bg-[var(--color-surface-2-dark)] text-[var(--color-text-muted-dark)]'
                   }`}
                 >
@@ -496,14 +496,14 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
             {/* La regla se dice ANTES de fallar, no despues: el formato lo
                 comparte el servidor y un rechazo al final del asistente seria
                 el peor momento para enterarse. */}
-            <p className={`text-sm mb-2 ${limpio && !valido ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted-dark)]'}`}>
+            <p className={`text-sm mb-2 ${limpio && !valido ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'text-[var(--color-text-muted-dark)]'}`}>
               {t('reg_usuario_regla')}
             </p>
             {/* El rebote desde el ultimo paso (nombre ya tomado, o rechazado
                 por el servidor) devuelve a esta pantalla. Sin esto, el usuario
                 volvia aqui sin ninguna explicacion de por que. */}
             {error && (
-              <p className="text-[var(--color-danger)] text-sm mb-6" aria-live="polite">
+              <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mb-6" aria-live="polite">
                 {error}
               </p>
             )}
@@ -631,10 +631,10 @@ export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, 
               </div>
 
               {confirmPassword && password !== confirmPassword && (
-                <p className="text-[var(--color-danger)] text-sm">{t('passwords_dont_match')}</p>
+                <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm">{t('passwords_dont_match')}</p>
               )}
               {error && (
-                <p className="text-[var(--color-danger)] text-sm flex items-center gap-1" aria-live="polite">
+                <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm flex items-center gap-1" aria-live="polite">
                   <Icons.AlertCircle size={14} />
                   {error}
                 </p>

@@ -134,12 +134,12 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
 
       {falloLista ? (
         <div className="uv-surface-1 rounded-2xl p-8 text-center uv-shadow-soft">
-          <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] opacity-70 mb-3" />
+          <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] opacity-70 mb-3" />
           <p className="uv-text-muted text-sm mb-4">{t('business_closed_load_failed')}</p>
           <button
             type="button"
             onClick={reintentar}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[var(--color-primary-hover)] active:scale-[0.98] uv-focus-ring"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-primary-fill)] px-5 py-2.5 text-sm font-bold text-white transition-all hover:bg-[var(--color-primary-hover)] active:scale-[0.98] uv-focus-ring"
           >
             <Icons.RefreshCw size={16} aria-hidden="true" />
             {t('error_retry')}
@@ -231,7 +231,7 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
           <div className="pb-24 pt-4 px-4 space-y-4">
             {falloVentas ? (
               <div className="uv-surface-1 rounded-2xl p-8 text-center uv-shadow-soft">
-                <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] opacity-70 mb-3" aria-hidden="true" />
+                <Icons.AlertCircle size={40} className="mx-auto text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] opacity-70 mb-3" aria-hidden="true" />
                 <p className="uv-text-muted text-sm">{t('business_sales_load_failed')}</p>
               </div>
             ) : ventas.length === 0 ? (
@@ -247,7 +247,7 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
             {hayMas && (
               <div className="space-y-2">
                 {falloMas && (
-                  <p role="alert" className="text-sm text-center text-[var(--color-danger)]">{t('business_closed_more_failed')}</p>
+                  <p role="alert" className="text-sm text-center text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('business_closed_more_failed')}</p>
                 )}
                 <Button variant="secondary" size="md" fullWidth loading={cargandoMas} onClick={pedirMas}>
                   {t('business_closed_more')}
@@ -261,7 +261,7 @@ export const ClosedMerchantsView: React.FC<Props> = ({ onClose }) => {
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           type="button"

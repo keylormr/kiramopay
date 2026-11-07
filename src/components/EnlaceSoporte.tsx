@@ -18,8 +18,8 @@ export const EnlaceSoporte: React.FC<EnlaceSoporteProps> = ({ destacado = false,
     href={ENLACE_SOPORTE}
     className={`flex min-w-0 items-center justify-center gap-2 rounded-xl px-4 py-3.5 font-bold active:scale-[0.98] transition-all uv-focus-ring ${
       destacado
-        ? 'bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white uv-shadow-primary'
-        : 'uv-surface-2 text-[var(--color-primary)]'
+        ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white uv-shadow-primary'
+        : 'uv-surface-2 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]'
     } ${className}`}
   >
     <Icons.Mail size={18} className="shrink-0" aria-hidden="true" />

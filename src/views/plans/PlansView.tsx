@@ -83,7 +83,7 @@ export const PlansView: React.FC<PlansViewProps> = ({ onClose }) => {
   });
 
   return (
-    <div className="fixed inset-0 z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}
@@ -115,7 +115,7 @@ export const PlansView: React.FC<PlansViewProps> = ({ onClose }) => {
                   onClick={() => irA(id)}
                   className="flex items-center gap-2 rounded-full border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-1 px-4 h-10 text-sm font-bold uv-text-primary hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)] transition-colors uv-focus-ring"
                 >
-                  <Icono size={16} aria-hidden="true" className="text-[var(--color-primary)]" />
+                  <Icono size={16} aria-hidden="true" className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
                   {etiqueta}
                 </button>
               ))}
@@ -225,7 +225,7 @@ const PlanesPersonales: React.FC<PlanesPersonalesProps> = ({ tarifas, planActual
                   <span className="block text-[11px] uv-text-muted">{t('plans_per_month')}</span>
                   <span className="mt-2 flex justify-center min-h-[22px]">
                     {p === planActual ? (
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-[11px] font-bold text-white">
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--color-primary-fill)] px-2 py-0.5 text-[11px] font-bold text-white">
                         <Icons.Check size={12} aria-hidden="true" />
                         {t('plans_badge_current')}
                       </span>
@@ -284,7 +284,7 @@ const PlanesPersonales: React.FC<PlanesPersonalesProps> = ({ tarifas, planActual
           <ul className="mt-3 grid gap-2.5 sm:grid-cols-2">
             {IGUAL_EN_TODOS.map((clave) => (
               <li key={clave} className="flex items-start gap-3">
-                <Icons.Check size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+                <Icons.Check size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
                 <span className="text-sm font-medium leading-relaxed uv-text-primary">{t(clave)}</span>
               </li>
             ))}
@@ -351,7 +351,7 @@ const PlanesComercio: React.FC<{ tarifas: Tarifas; interesAnalitica: EstadoInter
         {tarifas.analitica && (
           <div className="border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5">
             <div className="flex flex-wrap items-center gap-2">
-              <Icons.TrendingUp size={20} className="text-[var(--color-primary)]" aria-hidden="true" />
+              <Icons.TrendingUp size={20} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
               <h3 className="text-lg font-black uv-text-primary">{t('plans_analytics_name')}</h3>
               <span className="rounded-full bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-2 py-0.5 text-[11px] font-bold uv-text-secondary">
                 {t('plans_analytics_tag')}
@@ -368,7 +368,7 @@ const PlanesComercio: React.FC<{ tarifas: Tarifas; interesAnalitica: EstadoInter
             <ul className="mt-3 space-y-2.5">
               {(['plans_analytics_f1', 'plans_analytics_f2'] as const).map((clave) => (
                 <li key={clave} className="flex items-start gap-3">
-                  <Icons.Check size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+                  <Icons.Check size={18} className="mt-0.5 shrink-0 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
                   <span className="text-sm font-medium leading-relaxed uv-text-primary">{t(clave)}</span>
                 </li>
               ))}
@@ -407,14 +407,14 @@ const BotonInteres: React.FC<{ estado: EstadoInteres; encabezado?: string }> = (
         className={`flex w-full items-center justify-center gap-2 rounded-xl min-h-12 px-4 py-3 text-sm font-bold transition-colors uv-focus-ring disabled:cursor-default ${
           estado.registrado
             ? 'uv-chip-success'
-            : 'border border-[var(--color-primary)] text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
+            : 'border border-[var(--color-primary)] text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:bg-[var(--color-primary-soft)] disabled:opacity-70'
         }`}
       >
         {estado.registrado ? <Icons.Check size={17} aria-hidden="true" /> : <Icons.Bell size={16} aria-hidden="true" />}
         {etiqueta}
       </button>
       {estado.error && (
-        <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)]">
+        <p role="alert" className="mt-2 text-xs font-semibold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
           {t('plans_cta_error')}
         </p>
       )}

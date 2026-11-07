@@ -112,7 +112,7 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
                 <button
                   onClick={() => void toggle(l)}
                   disabled={busyId !== null}
-                  className={`text-[11px] font-bold shrink-0 disabled:opacity-50 ${l.active ? 'text-[var(--color-danger)]' : 'text-[var(--color-primary)]'}`}
+                  className={`text-[11px] font-bold shrink-0 disabled:opacity-50 ${l.active ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]'}`}
                 >
                   {busyId === l.id ? t('processing') : l.active ? t('business_location_deactivate') : t('business_location_activate')}
                 </button>
@@ -121,7 +121,7 @@ export const BusinessLocationsSheet: React.FC<Props> = ({ isOpen, onClose, merch
           </div>
         )}
 
-        {error && <p className="text-[var(--color-danger)] text-sm" aria-live="polite">{error}</p>}
+        {error && <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm" aria-live="polite">{error}</p>}
 
         {!showAdd ? (
           <Button onClick={() => setShowAdd(true)} fullWidth leftIcon={<Icons.Plus size={18} />}>

@@ -75,7 +75,7 @@ export const RespuestaEscrita: React.FC<RespuestaEscritaProps> = ({ seEliminaEl,
       <button
         type="button"
         onClick={() => void copiar()}
-        className="mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--color-primary)] hover:bg-white/10 transition-colors"
+        className="mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:bg-white/10 transition-colors"
       >
         {copiada ? <Icons.Check size={16} aria-hidden="true" /> : <Icons.Copy size={16} aria-hidden="true" />}
         {copiada ? t('resp_copied') : t('resp_copy')}

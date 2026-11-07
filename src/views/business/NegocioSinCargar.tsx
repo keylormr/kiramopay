@@ -32,7 +32,7 @@ export const NegocioSinCargar: React.FC<NegocioSinCargarProps> = ({ reintentando
         <button
           type="button"
           onClick={onReintentar}
-          className="flex items-center justify-center gap-2 rounded-xl bg-[var(--color-primary)] py-3.5 font-bold text-white transition-all hover:bg-[var(--color-primary-hover)] active:scale-[0.98] uv-focus-ring"
+          className="flex items-center justify-center gap-2 rounded-xl bg-[var(--color-primary-fill)] py-3.5 font-bold text-white transition-all hover:bg-[var(--color-primary-hover)] active:scale-[0.98] uv-focus-ring"
         >
           <Icons.RefreshCw size={18} aria-hidden="true" />
           {t('error_retry')}

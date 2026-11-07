@@ -77,7 +77,7 @@ export function BotonCompartirQr({ contenedor, titulo, subtitulo, pie, nombreArc
         {aviso && !aviso.error ? aviso.texto : ''}
       </p>
       {aviso?.error && (
-        <p role="alert" className="text-sm text-[var(--color-danger)] text-center mt-2">
+        <p role="alert" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-center mt-2">
           {aviso.texto}
         </p>
       )}

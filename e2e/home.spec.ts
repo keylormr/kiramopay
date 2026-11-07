@@ -51,11 +51,15 @@ test.describe('Dark Mode', () => {
       // Look for dark mode toggle
       const darkModeToggle = page.locator('text=/oscuro|dark|tema|theme/i').first();
       if (await darkModeToggle.isVisible({ timeout: 3000 })) {
-        await darkModeToggle.click();
-        // HTML element should have dark class
         const html = page.locator('html');
-        const classList = await html.getAttribute('class');
-        expect(classList).toContain('dark');
+        const conClaseDark = /(^|\s)dark(\s|$)/;
+        // Desde el rediseno de 2026-11 la app arranca en oscuro: el primer
+        // toque pasa a claro y el segundo vuelve a oscuro.
+        await expect(html).toHaveClass(conClaseDark);
+        await darkModeToggle.click();
+        await expect(html).not.toHaveClass(conClaseDark);
+        await darkModeToggle.click();
+        await expect(html).toHaveClass(conClaseDark);
       }
     }
   });

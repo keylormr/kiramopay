@@ -339,7 +339,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       />
 
       {/* Brand mark */}
-      <header className="relative px-6 pt-12 pb-6 flex items-center justify-between gap-3">
+      {/* En tablet y escritorio, una columna centrada: antes los campos median todo el ancho. */}
+      <header className="relative w-full max-w-md mx-auto px-6 pt-12 pb-6 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-12 h-12 uv-gradient-brand rounded-2xl flex items-center justify-center uv-shadow-primary shrink-0">
             <MarcaKiramo size={30} />
@@ -357,7 +358,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
           role="alert"
           className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 p-4 animate-slide-up"
         >
-          <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)]" />
+          <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" />
           <div className="min-w-0 flex-1">
             <p className="font-bold text-white">{t('account_blocked_title')}</p>
             <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
@@ -383,7 +384,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             role="status"
             className="relative mx-6 mb-6 flex items-start gap-3 rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-4 animate-slide-up"
           >
-            <Icons.Info size={22} className="mt-0.5 shrink-0 text-[var(--color-primary)]" aria-hidden="true" />
+            <Icons.Info size={22} className="mt-0.5 shrink-0 text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="font-bold text-white">{t('account_deleted_title')}</p>
               <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
@@ -450,7 +451,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       )}
 
       {/* Main content */}
-      <main className="relative flex-1 px-6">
+      <main className="relative w-full max-w-md mx-auto flex-1 px-6">
         {!showPasswordStage ? (
           <div className="animate-slide-up">
             <h1 className="text-[2rem] leading-tight font-black text-white mb-2 tracking-tight">
@@ -581,7 +582,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 </p>
               )}
               {error && (
-                <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
+                <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mt-2 flex items-center gap-1 animate-shake">
                   <Icons.AlertCircle size={14} />
                   <TextoConCorreo texto={error} />
                 </p>
@@ -680,7 +681,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   className="rounded-2xl border border-[var(--color-border-dark)] bg-[var(--color-surface-2-dark)] p-5 animate-slide-up"
                 >
                   <div className="flex items-start gap-3">
-                    <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)]" aria-hidden="true" />
+                    <Icons.AlertTriangle size={22} className="mt-0.5 shrink-0 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-hidden="true" />
                     <div className="min-w-0">
                       <p className="font-bold text-white">{t('login_pending_title')}</p>
                       <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary-dark)]">
@@ -762,7 +763,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   </button>
                 </div>
                 {error && (
-                  <p className="text-[var(--color-danger)] text-sm mt-2 flex items-center gap-1 animate-shake">
+                  <p className="text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] text-sm mt-2 flex items-center gap-1 animate-shake">
                     <Icons.AlertCircle size={14} />
                     <TextoConCorreo texto={error} />
                   </p>
@@ -809,7 +810,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
       </main>
 
       {/* Footer */}
-      <footer className="relative px-6 pb-8 pt-6">
+      <footer className="relative w-full max-w-md mx-auto px-6 pb-8 pt-6">
         {/* En la primera etapa ya esta el boton "Crear cuenta" bajo Continuar:
             con este enlace la pantalla lo mostraba dos veces. */}
         {showPasswordStage && (

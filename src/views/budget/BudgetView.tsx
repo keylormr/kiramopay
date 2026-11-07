@@ -179,7 +179,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
     formatMoney(monto, ccy as CurrencyCode, { decimals: ccy === 'USD' ? 2 : undefined });
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 flex h-14 flex-shrink-0 items-center justify-between border-b border-[var(--color-border)] bg-white/80 px-4 backdrop-blur-md dark:border-[var(--color-border-dark)] dark:bg-surface-dark/80">
         <button
           type="button"
@@ -195,7 +195,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
           onClick={() => setFormulario({ modo: 'nuevo' })}
           disabled={cargando || errorCarga}
           aria-label={t('budget_new')}
-          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-[var(--color-primary)] uv-focus-ring hover:bg-[var(--color-surface-muted)] disabled:opacity-40 dark:hover:bg-[var(--color-surface-muted-dark)]"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-[var(--color-primary)] dark:text-[var(--color-primary-light)] uv-focus-ring hover:bg-[var(--color-surface-muted)] disabled:opacity-40 dark:hover:bg-[var(--color-surface-muted-dark)]"
         >
           <Icons.Plus size={22} />
         </button>
@@ -208,7 +208,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
           </div>
         ) : errorCarga ? (
           <div className="flex flex-col items-center py-20 text-center">
-            <Icons.AlertCircle size={26} className="mb-3 text-[var(--color-danger)]" aria-hidden="true" />
+            <Icons.AlertCircle size={26} className="mb-3 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]" aria-hidden="true" />
             <p role="alert" className="font-semibold uv-text-primary">{t('budget_err_load')}</p>
             <Button className="mt-4" onClick={() => void cargar()}>
               {t('error_retry')}
@@ -217,7 +217,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
         ) : budgets.length === 0 ? (
           <div className="mx-auto flex max-w-sm flex-col items-center py-16 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-primary-soft)]">
-              <PiggyBank size={30} className="text-[var(--color-primary)]" aria-hidden />
+              <PiggyBank size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" aria-hidden />
             </div>
             <h2 className="text-lg font-bold uv-text-primary">{t('budget_empty_title')}</h2>
             <p className="mt-1.5 text-sm leading-relaxed uv-text-secondary">{t('budget_empty_desc')}</p>
@@ -240,7 +240,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                         <p className="text-3xl font-black tabular-nums tracking-tight uv-text-primary">{dinero(gastado, ccy)}</p>
                         <p
                           className={`text-sm font-bold tabular-nums ${
-                            estado === 'pasado' ? 'text-[var(--color-danger)]' : 'uv-text-secondary'
+                            estado === 'pasado' ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-secondary'
                           }`}
                         >
                           {pct}%
@@ -286,7 +286,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                     <p
                       className={`mt-2 text-sm font-semibold ${
                         estado === 'pasado'
-                          ? 'text-[var(--color-danger)]'
+                          ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]'
                           : estado === 'cerca'
                             ? 'text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]'
                             : 'text-[var(--color-success-strong)] dark:text-[var(--color-success-strong-dark)]'
@@ -298,7 +298,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                       <button
                         type="button"
                         onClick={() => setAAnotar(b)}
-                        className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary-soft)] text-sm font-bold text-[var(--color-primary)] uv-focus-ring active:scale-[0.98]"
+                        className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[var(--color-primary-soft)] text-sm font-bold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] uv-focus-ring active:scale-[0.98]"
                       >
                         <Icons.Plus size={16} aria-hidden="true" />
                         {t('budget_add_expense')}
@@ -315,7 +315,7 @@ export const BudgetView: React.FC<BudgetViewProps> = ({ onClose }) => {
                         type="button"
                         onClick={() => setAEliminar(b)}
                         aria-label={`${t('delete')}: ${b.label}`}
-                        className="flex h-11 w-11 items-center justify-center rounded-xl uv-surface-2 text-[var(--color-danger)] uv-focus-ring"
+                        className="flex h-11 w-11 items-center justify-center rounded-xl uv-surface-2 text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)] uv-focus-ring"
                       >
                         <Trash2 size={17} aria-hidden />
                       </button>
@@ -528,7 +528,7 @@ const HojaFormulario: React.FC<HojaFormularioProps> = ({ formulario, onClose, on
                   aria-pressed={moneda === ccy}
                   className={`h-11 rounded-xl text-sm font-bold uv-focus-ring transition-colors ${
                     moneda === ccy
-                      ? 'bg-[var(--color-primary)] text-white'
+                      ? 'bg-[var(--color-primary-fill)] text-white'
                       : 'bg-[var(--color-surface-muted)] uv-text-secondary dark:bg-[var(--color-surface-muted-dark)]'
                   }`}
                 >
@@ -574,7 +574,7 @@ const HojaFormulario: React.FC<HojaFormularioProps> = ({ formulario, onClose, on
           )}
         </div>
         {avisoTope && (
-          <p id="presupuesto-tope-aviso" className="-mt-3 text-xs font-medium text-[var(--color-danger)]">
+          <p id="presupuesto-tope-aviso" className="-mt-3 text-xs font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
             {t('budget_err_amount')}
           </p>
         )}
@@ -595,7 +595,7 @@ const HojaFormulario: React.FC<HojaFormularioProps> = ({ formulario, onClose, on
                     elegido ? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)]' : 'border-transparent uv-surface-2'
                   }`}
                 >
-                  <Icono size={20} className={elegido ? 'text-[var(--color-primary)]' : 'uv-text-secondary'} aria-hidden />
+                  <Icono size={20} className={elegido ? 'text-[var(--color-primary)] dark:text-[var(--color-primary-light)]' : 'uv-text-secondary'} aria-hidden />
                   <span className="w-full truncate text-center text-[11px] font-medium uv-text-secondary">{t(clave)}</span>
                 </button>
               );
@@ -626,7 +626,7 @@ const HojaFormulario: React.FC<HojaFormularioProps> = ({ formulario, onClose, on
         </fieldset>
 
         {error && (
-          <p role="alert" className="text-sm font-medium text-[var(--color-danger)]">
+          <p role="alert" className="text-sm font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
             {error}
           </p>
         )}
@@ -718,7 +718,7 @@ const HojaAnotar: React.FC<HojaAnotarProps> = ({ presupuesto, onClose, onAnotado
             {rellenar(t('budget_add_expense_hint'), { name: presupuesto.label })}
           </p>
           {error && (
-            <p role="alert" className="text-center text-sm font-medium text-[var(--color-danger)]">
+            <p role="alert" className="text-center text-sm font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
               {error}
             </p>
           )}
@@ -775,7 +775,7 @@ const HojaConfirmar: React.FC<HojaConfirmarProps> = ({ abierta, titulo, texto, c
       <div className="space-y-5 pb-2">
         <p className="text-[15px] leading-relaxed uv-text-secondary">{texto}</p>
         {error && (
-          <p role="alert" className="text-sm font-medium text-[var(--color-danger)]">
+          <p role="alert" className="text-sm font-medium text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">
             {error}
           </p>
         )}
