@@ -535,4 +535,23 @@ describe('MenuModal (mediana)', () => {
     capa.remove();
     boton.remove();
   });
+
+  it('cerrado encima de una pantalla que ya estaba abierta, el foco vuelve al boton del riel', async () => {
+    // El boton vive en el riel, a la vista con cualquier pantalla abierta.
+    const capa = document.createElement('div');
+    capa.className = 'kp-capa';
+    const volver = document.createElement('button');
+    capa.appendChild(volver);
+    document.body.appendChild(capa);
+    const boton = document.createElement('button');
+    document.body.appendChild(boton);
+    const ref = createRef<HTMLElement>() as { current: HTMLElement | null };
+    ref.current = boton;
+    const { rerender } = render(<MenuModal {...props({ devolverFocoA: ref })} />);
+    await esperar();
+    rerender(<MenuModal {...props({ abierto: false, devolverFocoA: ref })} />);
+    expect(document.activeElement).toBe(boton);
+    capa.remove();
+    boton.remove();
+  });
 });

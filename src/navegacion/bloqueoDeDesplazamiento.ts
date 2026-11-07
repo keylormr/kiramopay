@@ -26,7 +26,9 @@ export function bloquearDesplazamiento(): () => void {
   return () => {
     if (soltado) return;
     soltado = true;
-    pedidos--;
+    // Nunca por debajo de cero: una recarga en caliente del modulo en
+    // desarrollo reinicia la cuenta con hojas todavia abiertas.
+    pedidos = Math.max(0, pedidos - 1);
     if (pedidos === 0) document.body.style.overflow = anterior;
   };
 }

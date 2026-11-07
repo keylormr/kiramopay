@@ -298,12 +298,19 @@ input[inputmode='numeric'] {
    que cada vista lo pida, y se suelta solo cuando la capa se desmonta. Las
    pantallas completas tapan la barra superior y el contenido, asi que el
    ancho que deja la barra al irse no se ve moverse.
-   El contenedor que se desplaza dentro de la capa no le pasa el gesto a la
-   raiz al llegar al final (el tirar para recargar del navegador movil). */
+   La raiz guarda siempre el hueco de su barra: al bloquearla, la barra se va
+   pero el ancho no cambia, y la pestana de abajo no salta de lado mientras la
+   capa entra. Con barras superpuestas (telefonos, macOS) el hueco mide cero.
+   El contenedor principal de la capa no le pasa el gesto a la raiz al llegar
+   al final (el tirar para recargar del navegador movil); las listas de
+   adentro si se lo pasan a el. */
+html {
+  scrollbar-gutter: stable;
+}
 html:has(.kp-capa) {
   overflow: hidden;
 }
-.kp-capa .overflow-y-auto {
+.kp-capa > .overflow-y-auto {
   overscroll-behavior-y: contain;
 }
 

@@ -622,6 +622,8 @@ export const MenuModal: React.FC<PropsModal> = ({ abierto, onCerrar, elementos, 
     const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const boton = devolverFocoA?.current ?? null;
     const panel = panelRef.current;
+    // La pantalla completa que ya estaba abierta antes del cajon.
+    const capaAntes = document.querySelector<HTMLElement>('.kp-capa');
     const temporizador = setTimeout(() => {
       if (!panel || panel.contains(document.activeElement)) return;
       const destino = panel.querySelector<HTMLElement>('[aria-current="page"]') ?? enfocablesDentro(panel)[0] ?? panel;
@@ -632,10 +634,12 @@ export const MenuModal: React.FC<PropsModal> = ({ abierto, onCerrar, elementos, 
       const activo = document.activeElement;
       const focoPerdido = !activo || activo === document.body || (panel !== null && panel.contains(activo));
       if (!focoPerdido) return;
-      // Si el destino abrio una pantalla completa, el boton del menu quedo
-      // debajo de ella: el foco entra a la pantalla.
+      // Si el destino abrio una pantalla completa, el foco entra a ella: es lo
+      // que la persona eligio. Si la pantalla ya estaba abierta (cerrar el
+      // cajon con Escape o la X encima de Tarjetas), vuelve al boton del riel,
+      // que sigue a la vista.
       const capa = document.querySelector<HTMLElement>('.kp-capa');
-      const enCapa = capa ? enfocablesDentro(capa)[0] : undefined;
+      const enCapa = capa && capa !== capaAntes ? enfocablesDentro(capa)[0] : undefined;
       if (enCapa) {
         enCapa.focus({ preventScroll: true });
         return;

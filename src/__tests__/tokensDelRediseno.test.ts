@@ -223,7 +223,13 @@ describe('una sola barra de desplazamiento con una pantalla completa abierta', (
   });
 
   it('el contenedor de la capa no le pasa el gesto a la raiz al llegar al final', () => {
-    expect(css).toMatch(/\.kp-capa \.overflow-y-auto\s*{\s*overscroll-behavior-y: contain;\s*}/);
+    // Solo el principal: las listas de adentro si encadenan con el.
+    expect(css).toMatch(/\.kp-capa > \.overflow-y-auto\s*{\s*overscroll-behavior-y: contain;\s*}/);
+    expect(css).not.toMatch(/\.kp-capa \.overflow-y-auto\s*{/);
+  });
+
+  it('al bloquear la raiz el ancho no cambia: el hueco de la barra se guarda', () => {
+    expect(css).toMatch(/html\s*{\s*scrollbar-gutter: stable;\s*}/);
   });
 
   it('la pista no usa translate de -50 %: la animacion de entrada lo pisaba', () => {
