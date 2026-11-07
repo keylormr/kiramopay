@@ -1,4 +1,54 @@
 {
+  "2.15.0": {
+    "en": [
+      "Redesign, phase 6: the app starts in the dark style",
+      "When you open KiramoPay you see the brand's K on the app's dark background, with no white flash before the first screen",
+      "The icon has the new dark background, the same one the brand has inside the app",
+      "On Android 13 or later, if you use themed icons, the KiramoPay icon also takes on your phone's colors",
+      "The status bar and the navigation bar match the theme you choose in the app, even if your phone uses a different one",
+      "If you install KiramoPay from the browser, the icon and the start screen are dark too"
+    ],
+    "fr": [
+      "Refonte, phase 6 : l’application démarre dans le style sombre",
+      "À l’ouverture de KiramoPay, vous voyez le K de la marque sur le fond sombre de l’application, sans flash blanc avant le premier écran",
+      "L’icône a le nouveau fond sombre, le même que celui de la marque dans l’application",
+      "Sur Android 13 ou version ultérieure, si vous utilisez les icônes à thème, l’icône de KiramoPay prend aussi les couleurs de votre téléphone",
+      "La barre d’état et la barre de navigation suivent le thème que vous choisissez dans l’application, même si votre téléphone en utilise un autre",
+      "Si vous installez KiramoPay depuis le navigateur, l’icône et l’écran de démarrage sont aussi sombres"
+    ],
+    "pt": [
+      "Redesenho, fase 6: o aplicativo abre no estilo escuro",
+      "Ao abrir o KiramoPay, você vê o K da marca sobre o fundo escuro do aplicativo, sem um clarão branco antes da primeira tela",
+      "O ícone tem o novo fundo escuro, o mesmo da marca dentro do aplicativo",
+      "No Android 13 ou posterior, se você usa ícones com tema, o ícone do KiramoPay também assume as cores do seu celular",
+      "A barra de status e a barra de navegação acompanham o tema que você escolher no aplicativo, mesmo que o celular use outro",
+      "Se você instalar o KiramoPay pelo navegador, o ícone e a tela de abertura também ficam escuros"
+    ],
+    "zh-cn": [
+      "重新设计，第 6 阶段：应用以深色风格启动",
+      "打开 KiramoPay 时，您会在应用的深色背景上看到品牌的 K 标志，进入第一个页面前不再闪白",
+      "应用图标换上新的深色背景，与应用内品牌标志的底色相同",
+      "在 Android 13 或更高版本上，如果您使用主题图标，KiramoPay 的图标也会采用手机的颜色",
+      "状态栏和导航栏会跟随您在应用中选择的主题，即使手机使用的是另一种主题",
+      "如果您从浏览器安装 KiramoPay，图标和启动画面也是深色的"
+    ],
+    "ja": [
+      "リデザイン第6弾：アプリがダークスタイルで起動するように",
+      "KiramoPayを開くと、アプリのダークな背景にブランドのKが表示され、最初の画面の前に白く光ることはありません",
+      "アイコンが新しいダークな背景になりました。アプリ内のブランドマークと同じ背景です",
+      "Android 13以降でテーマアイコンを使っている場合、KiramoPayのアイコンもスマートフォンの色に合わせて変わります",
+      "ステータスバーとナビゲーションバーは、スマートフォンの設定とは関係なく、アプリで選んだテーマに合わせて表示されます",
+      "ブラウザからKiramoPayをインストールした場合も、アイコンと起動画面はダークになります"
+    ],
+    "hi": [
+      "नया डिज़ाइन, चरण 6: ऐप अब गहरे रंग की शैली में खुलता है",
+      "KiramoPay खोलने पर आपको ऐप की गहरी पृष्ठभूमि पर ब्रांड का K दिखता है, और पहली स्क्रीन से पहले कोई सफ़ेद चमक नहीं आती",
+      "आइकन को नई गहरी पृष्ठभूमि मिली है, वही जो ऐप के अंदर ब्रांड की है",
+      "Android 13 या उसके बाद के वर्शन में, अगर आप थीम वाले आइकन इस्तेमाल करते हैं, तो KiramoPay का आइकन भी आपके फ़ोन के रंग ले लेता है",
+      "स्टेटस बार और नेविगेशन बार ऐप में आपकी चुनी हुई थीम से मेल खाते हैं, भले ही आपका फ़ोन कोई दूसरी थीम इस्तेमाल करे",
+      "अगर आप ब्राउज़र से KiramoPay इंस्टॉल करते हैं, तो आइकन और शुरुआती स्क्रीन भी गहरे रंग की होती हैं"
+    ]
+  },
   "2.14.0": {
     "en": [
       "Redesign, phase 5: the rest of the app gets the new style",

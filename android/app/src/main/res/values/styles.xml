@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
@@ -9,14 +9,39 @@
         <item name="colorAccent">@color/colorAccent</item>
     </style>
 
+    <!-- El tema de la actividad despues del arranque (BridgeActivity lo pone en
+         onCreate). La ventana va en el fondo oscuro de la app aunque el
+         telefono este en claro: si no, con un WebView anterior al 140 (Capacitor
+         lo rellena y deja ver la ventana detras de las barras) se veria una
+         franja blanca. SystemBars usa este mismo windowBackground como fondo de
+         la decoracion. Las barras son transparentes, como desde Android 15 y
+         como deja la de estado el plugin StatusBar: detras se ve la pagina o
+         esta ventana, nunca un color propio que no coincida con lo que hay
+         debajo. La tinta de los iconos la ajusta la app segun lo que se ve
+         (src/hooks/useBarrasDelSistema.ts). -->
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/kiramo_fondo</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 
-
+    <!-- Arranque. @capacitor/splash-screen usa la API de splash de Android 12
+         con la compat de androidx en todas las versiones (desde Android 7), asi
+         que lo que se ve sale de estos atributos y no de drawable/splash.png:
+         sin ellos la compat pone ?android:colorBackground (blanco con el
+         telefono en claro) y el icono generico de Android. La marca es un
+         vector (drawable/splash_marca.xml, de la receta del icono) y el fondo,
+         el de la app. Sin android:background: pintaba splash.png estirado sobre
+         la ventana de arranque de Android 7 a 11 y tapaba lo de la compat. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/kiramo_fondo</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_marca</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
     </style>
 </resources>

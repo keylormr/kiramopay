@@ -26,6 +26,11 @@ const config: CapacitorConfig = {
   appId: 'com.kiramopay.app',
   appName: 'KiramoPay',
   webDir: 'dist',
+  // Fondo del WebView en las dos plataformas mientras la pagina todavia no
+  // pinto: sin el, Android lo deja blanco y iOS usa systemBackground (blanco
+  // con el telefono en claro), y entre el splash y la primera pantalla se ve un
+  // destello. Es el fondo de la app en oscuro (--color-background-dark).
+  backgroundColor: '#050B18',
   server: {
     androidScheme: 'https',
     hostname: esIOS ? 'localhost' : 'app.kiramopay.com',
@@ -48,17 +53,32 @@ const config: CapacitorConfig = {
   // en index.css). Cualquier otro valor haria que UIKit sume SU inset encima y
   // el contenido quedaria con doble margen bajo el notch.
   plugins: {
+    // El arranque de Android sale de la API de splash de Android 12 (y su
+    // compat), que toma el color y la marca del tema AppTheme.NoActionBarLaunch
+    // (res/values/styles.xml): ahi este backgroundColor no se usa. Si vale para
+    // el splash de iOS y para el de respaldo de Android (drawable*/splash.png,
+    // fondo plano del mismo color: con CENTER_CROP el recorte no se nota).
     SplashScreen: {
       launchShowDuration: 2000,
-      // Mismo navy que el fondo plano de drawable*/splash.png: con CENTER_CROP
-      // el recorte no se nota en ningun aspecto de pantalla.
-      backgroundColor: '#1B294A',
+      backgroundColor: '#050B18',
       showSpinner: false,
       androidScaleType: 'CENTER_CROP',
     },
+    // Tinta de los iconos de las barras al arrancar: DARK son iconos claros,
+    // para el fondo oscuro. SystemBars viene en el nucleo de Capacitor 8 y sin
+    // esto sigue al modo del TELEFONO (iconos oscuros sobre la app oscura si el
+    // telefono esta en claro). StatusBar, el plugin viejo, vuelve a poner su
+    // estilo en cada cambio de configuracion (girar, abrir un plegable): tiene
+    // que decir lo mismo. Despues la app los ajusta a lo que se ve
+    // (src/hooks/useBarrasDelSistema.ts). Sin backgroundColor: con
+    // overlaysWebView en true (el valor por defecto) el plugin deja la barra
+    // transparente en todas las versiones, y detras se ve la pagina o la
+    // ventana oscura (res/values/styles.xml).
+    SystemBars: {
+      style: 'DARK',
+    },
     StatusBar: {
-      style: 'dark',
-      backgroundColor: '#FFFFFF',
+      style: 'DARK',
     },
     // Actualizacion interna de la capa web (@capawesome/capacitor-live-update),
     // autoalojada: el paquete y su manifiesto firmado son adjuntos del release

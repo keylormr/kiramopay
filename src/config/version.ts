@@ -42,20 +42,33 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.14.0',
-    buildNumber: 24,
+    version: '2.15.0',
+    buildNumber: 25,
     releaseDate: '2026-11-07',
     changes: [
-      'Rediseño, fase 5: el resto de la aplicación estrena el estilo nuevo',
-      'Antes de pagar con QR o de enviar cripto revisas a quién le llega, cuánto, la comisión y tu saldo, igual que al enviar por SINPE',
-      'Cripto muestra los logos de Bitcoin y Ethereum, y tu cartera, SINPE y tu perfil viven en la misma tarjeta oscura del Inicio',
-      'El ojo que oculta tu saldo en el Inicio ahora también tapa los montos de Movimientos, Metas, Cripto, SINPE, Servicios, Dividir y tu perfil',
-      'La bienvenida, Servicios, el Mercado y las pantallas vacías tienen ilustraciones nuevas',
-      'En tablet y escritorio, SINPE, Cripto, Servicios, Perfil y el Mercado se ordenan en columnas',
-      'Los títulos de las secciones ya no van en mayúsculas, y donde decía "ahorro" ahora dice "Metas"',
+      'Rediseño, fase 6: la aplicación arranca en el tono oscuro',
+      'Al abrir KiramoPay ves la K de la marca sobre el fondo oscuro de la aplicación, sin un destello blanco antes de la primera pantalla',
+      'El icono tiene el fondo oscuro nuevo, el mismo de la marca dentro de la aplicación',
+      'En Android 13 o posterior, si usas iconos temáticos, el icono de KiramoPay también toma los colores de tu teléfono',
+      'La barra de estado y la de navegación combinan con el tema que elijas en la aplicación, aunque tu teléfono use otro',
+      'Si instalas KiramoPay desde el navegador, el icono y la pantalla de inicio también son oscuros',
     ],
   },
   history: [
+    {
+      version: '2.14.0',
+      buildNumber: 24,
+      releaseDate: '2026-11-07',
+      changes: [
+        'Rediseño, fase 5: el resto de la aplicación estrena el estilo nuevo',
+        'Antes de pagar con QR o de enviar cripto revisas a quién le llega, cuánto, la comisión y tu saldo, igual que al enviar por SINPE',
+        'Cripto muestra los logos de Bitcoin y Ethereum, y tu cartera, SINPE y tu perfil viven en la misma tarjeta oscura del Inicio',
+        'El ojo que oculta tu saldo en el Inicio ahora también tapa los montos de Movimientos, Metas, Cripto, SINPE, Servicios, Dividir y tu perfil',
+        'La bienvenida, Servicios, el Mercado y las pantallas vacías tienen ilustraciones nuevas',
+        'En tablet y escritorio, SINPE, Cripto, Servicios, Perfil y el Mercado se ordenan en columnas',
+        'Los títulos de las secciones ya no van en mayúsculas, y donde decía "ahorro" ahora dice "Metas"',
+      ],
+    },
     {
       version: '2.13.0',
       buildNumber: 23,

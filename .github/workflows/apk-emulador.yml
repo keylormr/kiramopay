@@ -3,7 +3,9 @@ name: APK en emulador
 # Compila un APK de DEPURACION y lo recorre en emuladores de Android (API 34 y
 # API 24, el minimo de la app: Android 7.0). Prueba lo nativo que ci.yml no ve:
 # que el binario instala, arranca, muestra las pantallas y abre el menu de
-# compartir al exportar, sin caerse. La imagen de API 24 trae el WebView de
+# compartir al exportar, sin caerse; y que del splash a la primera pantalla no
+# haya un destello blanco (scripts/emulador/sin-destello.mjs, con una rafaga de
+# capturas del arranque). La imagen de API 24 trae el WebView de
 # fabrica (69), anterior a android.minWebViewVersion: ahi se comprueba que la
 # app muestra la pagina para actualizarlo (public/webview-viejo) y no queda en
 # blanco.

@@ -4,15 +4,15 @@
   "description": "Tu super app financiera para Costa Rica",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F3F7FF",
-  "theme_color": "#2D7BFF",
+  "background_color": "#050B18",
+  "theme_color": "#050B18",
   "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icons/icon-192.png",
@@ -25,6 +25,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["finance", "business"],

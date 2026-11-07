@@ -6,9 +6,11 @@
 # Uso: bash scripts/emulador/recorrido.sh <apk> <carpeta de salida>
 #
 # Falla si logcat trae un FATAL EXCEPTION o una linea de AndroidRuntime del
-# paquete, si el proceso de la app ya no existe al final, o si el recorrido
-# fallo. Las capturas, logcat y el resumen quedan en la carpeta de salida para
-# subirlos como artefacto pase lo que pase.
+# paquete, si el proceso de la app ya no existe al final, si el recorrido
+# fallo o si el arranque no paso de splash a primera pantalla sin un destello
+# blanco (sin-destello.mjs). Las capturas (las del arranque en arranque/), logcat y el
+# resumen quedan en la carpeta de salida para subirlos como artefacto pase lo
+# que pase.
 
 set -uo pipefail
 
@@ -31,8 +33,17 @@ echo "WebView del sistema: ${version_webview:-desconocida}"
 adb logcat -c || true
 adb install -r -g "$APK"
 
-# -W espera a que la actividad termine de arrancar.
-adb shell am start -W -n "$PAQUETE/.MainActivity"
+# El arranque, en una rafaga de capturas desde que se abre la app: el splash y
+# lo que viene despues. Sin -W, para capturar mientras arranca. sin-destello.mjs
+# captura hasta unos segundos despues de que el splash da paso a la primera
+# pantalla (con un tope de tiempo) y falla si no llego a verla, si despues del
+# splash aparece un cuadro mayormente blanco o si hay una franja clara en las
+# barras (la de abajo no cuenta con el teclado a la vista: el login enfoca el
+# campo de usuario al abrir).
+adb shell am start -n "$PAQUETE/.MainActivity"
+if ! node scripts/emulador/sin-destello.mjs --capturar "$SALIDA/arranque"; then
+  fallas+=("el arranque no paso la revision de destellos (ver arranque/resumen.json)")
+fi
 
 WEBVIEW_VERSION="$version_webview" API_LEVEL="$nivel" node scripts/emulador/recorrido.mjs "$SALIDA"
 estado_recorrido=$?
@@ -63,6 +74,12 @@ else
 fi
 
 adb exec-out screencap -p > "$SALIDA/99-final.png" || true
+
+# El icono como lo dibuja el sistema (con la mascara del lanzador): la ficha de
+# la app en Ajustes. Va al final porque deja la app en segundo plano.
+adb shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d "package:$PAQUETE" > /dev/null 2>&1 || true
+sleep 3
+adb exec-out screencap -p > "$SALIDA/98-icono-en-ajustes.png" || true
 
 if [ "${#fallas[@]}" -gt 0 ]; then
   for f in "${fallas[@]}"; do

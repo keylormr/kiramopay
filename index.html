@@ -3,10 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
+    <!-- El color de la barra del navegador y de la PWA. Al cambiar de tema lo
+         ajusta src/hooks/useBarrasDelSistema.ts. -->
     <meta name="theme-color" content="#050B18" />
-    <!-- Antes de que cargue el CSS el lienzo ya es oscuro (sin destello blanco).
-         Despues manda color-scheme de :root segun el tema elegido. -->
     <meta name="color-scheme" content="dark light" />
+    <!-- Antes de que llegue el CSS el lienzo ya es el fondo oscuro de la app,
+         aunque el sistema este en claro (con solo el meta de arriba el
+         navegador elige el esquema del sistema y pinta blanco). La raiz arranca
+         con la clase dark; si la persona eligio el claro, la app se la quita y
+         esta regla deja de aplicar. -->
+    <style>
+      html.dark { background-color: #050B18; color-scheme: dark; }
+    </style>
     <meta name="description" content="KiramoPay - Tu super app financiera para Costa Rica" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />

@@ -5,6 +5,7 @@ import { Button } from '../../components/ui';
 import { clasificarIdentificador } from '@/utils/identificador';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { getApiLayer } from '@/api';
+import { useSuperficieOscura } from '@/hooks/useBarrasDelSistema';
 
 interface RecoverPasswordViewProps {
   onClose: () => void;
@@ -38,6 +39,8 @@ export const RecoverPasswordView: React.FC<RecoverPasswordViewProps> = ({
   initialCedula = '',
   initialToken = '',
 }) => {
+  // Oscura con cualquier tema: las barras del sistema tambien.
+  useSuperficieOscura();
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>(initialToken ? 'reset' : 'request');
   // Acepta lo mismo que el login: nombre de usuario, cedula, correo o telefono.

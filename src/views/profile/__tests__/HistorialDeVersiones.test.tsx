@@ -95,7 +95,7 @@ describe('HistorialDeVersiones: vigente completa, anteriores plegadas', () => {
 
 describe('changelog del rediseno', () => {
   // La 2.9.0 junta lo anterior al rediseno; de la 2.10.0 en adelante, una por fase.
-  const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0', '2.13.0', '2.14.0'];
+  const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0', '2.13.0', '2.14.0', '2.15.0'];
   const fases = nuevas.slice(1);
   const por = (v: string) => getAllVersions().find((x) => x.version === v)!;
 

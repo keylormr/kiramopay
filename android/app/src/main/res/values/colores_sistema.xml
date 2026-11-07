@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- El fondo de la app en oscuro (color-background-dark en src/index.css).
+         Es el del splash y el de la ventana nativa: el que se ve detras de las
+         barras del sistema cuando el WebView no pasa por debajo de ellas
+         (WebView anterior al 140, ver SystemBars de Capacitor). Tiene que ser
+         el mismo que backgroundColor y SplashScreen.backgroundColor de
+         capacitor.config.ts y que el del LaunchScreen de iOS. -->
+    <color name="kiramo_fondo">#050B18</color>
+</resources>
