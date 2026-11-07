@@ -173,6 +173,12 @@ export type TranslationKeys = {
   nav_apps: string;
   nav_profile: string;
   nav_main_aria: string;
+  nav_menu_collapse: string;
+  nav_menu_expand: string;
+  nav_menu_open: string;
+  nav_menu_close: string;
+  /** Acceso del menu lateral a las metas (antes decia "Ahorro": decision del dueno del 2026-11-06). */
+  nav_goals: string;
 
   // Home
   total_balance: string;

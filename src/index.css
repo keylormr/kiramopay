@@ -4,9 +4,7 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Letra: Geist, alojada en el repo (OFL 1.1, ver assets/fonts/geist/OFL.txt).
-   Un solo archivo variable cubre todos los pesos (100-900). Geist no trae el
-   glifo del colon (U+20A1): ese caracter lo dibuja la siguiente fuente de la
-   pila (Roboto en Android, SF en iOS, Segoe UI en Windows).
+   Un solo archivo variable cubre todos los pesos (100-900).
    ═══════════════════════════════════════════════════════════════════════════ */
 @font-face {
   font-family: "Geist";
@@ -15,6 +13,24 @@
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
+}
+
+/* El colon (U+20A1). Geist no trae ese glifo y lo dibujaba la fuente del
+   sistema, mas gruesa y de otra altura que las cifras. Este archivo es Inter
+   4.1 (OFL 1.1, ver assets/fonts/inter/OFL.txt) recortado a ese solo glifo,
+   variable en peso y con el tamano optico fijo en 14 (el corte de texto).
+   size-adjust iguala su altura de mayusculas a la de Geist (0,71 / 0,7275).
+   Con unicode-range el navegador solo lo descarga si la pagina tiene un ₡ (sale
+   como archivo aparte: ver assetsInlineLimit en vite.config.ts). */
+@font-face {
+  font-family: "Inter Colon";
+  src: url("./assets/fonts/inter/Inter-Colon.woff2") format("woff2-variations"),
+       url("./assets/fonts/inter/Inter-Colon.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+20A1;
+  size-adjust: 97.6%;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -156,7 +172,7 @@
   --shadow-primary:  0 8px 20px rgba(45, 123, 255, 0.32);
 
   /* ── Font stack ──────────────────────────────────────────────────────── */
-  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-sans: "Geist", "Inter Colon", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   --font-mono: "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
 
   /* ── Movimiento: una sola curva para todo lo que responde a un gesto ──── */
@@ -214,8 +230,23 @@ body {
   background-color: var(--color-background-dark);
   color: var(--color-text-primary-dark);
 }
-.dark {
+
+/* Esquema de color de la raiz: las barras de desplazamiento, los campos de
+   fecha, los selectores y el lienzo del navegador siguen al tema de la app y
+   no al del sistema. Va en la raiz y no en `.dark` suelto: con el claro elegido
+   en un sistema oscuro, los controles nativos tambien tienen que ser claros.
+   La barra de la pagina es fina (scrollbar-width no se hereda: las listas con
+   desplazamiento propio conservan su ancho) y con los colores del tema, que si
+   se heredan y tambien usan esas listas. El pulgar oscuro es el borde de
+   control (3,78:1 sobre el fondo) y el claro, el texto tenue (4,33:1). */
+:root {
+  color-scheme: light;
+  scrollbar-color: var(--color-text-muted) transparent;
+  scrollbar-width: thin;
+}
+:root.dark {
   color-scheme: dark;
+  scrollbar-color: var(--color-border-control-dark) transparent;
 }
 
 /* Montos: cifras de ancho fijo para que una columna de dinero no baile. Geist
@@ -254,6 +285,44 @@ input[inputmode='numeric'] {
    de las capas de Tailwind a proposito: tiene que ganarle a `inset-0`. */
 .kp-capa {
   left: var(--kp-nav-ancho);
+  /* Acompana al menu cuando se pliega o se despliega, con su misma curva. */
+  transition: left var(--kp-mov-hoja) var(--kp-curva-hoja);
+  /* Contenedor de la regla de columna de mas abajo. */
+  container: capa / inline-size;
+}
+
+/* Pantallas completas en pantalla ancha: la misma columna que las pestanas
+   (42rem, el max-w-2xl de <main>). Sin esto, en un escritorio las tarjetas de
+   Metas o de Movimientos median 1.600 px y la flecha de volver quedaba lejos
+   del contenido. Todas las capas tienen la misma forma (cabecera fija y un
+   contenedor con desplazamiento), asi que basta una regla:
+    - lo que no se desplaza (la cabecera, la barra para escribir del asistente)
+      deja su fondo y su borde a todo el ancho y corre su contenido a la
+      columna, 1rem adentro (el px-4 de siempre);
+    - lo que se desplaza sigue ocupando todo el ancho (la rueda del raton
+      funciona tambien en los costados) y centra cada bloque en la columna. Si
+      el contenedor ya trae px-4 / p-4, o el bloque lleva mx-4, el bloque mide
+      1rem menos por lado para que su texto quede debajo del de la cabecera.
+      Un bloque con su propio max-w-* se queda con su ancho.
+   Es una consulta de contenedor y no de ventana: sigue el ancho real de la
+   capa, con el menu abierto, plegado o con riel. Desde 42rem las formulas dan
+   lo mismo que el px-4 de siempre, asi que no hay salto al cruzar el limite.
+   Una vista mas ancha cambia la columna con [--kp-columna:..] en su div de
+   capa; una que necesite todo el ancho (una tabla de administracion) se sale
+   con data-ancho="libre". Sin consultas de contenedor (iOS 15), todo queda
+   como antes, a todo el ancho. */
+@container capa (min-width: 42rem) {
+  .kp-capa:not([data-ancho='libre']) > div:not(.overflow-y-auto):not(.fixed):not(.absolute) {
+    padding-inline: max(1rem, calc((100% - var(--kp-columna, 42rem)) / 2 + 1rem));
+  }
+  .kp-capa:not([data-ancho='libre']) > .overflow-y-auto > :not([class*='max-w-']) {
+    max-width: var(--kp-columna, 42rem);
+    margin-inline: auto;
+  }
+  .kp-capa:not([data-ancho='libre']) > .overflow-y-auto:is(.px-4, .p-4) > :not([class*='max-w-']),
+  .kp-capa:not([data-ancho='libre']) > .overflow-y-auto > .mx-4:not([class*='max-w-']) {
+    max-width: calc(var(--kp-columna, 42rem) - 2rem);
+  }
 }
 
 /* Entrada de una pantalla completa desde la derecha. Las vistas ya pedian
@@ -267,7 +336,20 @@ input[inputmode='numeric'] {
   animation: kp-capa-entra var(--kp-mov-hoja) var(--kp-curva) both;
 }
 
-/* Marco de la app autenticada: fija el ancho de la navegacion lateral. */
+/* Pista con el nombre de un icono del menu plegado: aparece corriendose 4 px
+   desde el riel. Con movimiento reducido aparece sin mas. */
+@keyframes kp-pista-entra {
+  from { opacity: 0; transform: translate(-4px, -50%); }
+  to   { opacity: 1; transform: translate(0, -50%); }
+}
+.kp-pista {
+  animation: kp-pista-entra var(--kp-mov-estado) var(--kp-curva) both;
+}
+
+/* Marco de la app autenticada: fija el ancho de la navegacion lateral. Es la
+   unica fuente de ese ancho: el riel o menu lo usa como `width`, las capas como
+   `left`, y el contenido es el resto de la fila. Plegar el menu (expandida)
+   solo cambia esta variable. */
 .kp-marco {
   --kp-nav-ancho: 0px;
 }
@@ -279,6 +361,9 @@ input[inputmode='numeric'] {
 @media (min-width: 52.5rem) {
   .kp-marco {
     --kp-nav-ancho: calc(256px + env(safe-area-inset-left, 0px));
+  }
+  .kp-marco[data-menu='plegado'] {
+    --kp-nav-ancho: calc(88px + env(safe-area-inset-left, 0px));
   }
 }
 

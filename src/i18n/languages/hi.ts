@@ -88,6 +88,11 @@ const hi: TranslationKeys = {
   nav_apps: 'ऐप्स',
   nav_profile: 'प्रोफाइल',
   nav_main_aria: 'मुख्य नेविगेशन',
+  nav_menu_collapse: 'मेनू छोटा करें',
+  nav_menu_expand: 'मेनू बड़ा करें',
+  nav_menu_open: 'मेनू खोलें',
+  nav_menu_close: 'मेनू बंद करें',
+  nav_goals: 'लक्ष्य',
 
   // Home
   total_balance: 'कुल शेष',

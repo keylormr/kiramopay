@@ -110,8 +110,8 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
-        <div className="flex items-center justify-between px-4 h-14">
+      <div className="sticky top-0 z-10 px-4 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+        <div className="flex items-center justify-between h-14">
           <button
             onClick={onClose}
             aria-label={t('back')}
@@ -124,7 +124,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
         </div>
 
         {/* Buscador */}
-        <div className="px-4 pb-3">
+        <div className="pb-3">
           <div className="relative">
             <Icons.Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -138,7 +138,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
         </div>
 
         {/* Categorías */}
-        <div className="px-4 pb-3 overflow-x-auto no-scrollbar">
+        <div className="-mx-4 px-4 pb-3 overflow-x-auto no-scrollbar">
           <div className="flex gap-2">
             {(['all', ...CATEGORIES] as const).map((category) => (
               <button

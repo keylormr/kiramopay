@@ -231,7 +231,7 @@ export const AnalyticsView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const anteriorIncompleto = !!anteriorListo && primeraFecha !== null && primeraFecha > anteriorListo.rango.desde;
 
   return (
-    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
+    <div className="fixed inset-0 kp-capa [--kp-columna:62rem] z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] flex flex-col animate-in slide-in-from-right duration-200">
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-surface-dark/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 h-14 flex items-center justify-between flex-shrink-0">
         <button
           onClick={onClose}

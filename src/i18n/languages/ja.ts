@@ -88,6 +88,11 @@ const ja: TranslationKeys = {
   nav_apps: 'アプリ',
   nav_profile: 'プロフィール',
   nav_main_aria: 'メインナビゲーション',
+  nav_menu_collapse: 'メニューを折りたたむ',
+  nav_menu_expand: 'メニューを展開',
+  nav_menu_open: 'メニューを開く',
+  nav_menu_close: 'メニューを閉じる',
+  nav_goals: '目標',
 
   // Home
   total_balance: '合計残高',

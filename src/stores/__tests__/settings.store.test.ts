@@ -117,3 +117,16 @@ describe('useSettingsStore: tema oscuro por defecto (version 2)', () => {
     expect(migrado.darkMode).toBe(false);
   });
 });
+
+describe('menu lateral plegado (preferencia del dispositivo)', () => {
+  it('arranca desplegado, se alterna y se guarda con los ajustes', () => {
+    localStorage.clear();
+    useSettingsStore.setState({ menuLateralPlegado: false });
+    useSettingsStore.getState().alternarMenuLateral();
+    expect(useSettingsStore.getState().menuLateralPlegado).toBe(true);
+    const guardado = JSON.parse(localStorage.getItem('kiramopay-settings') ?? '{}');
+    expect(guardado.state.menuLateralPlegado).toBe(true);
+    useSettingsStore.getState().alternarMenuLateral();
+    expect(useSettingsStore.getState().menuLateralPlegado).toBe(false);
+  });
+});
