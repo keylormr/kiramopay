@@ -469,7 +469,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 variant="default"
                 className="mb-6 !bg-[var(--color-surface-2-dark)] !border-[var(--color-border-dark)]"
               >
-                <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-3">
+                <p className="text-xs font-medium text-[var(--color-text-muted-dark)] mb-3">
                   {t('login_last_access')}
                 </p>
                 {/* Mientras consulta al servidor (con Render despertando,
@@ -538,7 +538,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
             <div className="mb-6">
               <label
                 htmlFor={idCampoIdentificador}
-                className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted-dark)] mb-2 block"
+                className="text-xs font-medium text-[var(--color-text-muted-dark)] mb-2 block"
               >
                 {t('login_identifier_label')}
               </label>
@@ -631,7 +631,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                 estas contrasenas no existen y el recuadro enganaba. */}
             {MOSTRAR_CUENTAS_LOCALES && (
               <div className="mt-8 p-3.5 rounded-xl bg-white/[0.04] border border-white/10">
-                <p className="text-[var(--color-primary-300)] text-xs font-semibold uppercase tracking-wider mb-2">
+                <p className="text-[var(--color-primary-300)] text-xs font-semibold mb-2">
                   {t('test_users')}
                 </p>
                 <div className="space-y-1 text-[11px] text-[var(--color-text-muted-dark)] font-mono">

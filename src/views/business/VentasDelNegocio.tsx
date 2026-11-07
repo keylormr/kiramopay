@@ -59,7 +59,7 @@ export const VentasDelNegocio: React.FC<Props> = ({ resumen, monedaBase, esDelNe
 
   return (
     <section aria-labelledby={idTitulo} aria-busy={resumen === undefined} className="space-y-2">
-      <h3 id={idTitulo} className="text-xs font-bold uv-text-muted uppercase tracking-wider">
+      <h3 id={idTitulo} className="text-xs font-semibold uv-text-muted">
         {t('business_sales_title')}
       </h3>
 

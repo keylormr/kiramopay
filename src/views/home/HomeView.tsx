@@ -1,7 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/hooks/useApp';
-import { Icons } from '../../components/Icons';
+import { Icons, IconosLinea } from '../../components/Icons';
+import { BotonDeRevision, BotonSecundarioDeRevision, CaraDeRevision, CifraGrande, FilasDeRevision, type FilaDeRevision } from '@/components/envio/PiezasDeRevision';
+import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { partesDelMonto } from '@/utils/partesDelMonto';
+import { iniciales } from '@/utils/arteDelMovimiento';
 import { Bandera } from '../../components/Bandera';
 import { LogoCripto, tieneLogoCripto } from '../../components/LogoCripto';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -486,7 +490,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
       const res = await api.qrPayments.scanAndPay({
         qrData: scannedQrData,
         amount: Number.isFinite(amt) && amt > 0 ? amt : undefined,
-        currency: baseAccount?.ccy ?? 'CRC',
+        // El servidor cobra en la moneda del codigo (qrpayment/service.go) y
+        // no deja cambiarla: se manda esa misma para no contradecirlo.
+        currency: resuelto?.currency || parsearQrKiramo(scannedQrData)?.moneda || baseAccount?.ccy || 'CRC',
         chargeId: resuelto?.chargeId,
         idempotencyKey: montoAbierto ? idemPagoRef.current : undefined,
       });
@@ -1077,31 +1083,33 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
         </QrScannerPanel>
       </BottomSheet>
 
-      {/* Scan Result / Pay Sheet — pago real via scanAndPay (mueve dinero en el ledger) */}
+      {/* Scan Result / Pay Sheet — pago real via scanAndPay (mueve dinero en el ledger).
+          Revisar antes de pagar tiene la forma de la revision de SINPE (fase 3):
+          a quien, cuanto en grande, que va a pasar, y un boton que dice cuanto. */}
       {scannedQrData && (
         <BottomSheet
           isOpen={activeSheet === 'scanResult'}
           onClose={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); setPayResult(null); }}
-          title={payResult ? t('payment_done') : t('payment_detected')}
+          title={payResult ? t('payment_done') : t('qr_revisar_titulo')}
+          dismissable={!payLoading}
         >
           {payResult ? (
-            <div className="flex flex-col items-center space-y-4 py-2">
+            <div className="flex flex-col items-center pt-1 text-center">
               <Ilustracion3D nombre="pagoListo" tamano={136} prioritaria className="kp-aparece" />
               {/* El monto con el formato de la app, como el resto de las
                   pantallas. El titulo de la hoja ya dice "Pago realizado": bajo
                   el monto va a quien se le pago, no la misma frase otra vez. */}
-              <p className="text-3xl font-black uv-text-primary tabular-nums">
-                {formatCurrency(payResult.amount, payResult.currency)}
-              </p>
+              <CifraGrande valor={payResult.amount} moneda={payResult.currency} className="mt-4" />
               {(resuelto?.merchantName || resuelto?.payeeName) && (
-                <p className="uv-text-muted text-sm">{resuelto?.merchantName || resuelto?.payeeName}</p>
+                <p className="mt-3 text-[15px] uv-text-secondary">{resuelto?.merchantName || resuelto?.payeeName}</p>
               )}
-              <button
-                onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayResult(null); }}
-                className="w-full bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3 rounded-xl font-bold"
-              >
-                {t('done')}
-              </button>
+              <div className="mt-6 w-full">
+                <BotonDeRevision
+                  onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayResult(null); }}
+                  etiqueta={t('done')}
+                  etiquetaProcesando={t('done')}
+                />
+              </div>
             </div>
           ) : (() => {
             // El QR de KiramoPay trae el monto adentro (en centimos): si es
@@ -1115,66 +1123,90 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
               ? resuelto.amount
               : (qr && qr.monto > 0 ? qr.monto : null);
             const cobrador = resuelto?.merchantName || resuelto?.payeeName || '';
+            // La moneda en la que se paga es la del codigo, tambien en los de
+            // monto abierto: el servidor no deja cambiarla
+            // (qrpayment/service.go). La cuenta base queda de respaldo para un
+            // codigo que todavia no se resolvio ni se pudo leer.
+            const monedaDelPago = resuelto?.currency || qr?.moneda || baseAccount?.ccy || 'CRC';
+            const tecleado = parseFloat(paymentAmount);
+            const montoAPagar = montoFijo ?? (Number.isFinite(tecleado) && tecleado > 0 ? tecleado : null);
+            const cuentaDelPago = state.accounts.find((a) => a.ccy === monedaDelPago);
+            const dinero = (v: number) => formatMoney(v, monedaDelPago as CurrencyCode, { decimals: 2 });
+            // Con el saldo a la vista en rojo, el boton no ofrece un pago que
+            // el servidor va a rechazar.
+            const sinFondos = !!cuentaDelPago && montoAPagar !== null && cuentaDelPago.balance < montoAPagar;
+            const filas: FilaDeRevision[] = [
+              // La comision del QR la paga el comercio (feeFromReceiver en
+              // backend/internal/qrpayment/service.go): quien paga no paga mas.
+              { clave: 'comision', etiqueta: t('envio_comision'), valor: dinero(0), nota: t('qr_sin_costo_para_ti'), tono: 'exito' },
+              ...(cuentaDelPago && montoAPagar !== null
+                ? [
+                    cuentaDelPago.balance >= montoAPagar
+                      ? { clave: 'saldo', etiqueta: t('envio_tu_saldo'), valor: `${dinero(cuentaDelPago.balance)} → ${dinero(cuentaDelPago.balance - montoAPagar)}` }
+                      : { clave: 'saldo', etiqueta: t('envio_tu_saldo'), valor: dinero(cuentaDelPago.balance), nota: t('insufficient_funds'), tono: 'peligro' as const },
+                  ]
+                : []),
+              { clave: 'llega', etiqueta: t('envio_llega'), valor: t('envio_al_instante') },
+            ];
+            const cerrarHoja = () => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); };
             return (
-              <div className="space-y-6">
+              <div className="flex flex-col gap-4">
                 {/* A quien se le paga va PRIMERO. Un codigo pegado en un
                     mostrador se puede tapar con el de otro, y hasta ahora la
                     hoja de pago no mostraba nunca quien recibe. */}
                 {!codigoRechazado && (
-                <div className="text-center pt-2">
-                  <p className="text-xs uv-text-muted uppercase tracking-wider">{t('qr_le_pagas_a')}</p>
+                <div className="flex flex-col items-center pt-1 text-center">
+                  <CaraDeRevision>
+                    {cobrador ? <span aria-hidden="true">{iniciales(cobrador)}</span> : <IconosLinea.Escanear size={28} />}
+                  </CaraDeRevision>
+                  <p className="mt-3 text-[13px] uv-text-muted">{t('qr_le_pagas_a')}</p>
                   {cobrador ? (
                     <>
-                      <p className="text-lg font-bold uv-text-primary">{cobrador}</p>
+                      <p className="mt-0.5 max-w-full break-words text-[17px] font-semibold uv-text-primary">{cobrador}</p>
                       {resuelto?.locationName && (
-                        <p className="text-xs uv-text-muted">{resuelto.locationName}</p>
+                        <p className="mt-0.5 text-[13px] uv-text-secondary">{resuelto.locationName}</p>
                       )}
                     </>
                   ) : resolviendo ? (
-                    <p className="text-sm uv-text-muted">{t('qr_verificando')}</p>
+                    <p className="mt-0.5 text-sm uv-text-secondary">{t('qr_verificando')}</p>
                   ) : resolverFallo ? (
                     <div className="mt-1 flex flex-col items-center gap-1.5" aria-live="polite">
                       <p id="pago-sin-verificar" className="text-sm text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{t('qr_err_no_se_pudo_verificar')}</p>
                       <button
                         type="button"
                         onClick={() => setIntentoResolver((n) => n + 1)}
-                        className="inline-flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline uv-focus-ring rounded-md"
+                        className="kp-toque inline-flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)] hover:underline uv-focus-ring rounded-md"
                       >
                         <Icons.RefreshCw size={14} aria-hidden="true" />
                         {t('error_retry')}
                       </button>
                     </div>
                   ) : (
-                    <p className="text-sm uv-text-muted">—</p>
+                    <p className="mt-0.5 text-sm uv-text-muted">—</p>
                   )}
-                </div>
-                )}
 
-                {/* Un codigo rechazado no se paga: ni monto que teclear ni boton. */}
-                {!codigoRechazado && (
-                <div className="text-center py-2">
+                  {/* Un codigo rechazado no se paga: ni monto que teclear ni boton. */}
                   {montoFijo !== null ? (
                     <>
-                      <p className="text-sm uv-text-muted mb-1">{t('qr_te_solicitan')}</p>
-                      <p className={`text-4xl font-black tabular-nums ${cobroCerrado ? 'uv-text-muted line-through decoration-2' : 'uv-text-primary'}`}>
-                        {formatCurrency(montoFijo, qr?.moneda || 'CRC')}
-                      </p>
+                      <p className="mt-5 text-[13px] uv-text-muted">{t('qr_te_solicitan')}</p>
+                      <CifraGrande valor={montoFijo} moneda={monedaDelPago} tachada={!!cobroCerrado} className="mt-2" />
                     </>
                   ) : (
-                    <div>
-                      <label className="text-sm text-gray-500 font-medium mb-2 block">
-                        {t('amount')} ({baseAccount?.ccy ?? 'CRC'})
+                    <div className="mt-5 w-full text-left">
+                      <label htmlFor="qr-monto-abierto" className="mb-2 block text-[13px] font-medium uv-text-secondary">
+                        {t('amount')} ({monedaDelPago})
                       </label>
-                      <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-4">
-                        <span className="text-2xl font-bold uv-text-primary mr-2">{baseAccount?.symbol ?? '₡'}</span>
+                      <div className="flex items-center rounded-[18px] border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-3 focus-within:border-[var(--color-primary)] dark:border-[var(--color-border-dark)] dark:bg-[var(--color-surface-2-dark)]">
+                        <span aria-hidden="true" className="mr-2 text-2xl font-semibold uv-text-secondary">{partesDelMonto(0, monedaDelPago).simbolo || monedaDelPago}</span>
                         {/* min-w-0: sin el, el ancho propio del input (unos 20
                             caracteres) desbordaba la caja a 390 px y la hoja
                             se corria de lado al enfocarlo. */}
                         <CampoMonto
+                          id="qr-monto-abierto"
                           value={paymentAmount}
                           onChange={setPaymentAmount}
                           placeholder="0.00"
-                          className="flex-1 min-w-0 bg-transparent text-2xl font-bold outline-none uv-text-primary"
+                          className="kp-num flex-1 min-w-0 bg-transparent text-3xl font-semibold outline-none uv-text-primary"
                           autoFocus
                         />
                       </div>
@@ -1182,6 +1214,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                   )}
                 </div>
                 )}
+
+                {!codigoRechazado && !cobroCerrado && <FilasDeRevision filas={filas} />}
 
                 {cobroCerrado ? (
                   // El cobro ya no se puede pagar: se dice de entrada y no se
@@ -1200,29 +1234,18 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
                 ) : null}
 
                 {cobroCerrado || codigoRechazado ? (
-                  <button
-                    onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
-                    className="w-full py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
-                  >
-                    {t('close')}
-                  </button>
+                  <BotonSecundarioDeRevision onClick={cerrarHoja}>{t('close')}</BotonSecundarioDeRevision>
                 ) : (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => { setActiveSheet('none'); setScannedQrData(null); setPaymentAmount(''); setPayError(''); }}
-                      className="flex-1 py-4 rounded-xl border-2 border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-text-primary font-bold"
-                    >
-                      {t('cancel')}
-                    </button>
-                    <button
+                  <div className="flex flex-col gap-1">
+                    <BotonDeRevision
                       onClick={handleScannedPayment}
-                      disabled={payLoading || sinSaberAQuienSePaga || (montoFijo === null && !(parseFloat(paymentAmount) > 0))}
-                      aria-describedby={resolverFallo ? 'pago-sin-verificar' : undefined}
-                      className="flex-1 py-4 rounded-xl bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white font-bold disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {payLoading && <div className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
-                      {payLoading ? t('paying') : t('pay')}
-                    </button>
+                      bloqueado={sinSaberAQuienSePaga || montoAPagar === null || sinFondos}
+                      procesando={payLoading}
+                      describedBy={resolverFallo ? 'pago-sin-verificar' : undefined}
+                      etiqueta={montoAPagar !== null ? rellenar(t('qr_pagar_monto'), { monto: dinero(montoAPagar) }) : t('pay')}
+                      etiquetaProcesando={t('paying')}
+                    />
+                    <BotonSecundarioDeRevision onClick={cerrarHoja} disabled={payLoading}>{t('cancel')}</BotonSecundarioDeRevision>
                   </div>
                 )}
               </div>

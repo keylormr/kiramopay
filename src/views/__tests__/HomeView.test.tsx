@@ -275,8 +275,11 @@ describe('HomeView — ayuda en las tarjetas', () => {
     // El de ahorros es el segundo: asistente, ahorros, divididos, lealtad...
     await user.click(screen.getAllByLabelText('¿Qué es esto?')[1]);
 
-    expect(await screen.findByText('Ahorros')).toBeInTheDocument();
-    expect(screen.getByText(/no genera intereses/)).toBeInTheDocument();
+    // El titulo y el cuerpo, DENTRO de la hoja de ayuda: el mosaico del Inicio
+    // tambien dice "Metas" y no prueba nada.
+    const ayuda = within(await screen.findByRole('dialog'));
+    expect(ayuda.getByRole('heading', { name: 'Metas' })).toBeInTheDocument();
+    expect(ayuda.getByText(/Ojo: lo apartado no genera intereses\./)).toBeInTheDocument();
     expect(abrirAhorros).not.toHaveBeenCalled();
   });
 });

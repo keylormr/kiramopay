@@ -4,6 +4,8 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { CampoMonto } from '@/components/CampoMonto';
+import { EstadoVacio } from '@/components/EstadoVacio';
+import { Monto, BotonOcultarMontos } from '@/components/montos/MontoOcultable';
 import { useSavingsStore, SavingsGoal } from '@/stores/savings.store';
 import { useApp } from '@/hooks/useApp';
 import { getApiLayer } from '@/api';
@@ -64,16 +66,19 @@ function llaveNueva(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// Los nombres van por el idioma de la app (antes eran fijos en espanol) y el de
+// la alcancia dice "Dinero": decision del dueno, la pantalla de Metas no habla
+// de ahorro. El id 'piggy-bank' se queda, porque es lo que guardan las metas.
 const GOAL_ICONS = [
-  { id: 'piggy-bank', Icon: Icons.PiggyBank, label: 'Ahorro' },
-  { id: 'home', Icon: Icons.Home, label: 'Casa' },
-  { id: 'car', Icon: Icons.Car, label: 'Auto' },
-  { id: 'plane', Icon: Icons.Navigation, label: 'Viaje' },
-  { id: 'gift', Icon: Icons.Gift, label: 'Regalo' },
-  { id: 'trophy', Icon: Icons.Trophy, label: 'Meta' },
-  { id: 'heart', Icon: Icons.Heart, label: 'Salud' },
-  { id: 'star', Icon: Icons.Star, label: 'Especial' },
-];
+  { id: 'piggy-bank', Icon: Icons.PiggyBank, label: 'meta_icono_dinero' },
+  { id: 'home', Icon: Icons.Home, label: 'meta_icono_casa' },
+  { id: 'car', Icon: Icons.Car, label: 'meta_icono_auto' },
+  { id: 'plane', Icon: Icons.Navigation, label: 'meta_icono_viaje' },
+  { id: 'gift', Icon: Icons.Gift, label: 'meta_icono_regalo' },
+  { id: 'trophy', Icon: Icons.Trophy, label: 'meta_icono_meta' },
+  { id: 'heart', Icon: Icons.Heart, label: 'meta_icono_salud' },
+  { id: 'star', Icon: Icons.Star, label: 'meta_icono_especial' },
+] as const;
 
 const GOAL_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
@@ -456,13 +461,16 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('savings_title')}</h1>
-        <button
-          onClick={abrirNuevaMeta}
-          className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
-          aria-label={t('savings_add_goal')}
-        >
-          <Icons.Plus size={20} />
-        </button>
+        <div className="flex items-center -mr-2">
+          <BotonOcultarMontos />
+          <button
+            onClick={abrirNuevaMeta}
+            className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
+            aria-label={t('savings_add_goal')}
+          >
+            <Icons.Plus size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">
@@ -500,8 +508,8 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
           <div className="bg-gradient-to-br from-primary/10 to-blue-500/5 dark:from-primary/20 dark:to-blue-900/10 rounded-3xl border border-primary/20 dark:border-primary/30 p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-xs font-bold text-primary/60 uppercase tracking-wider mb-1">{t('savings_total_saved')}</p>
-                <p className="text-3xl font-black uv-text-primary">{formatCurrency(totalSaved)}</p>
+                <p className="text-xs font-semibold text-primary/60 mb-1">{t('savings_total_saved')}</p>
+                <p className="text-3xl font-black uv-text-primary"><Monto>{formatCurrency(totalSaved)}</Monto></p>
               </div>
               {/* Circular progress */}
               <div className="relative w-16 h-16">
@@ -522,7 +530,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
             </div>
             {totalTarget > 0 && (
               <p className="text-xs uv-text-muted">
-                {t('savings_of_target')} {formatCurrency(totalTarget)}
+                {t('savings_of_target')} <Monto>{formatCurrency(totalTarget)}</Monto>
               </p>
             )}
           </div>
@@ -556,12 +564,13 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
         {/* Goals List */}
         {goals.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400 px-4">
-            <div className="w-24 h-24 rounded-3xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-4">
-              <Icons.PiggyBank size={48} className="opacity-30" />
-            </div>
-            <p className="text-lg font-bold mb-2 uv-text-primary">{t('savings_no_goals')}</p>
-            <p className="text-sm text-gray-400 text-center mb-6">{t('savings_no_goals_desc')}</p>
+          <EstadoVacio
+            ilustracion="sinMetas"
+            titulo={t('savings_no_goals')}
+            descripcion={t('savings_no_goals_desc')}
+            comoTitulo="h2"
+            className="py-16"
+          >
             <Button
               variant="primary"
               size="md"
@@ -569,7 +578,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
             >
               {t('savings_create_first')}
             </Button>
-          </div>
+          </EstadoVacio>
         ) : (
           <div className="px-4 py-2 space-y-3">
             {goals.map((goal, i) => {
@@ -595,7 +604,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                         <div>
                           <h3 className="font-bold uv-text-primary text-sm truncate">{goal.name}</h3>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {formatCurrency(goal.saved)} / {formatCurrency(goal.target)}
+                            <Monto>{formatCurrency(goal.saved)}</Monto> / <Monto>{formatCurrency(goal.target)}</Monto>
                           </p>
                         </div>
                         {isComplete ? (
@@ -665,7 +674,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
         <div className="space-y-5 pb-2">
           {/* Name */}
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('savings_goal_name')}</label>
+            <label className="text-xs font-semibold text-gray-500 block mb-2">{t('savings_goal_name')}</label>
             <input
               type="text"
               value={goalName}
@@ -678,7 +687,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
           {/* Target */}
           <div>
-            <label htmlFor="meta-objetivo" className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('savings_target_amount')}</label>
+            <label htmlFor="meta-objetivo" className="text-xs font-semibold text-gray-500 block mb-2">{t('savings_target_amount')}</label>
             <div
               className={`flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3 border transition-colors ${
                 avisoObjetivo ? 'border-[var(--color-danger)]' : 'border-transparent'
@@ -704,11 +713,13 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
           {/* Icon selection */}
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('icon')}</label>
+            <label className="text-xs font-semibold text-gray-500 block mb-2">{t('icon')}</label>
             <div className="grid grid-cols-4 gap-2">
               {GOAL_ICONS.map(({ id, Icon, label }) => (
                 <button
                   key={id}
+                  type="button"
+                  aria-pressed={goalIcon === id}
                   onClick={() => setGoalIcon(id)}
                   className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${
                     goalIcon === id
@@ -717,7 +728,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
                   }`}
                 >
                   <Icon size={20} className={goalIcon === id ? 'text-primary' : 'text-gray-400'} />
-                  <span className="text-[10px] font-medium text-gray-500">{label}</span>
+                  <span className="text-[11px] font-medium text-gray-500">{t(label)}</span>
                 </button>
               ))}
             </div>
@@ -725,7 +736,7 @@ export const SavingsView: React.FC<{ onClose: () => void; onOpenPlans?: () => vo
 
           {/* Color selection */}
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('color')}</label>
+            <label className="text-xs font-semibold text-gray-500 block mb-2">{t('color')}</label>
             {/* Ocho en una fila en cualquier telefono; el relleno deja ver el anillo. */}
             <div className="grid grid-cols-8 gap-1.5 p-1">
               {GOAL_COLORS.map((color, i) => (

@@ -190,7 +190,7 @@ describe('Un QR que no es de KiramoPay se rechaza en el escaner', () => {
     expect(screen.getByTestId('aviso-del-escaner')).toHaveTextContent(
       'Ese QR no es de KiramoPay. Pídele a quien te cobra que te muestre su código de KiramoPay.',
     );
-    expect(screen.queryByText('Pago detectado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Revisa antes de pagar')).not.toBeInTheDocument();
     expect(mocks.resolveQr).not.toHaveBeenCalled();
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
   });
@@ -203,7 +203,7 @@ describe('Un QR que no es de KiramoPay se rechaza en el escaner', () => {
     await user.click(screen.getByRole('button', { name: 'simular-kp' }));
 
     // Con un codigo valido el escaner se cierra y se abre la hoja de pago.
-    expect(await screen.findByText('Pago detectado')).toBeInTheDocument();
+    expect(await screen.findByText('Revisa antes de pagar')).toBeInTheDocument();
     expect(screen.queryByTestId('aviso-del-escaner')).not.toBeInTheDocument();
   });
 });
@@ -220,7 +220,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     expect(await screen.findByText('Verificando el código…')).toBeInTheDocument();
     // El monto ya se ve (sale del texto del codigo), pero todavia no hay a quien pagarle.
     expect(screen.getByText('₡5,500.00')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Pagar/ })).toBeDisabled();
 
     contestar({
       success: true,
@@ -228,7 +228,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     });
 
     expect(await screen.findByText('Soda Tica')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pagar' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Pagar/ })).toBeEnabled());
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
   });
 
@@ -259,7 +259,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await escanear(user, 'simular-kp');
     await screen.findByText('Verificando el código…');
     await user.click(screen.getByRole('button', { name: 'Cancelar' }));
-    await waitFor(() => expect(screen.queryByText('Pago detectado')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Revisa antes de pagar')).not.toBeInTheDocument());
 
     await escanear(user, 'simular-kp');
     expect(await screen.findByText('Soda Nueva')).toBeInTheDocument();
@@ -283,7 +283,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await escanear(user, 'simular-kp');
 
     expect(await screen.findByText('Ese código fue retirado por su dueño.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pagar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Pagar/ })).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('0.00')).not.toBeInTheDocument();
     // Ni a quien se le pagaria ni cuanto: el codigo no existe, no hay nada que ofrecer.
     expect(screen.queryByText('Le pagas a')).not.toBeInTheDocument();
@@ -292,7 +292,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     const cerrar = screen.getByText('Cerrar').closest('button');
     expect(cerrar).not.toBeNull();
     await user.click(cerrar!);
-    expect(screen.queryByText('Pago detectado')).not.toBeInTheDocument();
+    expect(screen.queryByText('Revisa antes de pagar')).not.toBeInTheDocument();
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
   });
 
@@ -312,13 +312,13 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await escanear(user, 'simular-kp');
 
     expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Pagar/ })).toBeDisabled();
     expect(mocks.scanAndPay).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));
 
     expect(await screen.findByText('Soda Tica')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pagar' })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Pagar/ })).toBeEnabled());
   });
 
   it('Pagar apunta a su motivo y Reintentar es un blanco tactil de 44 px', async () => {
@@ -329,7 +329,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await escanear(user, 'simular-kp');
 
     const aviso = await screen.findByText('No pudimos verificar el código. Intenta de nuevo.');
-    const pagar = screen.getByRole('button', { name: 'Pagar' });
+    const pagar = screen.getByRole('button', { name: /^Pagar/ });
     expect(pagar).toHaveAccessibleDescription('No pudimos verificar el código. Intenta de nuevo.');
     expect(aviso.id).toBe(pagar.getAttribute('aria-describedby'));
     expect(screen.getByRole('button', { name: 'Reintentar' }).className).toContain('min-h-11');
@@ -346,7 +346,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
 
     await waitFor(() => expect(mocks.resolveQr).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Pagar/ })).toBeDisabled();
   });
 
   it('si la consulta lanza una excepcion se trata como no verificado: Pagar espera', async () => {
@@ -357,7 +357,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await escanear(user, 'simular-kp');
 
     expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Pagar/ })).toBeDisabled();
   });
 
   it('sin la capa de pagos por QR tampoco se paga a ciegas', async () => {
@@ -369,7 +369,7 @@ describe('Pagar espera a saber a quien se le paga', () => {
     await escanear(user, 'simular-kp');
 
     expect(await screen.findByText('No pudimos verificar el código. Intenta de nuevo.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Pagar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Pagar/ })).toBeDisabled();
   });
 });
 

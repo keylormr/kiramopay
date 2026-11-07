@@ -4,6 +4,9 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons, IconosLinea } from '../../components/Icons';
 import type { LucideIcon } from 'lucide-react';
 import { BottomSheet } from '../../components/BottomSheet';
+import { Icono3D } from '../../components/arte3d/Arte3D';
+import type { NombreIcono3D } from '../../components/arte3d/catalogo';
+import { EstadoVacio } from '../../components/EstadoVacio';
 import { getApiLayer } from '@/api';
 import { refreshAccounts } from '@/services/dataSync';
 import type { RideRequest, FoodOrder, Transaction } from '@/types';
@@ -36,8 +39,9 @@ const RIDE_STEPS = [
 ] as const;
 
 // Los socios y restaurantes no llevan logo propio (las marcas de terceros no
-// se dibujan sin licencia): su mosaico muestra el icono de linea de su
-// categoria y el nombre va al lado.
+// se dibujan sin licencia): su mosaico muestra el icono 3D de su categoria y el
+// nombre va al lado. Los chips de categoria, de 18 px, siguen con el icono de
+// linea: el dibujo 3D a ese tamano se ve como una mancha.
 type CategoriaDelMercado = 'transport' | 'food' | 'supermarket' | 'entertainment';
 const ICONO_DE_CATEGORIA: Record<CategoriaDelMercado | 'all', LucideIcon> = {
   all: IconosLinea.Todo,
@@ -46,15 +50,18 @@ const ICONO_DE_CATEGORIA: Record<CategoriaDelMercado | 'all', LucideIcon> = {
   supermarket: IconosLinea.Super,
   entertainment: IconosLinea.Ocio,
 };
-
-const MosaicoDeCategoria: React.FC<{ categoria: CategoriaDelMercado; className: string; tamano: number }> = ({ categoria, className, tamano }) => {
-  const Icono = ICONO_DE_CATEGORIA[categoria];
-  return (
-    <div className={`flex items-center justify-center bg-[var(--color-primary-soft)] text-[var(--color-primary)] dark:bg-[var(--color-surface-3-dark)] dark:text-[var(--color-primary-tint)] ${className}`}>
-      <Icono size={tamano} aria-hidden="true" />
-    </div>
-  );
+const ARTE_DE_CATEGORIA: Record<CategoriaDelMercado, NombreIcono3D> = {
+  transport: 'transporte',
+  food: 'comida',
+  supermarket: 'supermercado',
+  entertainment: 'entretenimiento',
 };
+
+const MosaicoDeCategoria: React.FC<{ categoria: CategoriaDelMercado; className: string; tamano: number }> = ({ categoria, className, tamano }) => (
+  <div className={`flex shrink-0 items-center justify-center bg-[var(--color-surface-2)] shadow-[inset_0_0_0_1px_var(--color-border-strong)] dark:bg-[var(--color-surface-2-dark)] dark:shadow-[inset_0_0_0_1px_var(--color-border-strong-dark)] ${className}`}>
+    <Icono3D nombre={ARTE_DE_CATEGORIA[categoria]} tamano={Math.max(28, tamano)} />
+  </div>
+);
 const RIDE_STATUS_INDEX: Record<string, number> = {
   confirmed: 0,
   arriving: 1,
@@ -494,10 +501,10 @@ export const MarketplaceView: React.FC = () => {
   }));
 
   return (
-    <div className="pb-24 pt-4 space-y-6 px-4">
+    <div className="@container/mercado pb-24 pt-4 space-y-6 px-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-black uv-text-primary mb-1">
+        <h1 className="text-2xl font-semibold uv-text-primary mb-1">
           {t('home_marketplace')}
         </h1>
         {/* El mismo texto de la tarjeta del Inicio. Antes decia "Paga con
@@ -507,12 +514,12 @@ export const MarketplaceView: React.FC = () => {
       </div>
 
       {/* Categories */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 @min-[40rem]/mercado:flex-wrap @min-[40rem]/mercado:overflow-visible">
         {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id as typeof activeCategory)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
+            className={`kp-toque kp-foco flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap text-sm font-medium transition-colors duration-[var(--kp-mov-estado)] ease-kp ${
               activeCategory === cat.id
                 ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
                 : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
@@ -527,7 +534,7 @@ export const MarketplaceView: React.FC = () => {
       {/* Connected Apps */}
       {state.connectedPartners.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
+          <h3 className="text-sm font-semibold uv-text-muted mb-3">
             {t('market_connected_apps')}
           </h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
@@ -538,9 +545,9 @@ export const MarketplaceView: React.FC = () => {
                 <button
                   key={partnerId}
                   onClick={() => handleSelectPartner(partner)}
-                  className="flex flex-col items-center gap-2"
+                  className="kp-toque kp-foco flex flex-col items-center gap-2 rounded-2xl"
                 >
-                  <MosaicoDeCategoria categoria={partner.category} className="w-16 h-16 rounded-2xl" tamano={30} />
+                  <MosaicoDeCategoria categoria={partner.category} className="w-16 h-16 rounded-[20px]" tamano={44} />
                   <span className="text-xs font-medium uv-text-secondary">
                     {partner.name}
                   </span>
@@ -553,25 +560,34 @@ export const MarketplaceView: React.FC = () => {
 
       {/* Partners Grid */}
       <div>
-        <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
+        <h3 className="text-sm font-semibold uv-text-muted mb-3">
           {activeCategory === 'all' ? t('market_all_services') : categories.find(c => c.id === activeCategory)?.label}
         </h3>
-        <div className="grid grid-cols-2 gap-3">
-          {filteredPartners.map((partner) => (
-            <button
-              key={partner.id}
-              onClick={() => handleSelectPartner(partner)}
-              className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary transition-colors relative"
-            >
-              {isConnected(partner.id) && (
-                <span className="absolute top-2 right-2 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-surface-dark" />
-              )}
-              <MosaicoDeCategoria categoria={partner.category} className="w-14 h-14 rounded-xl mb-3" tamano={28} />
-              <p className="font-bold uv-text-primary">{partner.name}</p>
-              <p className="text-xs text-gray-500 mt-1">{t(partner.descriptionKey)}</p>
-            </button>
-          ))}
-        </div>
+        {filteredPartners.length === 0 ? (
+          <EstadoVacio
+            icono="mercado"
+            titulo={t('help_no_results')}
+            descripcion={t('help_no_results_desc')}
+            className="uv-surface-1 rounded-[20px]"
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 @min-[40rem]/mercado:grid-cols-3 @min-[56rem]/mercado:grid-cols-4">
+            {filteredPartners.map((partner) => (
+              <button
+                key={partner.id}
+                onClick={() => handleSelectPartner(partner)}
+                className="kp-toque kp-foco uv-surface-1 rounded-[20px] p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary dark:hover:border-primary transition-colors duration-[var(--kp-mov-estado)] ease-kp relative"
+              >
+                {isConnected(partner.id) && (
+                  <span className="absolute top-3 right-3 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-surface-dark" />
+                )}
+                <MosaicoDeCategoria categoria={partner.category} className="w-14 h-14 rounded-[16px] mb-3" tamano={40} />
+                <p className="font-semibold uv-text-primary break-words">{partner.name}</p>
+                <p className="text-xs text-gray-500 mt-1">{t(partner.descriptionKey)}</p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Partner Connect Sheet */}
@@ -582,8 +598,8 @@ export const MarketplaceView: React.FC = () => {
       >
         {selectedPartner && (
           <div className="text-center py-4">
-            <MosaicoDeCategoria categoria={selectedPartner.category} className="w-24 h-24 rounded-3xl mx-auto mb-4" tamano={44} />
-            <h2 className="text-2xl font-black uv-text-primary mb-2">
+            <MosaicoDeCategoria categoria={selectedPartner.category} className="w-24 h-24 rounded-[28px] mx-auto mb-4" tamano={64} />
+            <h2 className="text-2xl font-semibold uv-text-primary mb-2">
               {selectedPartner.name}
             </h2>
             <p className="text-gray-500 mb-6">{t(selectedPartner.descriptionKey)}</p>
@@ -774,7 +790,7 @@ export const MarketplaceView: React.FC = () => {
               <div className="uv-surface-2 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="uv-text-muted">{t('market_total_to_pay')}</span>
-                  <span className="font-black text-xl uv-text-primary">
+                  <span className="font-semibold text-xl uv-text-primary">
                     {formatCurrency(activeRide.estimatedPrice)}
                   </span>
                 </div>
@@ -823,7 +839,7 @@ export const MarketplaceView: React.FC = () => {
                   <p className="text-sm text-gray-500 mb-1">
                     {activeRide?.status === 'in_progress' ? t('market_ride_arrives_in') : t('market_ride_driver_arrives_in')}
                   </p>
-                  <p className="text-3xl font-black uv-text-primary">
+                  <p className="text-3xl font-semibold uv-text-primary">
                     {(activeRide?.minutesRemaining ?? 0) > 0 ? minutosEn(activeRide?.minutesRemaining ?? 0) : t('market_very_soon')}
                   </p>
                 </div>
@@ -909,7 +925,7 @@ export const MarketplaceView: React.FC = () => {
                     onClick={() => setSelectedRestaurant(rest)}
                     className="w-full flex items-center gap-4 uv-surface-2 p-4 rounded-xl"
                   >
-                    <MosaicoDeCategoria categoria="food" className="w-14 h-14 rounded-xl shrink-0" tamano={26} />
+                    <MosaicoDeCategoria categoria="food" className="w-14 h-14 rounded-[16px]" tamano={40} />
                     <div className="flex-1 text-left">
                       <p className="font-bold uv-text-primary">{rest.name}</p>
                       <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -940,7 +956,7 @@ export const MarketplaceView: React.FC = () => {
                 </button>
 
                 <div className="flex items-center gap-4 mb-6">
-                  <MosaicoDeCategoria categoria="food" className="w-16 h-16 rounded-xl shrink-0" tamano={30} />
+                  <MosaicoDeCategoria categoria="food" className="w-16 h-16 rounded-[18px]" tamano={44} />
                   <div>
                     <h3 className="text-xl font-bold uv-text-primary">
                       {selectedRestaurant.name}
@@ -1045,7 +1061,7 @@ export const MarketplaceView: React.FC = () => {
               {activeOrder?.status !== 'delivered' && (
                 <div className="uv-surface-2 rounded-xl p-4 text-center">
                   <p className="text-sm text-gray-500 mb-1">{t('market_order_arrives_in')}</p>
-                  <p className="text-3xl font-black uv-text-primary">
+                  <p className="text-3xl font-semibold uv-text-primary">
                     {(activeOrder?.minutesRemaining ?? 0) > 0 ? minutosEn(activeOrder?.minutesRemaining ?? 0) : t('market_almost_ready')}
                   </p>
                 </div>
@@ -1090,7 +1106,7 @@ export const MarketplaceView: React.FC = () => {
                   </div>
                   <div className="flex justify-between pt-2 border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
                     <span className="font-bold uv-text-primary">{t('market_total_charged')}</span>
-                    <span className="font-black text-xl uv-text-primary">{formatCurrency(activeOrder.total)}</span>
+                    <span className="font-semibold text-xl uv-text-primary">{formatCurrency(activeOrder.total)}</span>
                   </div>
                 </div>
               )}

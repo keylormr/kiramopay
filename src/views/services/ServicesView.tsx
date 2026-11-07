@@ -2,12 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
-import {
-  Zap, Lightbulb, PlugZap, UtilityPole, Droplets, ShowerHead, Smartphone,
-  Signal, PhoneCall, Wifi, Tv, MonitorPlay, Cross, ShieldCheck, CarFront,
-  LayoutGrid, FileText,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Zap, Droplets, Smartphone, Wifi, Tv, FileText, LayoutGrid } from 'lucide-react';
+import { Icono3D } from '../../components/arte3d/Arte3D';
+import type { NombreIcono3D } from '../../components/arte3d/catalogo';
+import { EstadoVacio } from '../../components/EstadoVacio';
+import { Monto, BotonOcultarMontos } from '../../components/montos/MontoOcultable';
 import type { ServiceCatalog, ServiceOperatorInfo, ServiceProviderInfo } from '@/api';
 import { BottomSheet } from '../../components/BottomSheet';
 import { Button } from '../../components/ui/Button';
@@ -32,58 +31,78 @@ import {
 } from './llaveDelServicio';
 
 // Lo unico que la pantalla sabe por su cuenta de cada empresa u operador es su
-// dibujo y su color. QUE empresas y QUE operadores se ofrecen no vive aqui: sale
-// del servidor (GET /services/providers). La lista que estaba escrita a mano
-// tenia 15 empresas y 11 de ellas no existian alla: cada una respondia
+// dibujo. QUE empresas y QUE operadores se ofrecen no vive aqui: sale del
+// servidor (GET /services/providers). La lista que estaba escrita a mano tenia
+// 15 empresas y 11 de ellas no existian alla: cada una respondia
 // INVALID_PROVIDER, que la persona leia como "No se pudo completar la accion".
+// El dibujo es el icono 3D de la categoria del servicio (no hay logos de
+// terceros: las marcas no se dibujan sin licencia).
 interface Dibujo {
-  logo: LucideIcon;
-  color: string;
+  arte: NombreIcono3D;
 }
 
 const DIBUJO_DE_EMPRESA: Record<string, Dibujo> = {
-  ice: { logo: Zap, color: 'from-yellow-500 to-orange-500' },
-  cnfl: { logo: Lightbulb, color: 'from-yellow-400 to-yellow-600' },
-  esph: { logo: PlugZap, color: 'from-green-500 to-emerald-600' },
-  coopelesca: { logo: UtilityPole, color: 'from-blue-500 to-blue-600' },
-  aya: { logo: Droplets, color: 'from-blue-400 to-cyan-500' },
-  'esph-agua': { logo: ShowerHead, color: 'from-cyan-400 to-blue-500' },
-  kolbi: { logo: Smartphone, color: 'from-green-500 to-green-600' },
-  claro: { logo: Signal, color: 'from-red-500 to-red-600' },
-  movistar: { logo: PhoneCall, color: 'from-blue-500 to-indigo-600' },
-  tigo: { logo: Wifi, color: 'from-blue-600 to-blue-700' },
-  liberty: { logo: Tv, color: 'from-purple-500 to-purple-600' },
-  cabletica: { logo: MonitorPlay, color: 'from-orange-500 to-red-500' },
-  ccss: { logo: Cross, color: 'from-green-600 to-emerald-700' },
-  ins: { logo: ShieldCheck, color: 'from-blue-700 to-blue-800' },
-  marchamo: { logo: CarFront, color: 'from-gray-600 to-gray-700' },
+  ice: { arte: 'luz' },
+  cnfl: { arte: 'luz' },
+  esph: { arte: 'luz' },
+  coopelesca: { arte: 'luz' },
+  aya: { arte: 'agua' },
+  'esph-agua': { arte: 'agua' },
+  kolbi: { arte: 'telefonia' },
+  claro: { arte: 'telefonia' },
+  movistar: { arte: 'telefonia' },
+  tigo: { arte: 'internet' },
+  liberty: { arte: 'cable' },
+  cabletica: { arte: 'cable' },
 };
 
 // Una empresa nueva del servidor, sin dibujo propio, toma el de su categoria.
-const DIBUJO_DE_CATEGORIA: Record<string, Dibujo> = {
-  electricity: { logo: Zap, color: 'from-yellow-500 to-orange-500' },
-  water: { logo: Droplets, color: 'from-blue-400 to-cyan-500' },
-  telecom: { logo: Smartphone, color: 'from-green-500 to-green-600' },
-  internet: { logo: Wifi, color: 'from-blue-600 to-blue-700' },
+const ARTE_DE_CATEGORIA: Record<string, NombreIcono3D> = {
+  electricity: 'luz',
+  water: 'agua',
+  telecom: 'telefonia',
+  internet: 'internet',
+  cable: 'cable',
+  other: 'factura',
 };
 
-const DIBUJO_GENERICO: Dibujo = { logo: FileText, color: 'from-gray-500 to-gray-600' };
+const DIBUJO_GENERICO: Dibujo = { arte: 'factura' };
 
 const dibujoDeEmpresa = (codigo: string, categoria?: string): Dibujo =>
-  DIBUJO_DE_EMPRESA[codigo] ?? (categoria ? DIBUJO_DE_CATEGORIA[categoria] : undefined) ?? DIBUJO_GENERICO;
+  DIBUJO_DE_EMPRESA[codigo] ??
+  (categoria && ARTE_DE_CATEGORIA[categoria] ? { arte: ARTE_DE_CATEGORIA[categoria] } : undefined) ??
+  DIBUJO_GENERICO;
 
 // Los montos de recarga que se ofrecen por operador. Tampoco son una lista de
 // operadores: un operador que el servidor ofrece y no esta aqui usa los montos
 // de abajo.
 const MONTOS_POR_DEFECTO = [1000, 2000, 5000, 10000, 20000];
-const OPERADOR_CONOCIDO: Record<string, Dibujo & { montos: number[] }> = {
-  kolbi: { logo: Smartphone, color: 'from-green-500 to-green-600', montos: [1000, 2000, 3000, 5000, 10000, 20000] },
-  claro: { logo: Signal, color: 'from-red-500 to-red-600', montos: [1000, 2000, 5000, 10000, 15000, 20000] },
-  movistar: { logo: PhoneCall, color: 'from-blue-500 to-blue-600', montos: [1000, 2000, 5000, 10000, 20000] },
+const OPERADOR_CONOCIDO: Record<string, { montos: number[] }> = {
+  kolbi: { montos: [1000, 2000, 3000, 5000, 10000, 20000] },
+  claro: { montos: [1000, 2000, 5000, 10000, 15000, 20000] },
+  movistar: { montos: [1000, 2000, 5000, 10000, 20000] },
 };
 
-const dibujoDeOperador = (codigo: string): Dibujo & { montos: number[] } =>
-  OPERADOR_CONOCIDO[codigo] ?? { ...DIBUJO_GENERICO, logo: Smartphone, montos: MONTOS_POR_DEFECTO };
+const dibujoDeOperador = (codigo: string): Dibujo & { montos: number[] } => ({
+  arte: 'recarga',
+  montos: OPERADOR_CONOCIDO[codigo]?.montos ?? MONTOS_POR_DEFECTO,
+});
+
+// La placa donde se apoya un icono 3D: vidrio oscuro con borde fino, como las
+// del resto del rediseno. El icono ocupa algo mas de la mitad (nunca menos de 28).
+const PlacaDeArte: React.FC<{ arte: NombreIcono3D; lado?: number; icono?: number; className?: string }> = ({
+  arte,
+  lado = 44,
+  icono = 30,
+  className = '',
+}) => (
+  <div
+    style={{ width: lado, height: lado }}
+    className={`flex shrink-0 items-center justify-center rounded-[16px] bg-[var(--color-surface-2)] shadow-[inset_0_0_0_1px_var(--color-border-strong)] dark:bg-[var(--color-surface-2-dark)] dark:shadow-[inset_0_0_0_1px_var(--color-border-strong-dark)] ${className}`}
+  >
+    <Icono3D nombre={arte} tamano={icono} />
+  </div>
+);
 
 /** Una empresa tal como la pinta la pantalla: lo del servidor mas su dibujo. */
 type Empresa = ServiceProviderInfo & Dibujo;
@@ -494,32 +513,46 @@ export const ServicesView: React.FC = () => {
     </div>
   ) : null;
 
+  const clasePestana = (activa: boolean) =>
+    `kp-toque kp-foco flex flex-1 items-center justify-center gap-1.5 rounded-[14px] py-2.5 text-xs font-semibold transition-colors duration-[var(--kp-mov-estado)] ease-kp ${
+      activa
+        ? 'bg-white shadow-sm dark:bg-[var(--color-surface-3-dark)] uv-text-primary'
+        : 'text-gray-500 dark:text-[var(--color-text-secondary-dark)]'
+    }`;
+
+  const claseCarta =
+    'kp-toque kp-foco uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] transition-colors duration-[var(--kp-mov-estado)] ease-kp hover:border-primary dark:hover:border-primary disabled:opacity-50 disabled:hover:border-[var(--color-border)]';
+
+  const claseLista =
+    'uv-surface-1 rounded-[20px] divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]';
+
   return (
-    <div className="pb-24 pt-4 space-y-6 px-4">
+    <div className="@container/servicios pb-24 pt-4 space-y-6 px-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black uv-text-primary">
+        <h1 className="text-2xl font-semibold uv-text-primary">
           {t('nav_services')}
         </h1>
-        <div className="text-right">
-          <p className="text-xs text-gray-500">{t('available')}</p>
-          <p className="text-lg font-bold uv-text-primary">
-            {formatCurrency(balance)}
-          </p>
+        {/* El ojo va junto al saldo, a la vista en las tres pestanas: antes
+            solo estaba en Historial y desde Servicios no habia como destapar. */}
+        <div className="flex items-center gap-1">
+          <div className="text-right">
+            <p className="text-xs text-gray-500">{t('available')}</p>
+            <p className="text-lg font-semibold uv-text-primary">
+              <Monto>{formatCurrency(balance)}</Monto>
+            </p>
+          </div>
+          <BotonOcultarMontos className="-mr-2" />
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-xl" role="tablist">
+      <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] p-1 rounded-[18px]" role="tablist">
         <button
           onClick={() => { setActiveTab('services'); setAvisoDeLista(''); }}
           role="tab"
           aria-selected={activeTab === 'services'}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-            activeTab === 'services'
-              ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm'
-              : 'text-gray-500'
-          }`}
+          className={clasePestana(activeTab === 'services')}
         >
           <Icons.FileText size={14} />
           {t('nav_services')}
@@ -528,11 +561,7 @@ export const ServicesView: React.FC = () => {
           onClick={() => { setActiveTab('recharge'); setAvisoDeLista(''); }}
           role="tab"
           aria-selected={activeTab === 'recharge'}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-            activeTab === 'recharge'
-              ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm'
-              : 'text-gray-500'
-          }`}
+          className={clasePestana(activeTab === 'recharge')}
         >
           <Icons.Phone size={14} />
           {t('recharge_label')}
@@ -541,11 +570,7 @@ export const ServicesView: React.FC = () => {
           onClick={() => setActiveTab('history')}
           role="tab"
           aria-selected={activeTab === 'history'}
-          className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
-            activeTab === 'history'
-              ? 'bg-white dark:bg-gray-700 uv-text-primary shadow-sm'
-              : 'text-gray-500'
-          }`}
+          className={clasePestana(activeTab === 'history')}
         >
           <Icons.History size={14} />
           {t('history')}
@@ -561,7 +586,7 @@ export const ServicesView: React.FC = () => {
           {/* Servicios guardados */}
           {guardadosOfrecidos.length > 0 && (
             <div>
-              <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
+              <h3 className="text-sm font-semibold uv-text-muted mb-3">
                 {t('my_services')}
               </h3>
               <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
@@ -571,19 +596,17 @@ export const ServicesView: React.FC = () => {
                       key={saved.id}
                       onClick={() => handleSelectProvider(provider)}
                       disabled={!conveniosActivos}
-                      className="min-w-[140px] uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] disabled:opacity-50"
+                      className={`min-w-[140px] p-4 text-left ${claseCarta}`}
                     >
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-2`}>
-                        <provider.logo size={20} />
-                      </div>
+                      <PlacaDeArte arte={provider.arte} lado={44} icono={32} className="mb-2" />
                       <div className="text-left">
-                        <p className="font-bold uv-text-primary text-sm truncate">
+                        <p className="font-semibold uv-text-primary text-sm truncate">
                           {saved.nickname || provider.name}
                         </p>
                         <p className="text-xs text-gray-500">{saved.clientId}</p>
                         {saved.lastAmount && (
-                          <p className="text-sm font-bold text-orange-500 mt-1">
-                            {formatCurrency(saved.lastAmount)}
+                          <p className="text-sm font-semibold text-orange-500 mt-1">
+                            <Monto>{formatCurrency(saved.lastAmount)}</Monto>
                           </p>
                         )}
                       </div>
@@ -595,166 +618,166 @@ export const ServicesView: React.FC = () => {
           )}
 
           {datosDelCatalogo && empresas.length === 0 && (
-            <div className="uv-surface-1 rounded-2xl p-8 text-center">
-              <Icons.FileText size={48} className="mx-auto text-gray-300 mb-4" />
-              <p className="uv-text-muted">{t('services_no_providers')}</p>
-            </div>
+            <EstadoVacio icono="factura" titulo={t('services_no_providers')} className="uv-surface-1 rounded-[20px]" />
           )}
 
           {datosDelCatalogo && empresas.length > 0 && (
-            <>
-              {/* Búsqueda */}
-              <div className="relative">
-                <Icons.Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('search_service')}
-                  className="w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-11 pr-4 py-3 rounded-xl outline-none uv-text-primary placeholder-gray-400"
-                />
+            <div className={`flex flex-col gap-6 @min-[44rem]/servicios:grid @min-[44rem]/servicios:grid-cols-[16rem_minmax(0,1fr)] @min-[44rem]/servicios:items-start`}>
+              {/* Filtros: arriba en el telefono, a un lado en pantalla ancha */}
+              <div className="space-y-4">
+                {/* Búsqueda */}
+                <div className="relative">
+                  <Icons.Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t('search_service')}
+                    className="kp-foco w-full bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] pl-11 pr-4 py-3 rounded-[16px] outline-none uv-text-primary placeholder-gray-400"
+                  />
+                </div>
+
+                {/* Categorías: solo las que tienen empresas */}
+                {categoriasOfrecidas.length > 1 && (
+                  <div className={`flex gap-2 overflow-x-auto no-scrollbar pb-2 @min-[44rem]/servicios:flex-col @min-[44rem]/servicios:overflow-visible @min-[44rem]/servicios:pb-0`} role="tablist" aria-label={t('nav_services')}>
+                    {[{ id: 'all', label: 'cat_all', icon: LayoutGrid }, ...categoriasOfrecidas].map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedCategory(cat.id)}
+                        role="tab"
+                        aria-selected={categoriaActiva === cat.id}
+                        className={`kp-toque kp-foco flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors duration-[var(--kp-mov-estado)] ease-kp @min-[44rem]/servicios:w-full @min-[44rem]/servicios:rounded-[16px] @min-[44rem]/servicios:py-3 ${
+                          categoriaActiva === cat.id
+                            ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
+                            : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
+                        }`}
+                      >
+                        <cat.icon size={15} />
+                        {t(cat.label)}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Categorías: solo las que tienen empresas */}
-              {categoriasOfrecidas.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2" role="tablist" aria-label={t('nav_services')}>
-                  {[{ id: 'all', label: 'cat_all', icon: LayoutGrid }, ...categoriasOfrecidas].map((cat) => (
+              {/* Lista de proveedores */}
+              {filteredProviders.length === 0 ? (
+                <EstadoVacio
+                  icono="factura"
+                  titulo={t('help_no_results')}
+                  descripcion={t('help_no_results_desc')}
+                  className="uv-surface-1 rounded-[20px]"
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-3 @min-[60rem]/servicios:grid-cols-3">
+                  {filteredProviders.map((provider) => (
                     <button
-                      key={cat.id}
-                      onClick={() => setSelectedCategory(cat.id)}
-                      role="tab"
-                      aria-selected={categoriaActiva === cat.id}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
-                        categoriaActiva === cat.id
-                          ? 'bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white'
-                          : 'bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] uv-text-secondary'
-                      }`}
+                      key={provider.code}
+                      onClick={() => handleSelectProvider(provider)}
+                      disabled={!conveniosActivos}
+                      className={`p-4 text-left ${claseCarta}`}
                     >
-                      <cat.icon size={15} />
-                      {t(cat.label)}
+                      <PlacaDeArte arte={provider.arte} lado={56} icono={40} className="mb-3" />
+                      <p className="font-semibold uv-text-primary break-words">{provider.name}</p>
+                      <p className="text-xs text-gray-500">{provider.code.toUpperCase()}</p>
                     </button>
                   ))}
                 </div>
               )}
-
-              {/* Lista de proveedores */}
-              <div className="grid grid-cols-2 gap-3">
-                {filteredProviders.map((provider) => (
-                  <button
-                    key={provider.code}
-                    onClick={() => handleSelectProvider(provider)}
-                    disabled={!conveniosActivos}
-                    className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-left hover:border-primary dark:hover:border-primary transition-colors disabled:opacity-50 disabled:hover:border-[var(--color-border)]"
-                  >
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mb-3`}>
-                      <provider.logo size={24} />
-                    </div>
-                    <p className="font-bold uv-text-primary">{provider.name}</p>
-                    <p className="text-xs text-gray-500">{provider.code.toUpperCase()}</p>
-                  </button>
-                ))}
-              </div>
-            </>
+            </div>
           )}
         </>
       )}
 
       {activeTab === 'recharge' && (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
           {estadoDelCatalogo}
           {avisoSinConvenios}
           {avisoDeListaVieja}
 
-          {/* Operadores */}
-          {datosDelCatalogo && operadores.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
-                {t('select_operator')}
-              </h3>
-              <div className="grid grid-cols-3 gap-3">
-                {operadores.map((op) => (
-                  <button
-                    key={op.code}
-                    onClick={() => {
-                      if (!conveniosActivos) return;
-                      setSelectedOperator(op);
-                      setActionError('');
-                      setActionBlocked(false);
-                      setAvisoDeLista('');
-                      setShowRechargeSheet(true);
-                    }}
-                    disabled={!conveniosActivos}
-                    className="uv-surface-1 rounded-2xl p-4 border border-[var(--color-border)] dark:border-[var(--color-border-dark)] text-center hover:border-primary transition-colors disabled:opacity-50 disabled:hover:border-[var(--color-border)]"
-                  >
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mx-auto mb-2`}>
-                      <op.logo size={26} />
-                    </div>
-                    <p className="font-bold uv-text-primary">{op.name}</p>
-                  </button>
-                ))}
+          <div className={`flex flex-col gap-6 @min-[44rem]/servicios:grid @min-[44rem]/servicios:grid-cols-2 @min-[44rem]/servicios:items-start`}>
+            {/* Operadores */}
+            {datosDelCatalogo && operadores.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold uv-text-muted mb-3">
+                  {t('select_operator')}
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  {operadores.map((op) => (
+                    <button
+                      key={op.code}
+                      onClick={() => {
+                        if (!conveniosActivos) return;
+                        setSelectedOperator(op);
+                        setActionError('');
+                        setActionBlocked(false);
+                        setAvisoDeLista('');
+                        setShowRechargeSheet(true);
+                      }}
+                      disabled={!conveniosActivos}
+                      className={`p-4 text-center ${claseCarta}`}
+                    >
+                      <PlacaDeArte arte={op.arte} lado={56} icono={40} className="mx-auto mb-2" />
+                      <p className="font-semibold uv-text-primary break-words">{op.name}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Recargas recientes */}
-          {state.rechargeHistory.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
-                {t('recent_recharges')}
-              </h3>
-              <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
-                {state.rechargeHistory.slice(0, 5).map((recharge) => {
-                  const op = dibujoDeOperador(recharge.operatorId);
-                  return (
-                    <div key={recharge.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mr-3`}>
-                        <op.logo size={20} />
+            {/* Recargas recientes */}
+            {state.rechargeHistory.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold uv-text-muted mb-3">
+                  {t('recent_recharges')}
+                </h3>
+                <div className={claseLista}>
+                  {state.rechargeHistory.slice(0, 5).map((recharge) => {
+                    const op = dibujoDeOperador(recharge.operatorId);
+                    return (
+                      <div key={recharge.id} className="flex items-center p-4 gap-3">
+                        <PlacaDeArte arte={op.arte} lado={44} icono={32} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold uv-text-primary">{recharge.phone}</p>
+                          <p className="text-sm text-gray-500">{fechaCorta(recharge.dateISO, language) || recharge.date}</p>
+                        </div>
+                        <p className="font-semibold uv-text-primary">
+                          <Monto>{formatCurrency(recharge.amount)}</Monto>
+                        </p>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-bold uv-text-primary">{recharge.phone}</p>
-                        <p className="text-sm text-gray-500">{fechaCorta(recharge.dateISO, language) || recharge.date}</p>
-                      </div>
-                      <p className="font-bold uv-text-primary">
-                        {formatCurrency(recharge.amount)}
-                      </p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {activeTab === 'history' && (
-        <div className="space-y-6">
+        <div className={`flex flex-col gap-6 @min-[44rem]/servicios:grid @min-[44rem]/servicios:grid-cols-2 @min-[44rem]/servicios:items-start`}>
           {/* Pagos de servicios */}
           <div>
-            <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
+            <h3 className="mb-3 text-sm font-semibold uv-text-muted">
               {t('service_payments')}
             </h3>
             {state.billHistory.length === 0 ? (
-              <div className="uv-surface-1 rounded-2xl p-8 text-center">
-                <Icons.FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="uv-text-muted">{t('no_service_payments')}</p>
-              </div>
+              <EstadoVacio icono="factura" titulo={t('no_service_payments')} className="uv-surface-1 rounded-[20px]" />
             ) : (
-              <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+              <div className={claseLista}>
                 {state.billHistory.map((bill) => {
                   const provider = dibujoDeEmpresa(bill.providerId);
                   return (
-                    <div key={bill.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${provider.color} flex items-center justify-center text-white mr-3`}>
-                        <provider.logo size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-bold uv-text-primary">{bill.providerName}</p>
+                    <div key={bill.id} className="flex items-center p-4 gap-3">
+                      <PlacaDeArte arte={provider.arte} lado={44} icono={32} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold uv-text-primary">{bill.providerName}</p>
                         <p className="text-sm text-gray-500">{t('client_label')}: {bill.clientId}</p>
                         <p className="text-xs text-gray-400">{bill.period}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold uv-text-primary">
-                          {formatCurrency(bill.amount)}
+                        <p className="font-semibold uv-text-primary">
+                          <Monto>{formatCurrency(bill.amount)}</Monto>
                         </p>
                         <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                           {t('paid')}
@@ -767,33 +790,30 @@ export const ServicesView: React.FC = () => {
             )}
           </div>
 
-          {/* Recargas */}
+          {/* Recargas: el titulo ocupa la misma altura que el del lado, que lleva el ojo */}
           <div>
-            <h3 className="text-sm font-bold uv-text-muted uppercase mb-3">
-              {t('recharge_label')}
-            </h3>
+            <div className="flex items-center min-h-11 mb-3">
+              <h3 className="text-sm font-semibold uv-text-muted">
+                {t('recharge_label')}
+              </h3>
+            </div>
             {state.rechargeHistory.length === 0 ? (
-              <div className="uv-surface-1 rounded-2xl p-8 text-center">
-                <Icons.Phone size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="uv-text-muted">{t('no_recharges_yet')}</p>
-              </div>
+              <EstadoVacio icono="recarga" titulo={t('no_recharges_yet')} className="uv-surface-1 rounded-[20px]" />
             ) : (
-              <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
+              <div className={claseLista}>
                 {state.rechargeHistory.map((recharge) => {
                   const op = dibujoDeOperador(recharge.operatorId);
                   return (
-                    <div key={recharge.id} className="flex items-center p-4">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${op.color} flex items-center justify-center text-white mr-3`}>
-                        <op.logo size={20} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-bold uv-text-primary">{nombreDelOperador(recharge.operatorId)}</p>
+                    <div key={recharge.id} className="flex items-center p-4 gap-3">
+                      <PlacaDeArte arte={op.arte} lado={44} icono={32} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold uv-text-primary">{nombreDelOperador(recharge.operatorId)}</p>
                         <p className="text-sm text-gray-500">+506 {recharge.phone}</p>
                         <p className="text-xs text-gray-400">{fechaCorta(recharge.dateISO, language) || recharge.date}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold uv-text-primary">
-                          {formatCurrency(recharge.amount)}
+                        <p className="font-semibold uv-text-primary">
+                          <Monto>{formatCurrency(recharge.amount)}</Monto>
                         </p>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           recharge.status === 'completed'
@@ -821,9 +841,7 @@ export const ServicesView: React.FC = () => {
         <div className="space-y-6">
           {selectedProvider && (
             <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedProvider.color} flex items-center justify-center text-white`}>
-                <selectedProvider.logo size={26} />
-              </div>
+              <PlacaDeArte arte={selectedProvider.arte} lado={56} icono={40} />
               <div>
                 <p className="font-bold uv-text-primary">{selectedProvider.name}</p>
                 <p className="text-sm text-gray-500">{selectedProvider.code.toUpperCase()}</p>
@@ -885,9 +903,7 @@ export const ServicesView: React.FC = () => {
         <div className="space-y-6">
           {selectedOperator && (
             <div className="flex items-center gap-4 uv-surface-2 p-4 rounded-xl">
-              <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${selectedOperator.color} flex items-center justify-center text-white`}>
-                <selectedOperator.logo size={26} />
-              </div>
+              <PlacaDeArte arte={selectedOperator.arte} lado={56} icono={40} />
               <div>
                 <p className="font-bold uv-text-primary">{selectedOperator.name}</p>
                 <p className="text-sm text-gray-500">{t('prepaid_recharge')}</p>
@@ -960,7 +976,7 @@ export const ServicesView: React.FC = () => {
           <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
             <Icons.Check size={40} className="text-green-500" />
           </div>
-          <h2 className="text-2xl font-black uv-text-primary mb-2">
+          <h2 className="text-2xl font-semibold uv-text-primary mb-2">
             {lastPayment?.type === 'recharge'
               ? t(pagoYaHecho ? 'recharge_ya_hecho' : 'recharge_success')
               : t(pagoYaHecho ? 'bill_ya_hecho' : 'payment_success')}
@@ -974,7 +990,7 @@ export const ServicesView: React.FC = () => {
 
           {lastPayment && (
             <div className="uv-surface-2 rounded-2xl p-6 mb-6">
-              <p className="text-4xl font-black uv-text-primary">
+              <p className="text-4xl font-semibold uv-text-primary">
                 {formatCurrency(lastPayment.amount)}
               </p>
             </div>

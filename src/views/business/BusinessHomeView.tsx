@@ -365,7 +365,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
         />
         {canSeeBalance ? (
           <>
-            <span className="relative text-xs font-semibold uppercase tracking-wider text-white/70">
+            <span className="relative text-xs font-semibold text-white/70">
               {t('business_balance')}
             </span>
             <div className="relative text-3xl font-black mt-1 tabular-nums">
@@ -386,7 +386,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
           </>
         ) : (
           <>
-            <span className="relative text-xs font-semibold uppercase tracking-wider text-white/70">
+            <span className="relative text-xs font-semibold text-white/70">
               {t('business_sales_today')}
             </span>
             <div className="relative text-3xl font-black mt-1 mb-1 tabular-nums">
@@ -443,7 +443,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
 
       {/* Recent movements */}
       <div>
-        <h3 className="text-xs font-bold uv-text-muted uppercase tracking-wider mb-2">{t('business_movements')}</h3>
+        <h3 className="text-xs font-semibold uv-text-muted mb-2">{t('business_movements')}</h3>
         {paymentsFailed ? (
           <div className="space-y-2">
             <p className="text-sm uv-text-muted">{t('business_sales_load_failed')}</p>
@@ -509,7 +509,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
         <div className="space-y-4">
           {/* ── El rotulo ─────────────────────────────────────────────── */}
           <div className="flex flex-col items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
+            <span className="text-[11px] font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
               {cobro ? t('qr_cobrando').replace('{amount}', money(cobro.amount, cobro.currency)) : t('qr_rotulo_mostrador')}
             </span>
             <div ref={qrRef} className="bg-white p-4 rounded-2xl border border-gray-200">

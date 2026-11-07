@@ -149,7 +149,7 @@ describe('cartera: los porcentajes dicen de que son', () => {
   it('el encabezado rotula su ganancia o perdida como desde la compra', () => {
     montar();
 
-    const encabezado = screen.getByRole('heading', { level: 1 }).closest('.uv-gradient-brand') as HTMLElement;
+    const encabezado = screen.getByRole('heading', { level: 1 }).closest('.kp-tarjeta-metal') as HTMLElement;
     expect(within(encabezado).getByText('desde la compra')).toBeInTheDocument();
   });
 

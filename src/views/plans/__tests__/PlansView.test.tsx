@@ -65,7 +65,7 @@ describe('PlansView', () => {
       expect(within(encabezados[2]).getByText('$34.99')).toBeInTheDocument();
 
       expect(fila('Consultas al asistente por día')).toEqual(['2', '15', '50']);
-      expect(fila('Metas de ahorro activas')).toEqual(['3', '10', 'Sin tope']);
+      expect(fila('Metas activas')).toEqual(['3', '10', 'Sin tope']);
       expect(fila('Tarjetas virtuales activas')).toEqual(['1', '3', '5']);
     });
 
@@ -78,8 +78,8 @@ describe('PlansView', () => {
 
       montar();
 
-      expect(await screen.findByRole('rowheader', { name: 'Metas de ahorro activas' })).toBeInTheDocument();
-      await waitFor(() => expect(fila('Metas de ahorro activas')).toEqual(['5', '10', 'Sin tope']));
+      expect(await screen.findByRole('rowheader', { name: 'Metas activas' })).toBeInTheDocument();
+      await waitFor(() => expect(fila('Metas activas')).toEqual(['5', '10', 'Sin tope']));
       expect(screen.queryByRole('rowheader', { name: 'Consultas al asistente por día' })).toBeNull();
     });
 

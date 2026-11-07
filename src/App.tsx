@@ -277,6 +277,9 @@ const LockScreen = () => {
 
 // Tab definitions
 type TabId = 'home' | 'sinpe' | 'crypto' | 'services' | 'profile';
+
+// Pestanas que en la clase expandida usan la columna de 76rem (ver anchoDeColumna).
+const PESTANAS_ANCHAS: ReadonlySet<TabId> = new Set<TabId>(['home', 'sinpe', 'crypto', 'services', 'profile']);
 type OverlayView = 'notifications' | 'faq' | 'budget' | 'recurring' | 'transactions' | 'analytics' | 'savings' | 'splitpay' | 'loyalty' | 'escrow' | 'payout' | 'adminMerchants' | 'closedMerchants' | 'adminUsers' | 'adminDisputas' | 'adminPromociones' | 'adminCapital' | 'plans' | 'sessions' | 'assistant' | 'marketplace' | 'cards' | null;
 
 // Keyed by TabId on purpose: adding a tab without deciding whether deep links
@@ -551,13 +554,15 @@ const Layout = () => {
     return <LockScreen />;
   }
 
-  // La columna del contenido: 42rem para todo, salvo el Inicio personal en
-  // pantalla ancha, que se abre en dos columnas (saldo y acciones a un lado,
-  // actividad al otro) y necesita hasta 76rem. La barra superior va en la misma
-  // columna para que el titulo y la campana queden sobre los bordes del
-  // contenido.
+  // La columna del contenido: 42rem para todo, salvo las pestanas personales
+  // que en pantalla ancha se abren en columnas (Inicio: saldo y acciones a un
+  // lado, actividad al otro; SINPE, Cripto, Servicios y Perfil: ver cada vista)
+  // y necesitan hasta 76rem. Cada una decide sus columnas con una consulta de
+  // contenedor, asi que con el menu abierto o plegado se acomodan solas. La
+  // barra superior va en la misma columna para que el titulo y la campana
+  // queden sobre los bordes del contenido.
   const anchoDeColumna =
-    claseDeVentana === 'expandida' && !businessMode && activeTab === 'home' ? 'max-w-[76rem]' : 'max-w-2xl';
+    claseDeVentana === 'expandida' && !businessMode && PESTANAS_ANCHAS.has(activeTab) ? 'max-w-[76rem]' : 'max-w-2xl';
 
   const renderContent = () => {
     // Business mode replaces the personal tabs entirely: the owner is acting as
@@ -674,7 +679,7 @@ const Layout = () => {
         )}
         <div className="flex items-center gap-2">
           {state.settings.offlineMode && (
-            <span aria-live="polite" className="px-2 py-0.5 uv-chip-danger text-[10px] font-bold uppercase tracking-wider rounded-md">
+            <span aria-live="polite" className="px-2 py-0.5 uv-chip-danger text-[10px] font-semibold rounded-md">
               Offline
             </span>
           )}
@@ -798,7 +803,7 @@ const Layout = () => {
           <AssistantView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'marketplace' && (
-          <OverlayShell title={t('home_marketplace')} onClose={() => setOverlayView(null)}>
+          <OverlayShell title={t('home_marketplace')} onClose={() => setOverlayView(null)} columna="64rem">
             <MarketplaceView />
           </OverlayShell>
         )}

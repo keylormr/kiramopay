@@ -426,7 +426,7 @@ export const AdminMerchantsView: React.FC<{ onClose: () => void }> = ({ onClose 
                     <li key={m.id} data-comercio={m.id} className="uv-surface-1 rounded-2xl uv-shadow-soft p-4">
                       <div className="flex items-start justify-between gap-3">
                         <p className="min-w-0 font-bold uv-text-primary truncate">{m.name}</p>
-                        <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${ESTADO_COLOR[cerrado ? 'closed' : m.verificationStatus]}`}>
+                        <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-md ${ESTADO_COLOR[cerrado ? 'closed' : m.verificationStatus]}`}>
                           {cerrado
                             ? t('merchant_status_closed')
                             : t(`merchant_status_${m.verificationStatus}` as Parameters<typeof t>[0])}

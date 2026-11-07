@@ -91,7 +91,7 @@ export const AdminCapitalView: React.FC<{ onClose: () => void }> = ({ onClose })
 
         {!cargando && !fallo && monedas?.map((m) => (
           <section key={m.moneda} aria-label={m.moneda} className="uv-surface-1 rounded-2xl uv-shadow-soft p-5">
-            <p className="text-xs font-semibold uv-text-muted uppercase tracking-wider">{m.moneda}</p>
+            <p className="text-xs font-semibold uv-text-muted">{m.moneda}</p>
             <p
               className={`mt-1 text-3xl font-extrabold tabular-nums ${m.enNegativo ? 'text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]' : 'uv-text-primary'}`}
             >

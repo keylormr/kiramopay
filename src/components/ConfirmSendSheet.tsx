@@ -1,36 +1,59 @@
 import React from 'react';
 import { BottomSheet } from './BottomSheet';
 import { Icons } from './Icons';
+import {
+  BotonDeRevision,
+  BotonSecundarioDeRevision,
+  CantidadGrande,
+  CaraDeRevision,
+  CifraGrande,
+  FilasDeRevision,
+  type FilaDeRevision,
+} from './envio/PiezasDeRevision';
 import { useLanguage } from '@/i18n/LanguageContext';
-import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { iniciales } from '@/utils/arteDelMovimiento';
+import type { CurrencyCode } from '@/utils/money';
 
 interface Row {
   label: string;
   value: string;
+  /** Una linea chica bajo el valor ("la paga quien envia"). */
+  note?: string;
+  tone?: 'exito' | 'peligro';
 }
 
 interface ConfirmSendSheetProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  /** Fiat amount, formatted with formatMoney(currency). Ignored when amountDisplay is set. */
+  /** Monto en dinero (colones, dolares), dibujado en grande. */
   amount?: number;
   currency?: CurrencyCode;
-  /** Pre-formatted headline (e.g. crypto "0.5 BTC") — overrides amount/currency. */
+  /** Una cantidad que no es dinero (0.0050125 BTC): la cifra y su unidad. */
+  quantity?: { value: string; unit: string };
+  /** Texto ya formateado, si no hay amount ni quantity. */
   amountDisplay?: string;
-  /** Recap rows (recipient, reference, fee...) — labels already translated by the caller. */
+  /** Quien recibe: va arriba, antes del monto (a quien, despues cuanto). */
+  recipient?: string;
+  /** Una linea bajo el nombre (la red, el canal). */
+  recipientDetail?: string;
+  /** La placa de arriba: un logo o un icono. Sin ella, las iniciales de quien recibe. */
+  face?: React.ReactNode;
+  /** Lo que va a pasar, con las etiquetas ya traducidas. */
   rows: Row[];
   processing?: boolean;
-  /** Optional caution note (e.g. irreversibility) rendered in the warning tint. */
+  /** Aviso en amarillo (por ejemplo, que no se deshace). */
   warning?: string;
   title?: string;
+  /** Lo que hace el boton, con la cifra ("Enviar 0.005 BTC"). */
   confirmLabel?: string;
 }
 
 /**
- * A review-before-send confirmation sheet. Moving money is irreversible on the
- * ledger, so every money-move flow should pause here with a recap of amount +
- * recipient before the final commit. Reusable across SINPE, QR, and crypto.
+ * Revisar antes de mover dinero, con la forma de la revision de SINPE del
+ * rediseno (HojaRevisarEnvio): a quien, cuanto en grande, que va a pasar, un
+ * aviso si hace falta y un solo boton que dice lo que hace. Mover dinero no se
+ * deshace en el libro: esta hoja es la pausa. La usa el envio de cripto.
  */
 export const ConfirmSendSheet: React.FC<ConfirmSendSheetProps> = ({
   isOpen,
@@ -38,7 +61,11 @@ export const ConfirmSendSheet: React.FC<ConfirmSendSheetProps> = ({
   onConfirm,
   amount,
   currency = 'CRC',
+  quantity,
   amountDisplay,
+  recipient,
+  recipientDetail,
+  face,
   rows,
   processing = false,
   warning,
@@ -46,66 +73,44 @@ export const ConfirmSendSheet: React.FC<ConfirmSendSheetProps> = ({
   confirmLabel,
 }) => {
   const { t } = useLanguage();
-  const headline = amountDisplay ?? formatMoney(amount ?? 0, currency);
+  const filas: FilaDeRevision[] = rows.map((r) => ({ clave: r.label, etiqueta: r.label, valor: r.value, nota: r.note, tono: r.tone }));
+  const cara = face ?? (recipient ? <span aria-hidden="true">{iniciales(recipient)}</span> : null);
 
   return (
-    <BottomSheet isOpen={isOpen} onClose={onClose} title={title || t('confirm')} dismissable={!processing}>
-      <div className="space-y-5">
-        <div className="text-center py-2">
-          <p className="text-xs uv-text-muted uppercase tracking-wider font-bold mb-1">
-            {t('amount')}
-          </p>
-          <p className="text-4xl font-black uv-text-primary tracking-tight">
-            {headline}
-          </p>
+    <BottomSheet isOpen={isOpen} onClose={onClose} title={title || t('envio_revisar_titulo')} dismissable={!processing}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col items-center pt-1 text-center">
+          {cara && <CaraDeRevision>{cara}</CaraDeRevision>}
+          {recipient && <p className="mt-3 max-w-full break-words text-[17px] font-semibold uv-text-primary">{recipient}</p>}
+          {recipientDetail && <p className="mt-0.5 text-[13px] uv-text-muted">{recipientDetail}</p>}
+          <div className="mt-5 w-full">
+            {quantity ? (
+              <CantidadGrande cantidad={quantity.value} unidad={quantity.unit} />
+            ) : amountDisplay !== undefined ? (
+              <p className="kp-num text-4xl font-semibold tracking-[-0.03em] uv-text-primary">{amountDisplay}</p>
+            ) : (
+              <CifraGrande valor={amount ?? 0} moneda={currency} />
+            )}
+          </div>
         </div>
 
-        <div className="uv-surface-2 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">
-          {rows.map((r) => (
-            <div key={r.label} className="flex items-center justify-between gap-4 px-4 py-3">
-              <span className="text-sm uv-text-muted flex-shrink-0">{r.label}</span>
-              <span className="text-sm font-semibold uv-text-primary text-right truncate">
-                {r.value}
-              </span>
-            </div>
-          ))}
-        </div>
+        <FilasDeRevision filas={filas} />
 
         {warning && (
-          <div className="flex items-start gap-2 p-3 rounded-xl bg-[var(--color-warning-soft)]">
-            <Icons.AlertTriangle
-              size={18}
-              className="text-[var(--color-warning)] flex-shrink-0 mt-0.5"
-            />
-            <p className="text-xs text-[var(--color-warning)] leading-relaxed">{warning}</p>
+          <div className="flex items-start gap-2.5 rounded-2xl bg-[var(--color-warning-soft)] p-3.5">
+            <Icons.AlertTriangle size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--color-warning-strong)] dark:text-[var(--color-warning-strong-dark)]" />
+            <p className="text-[13px] leading-relaxed uv-text-primary">{warning}</p>
           </div>
         )}
 
-        <div className="flex gap-3">
-          <button
-            onClick={onClose}
-            disabled={processing}
-            className="flex-1 py-4 rounded-xl font-bold uv-surface-2 uv-text-secondary border border-[var(--color-border)] dark:border-[var(--color-border-dark)] active:scale-[0.98] transition-all disabled:opacity-50 uv-focus-ring"
-          >
-            {t('cancel')}
-          </button>
-          <button
+        <div className="flex flex-col gap-1">
+          <BotonDeRevision
             onClick={onConfirm}
-            disabled={processing}
-            className="flex-[1.5] py-4 rounded-xl font-bold text-white bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 flex items-center justify-center gap-2 active:scale-[0.98] transition-all uv-shadow-primary uv-focus-ring"
-          >
-            {processing ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                {t('processing')}
-              </>
-            ) : (
-              <>
-                <Icons.Check size={20} />
-                {confirmLabel || t('confirm')}
-              </>
-            )}
-          </button>
+            procesando={processing}
+            etiqueta={confirmLabel || t('confirm')}
+            etiquetaProcesando={t('processing')}
+          />
+          <BotonSecundarioDeRevision onClick={onClose} disabled={processing}>{t('cancel')}</BotonSecundarioDeRevision>
         </div>
       </div>
     </BottomSheet>

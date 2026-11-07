@@ -8,6 +8,7 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { CampoMonto } from '@/components/CampoMonto';
+import { EstadoVacio } from '@/components/EstadoVacio';
 import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { rellenar } from '@/utils/planes';
 import { esFechaValida, fechaCorta, hoyLocal, siguienteFecha } from '@/utils/pagosFijos';
@@ -264,17 +265,18 @@ export const RecurringView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
             </Button>
           </div>
         ) : payments.length === 0 ? (
-          <div className="mx-auto flex max-w-sm flex-col items-center py-16 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--color-primary-soft)]">
-              <Icons.Calendar size={30} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)]" />
-            </div>
-            <h2 className="text-lg font-bold uv-text-primary">{t('recurring_empty_title')}</h2>
-            <p className="mt-1.5 text-sm leading-relaxed uv-text-secondary">{t('recurring_empty_desc')}</p>
-            <p className="mt-3 text-xs leading-relaxed uv-text-muted">{t('recurring_manual_note')}</p>
-            <Button className="mt-6" leftIcon={<Icons.Plus size={18} />} onClick={() => setVerNuevo(true)}>
+          <EstadoVacio
+            ilustracion="sinPagosFijos"
+            titulo={t('recurring_empty_title')}
+            descripcion={t('recurring_empty_desc')}
+            comoTitulo="h2"
+            className="py-16"
+          >
+            <p className="text-xs leading-relaxed uv-text-muted">{t('recurring_manual_note')}</p>
+            <Button leftIcon={<Icons.Plus size={18} />} onClick={() => setVerNuevo(true)}>
               {t('recurring_new')}
             </Button>
-          </div>
+          </EstadoVacio>
         ) : (
           <div className="space-y-6">
             <p className="flex gap-2 rounded-2xl border border-[var(--color-border)] p-3 text-xs leading-relaxed uv-text-secondary dark:border-[var(--color-border-dark)]">

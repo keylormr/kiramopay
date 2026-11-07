@@ -182,7 +182,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
         </div>
         <h2 className="text-lg font-bold uv-text-primary">{merchant.name}</h2>
         <p className="text-sm uv-text-muted">{cat}</p>
-        <span className={`inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md mt-2 ${STATUS_COLOR[merchant.verificationStatus]}`}>
+        <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-md mt-2 ${STATUS_COLOR[merchant.verificationStatus]}`}>
           {t(`merchant_status_${merchant.verificationStatus}` as Parameters<typeof t>[0])}
         </span>
         {merchant.verificationStatus === 'rejected' && merchant.rejectionReason && (
@@ -192,7 +192,7 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
 
       {/* Tu rol y, si no eres el dueno, quien es: a quien pedirle un permiso. */}
       <section aria-labelledby={idRol} className="uv-surface-1 rounded-2xl uv-shadow-soft overflow-hidden">
-        <h3 id={idRol} className="px-4 pt-3.5 pb-1 text-xs font-bold uv-text-muted uppercase tracking-wider">
+        <h3 id={idRol} className="px-4 pt-3.5 pb-1 text-xs font-semibold uv-text-muted">
           {t('business_you_title')}
         </h3>
         <div className="divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)]">

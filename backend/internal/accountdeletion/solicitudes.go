@@ -577,7 +577,7 @@ func (s *Service) Procesar(ctx context.Context, solicitudID, adminID string) (*A
 // en la frase generica (motivosDe).
 var frasesDeBloqueo = map[string]string{
 	BloqueoSaldo:             "tienes saldo en tu billetera: envíalo, retíralo o gástalo hasta dejarla en cero",
-	BloqueoAhorros:           "tienes dinero en tus metas de ahorro: pásalo a tu billetera",
+	BloqueoAhorros:           "tienes dinero en tus metas: pásalo a tu billetera",
 	BloqueoCripto:            "tienes criptomonedas: véndelas o envíalas",
 	BloqueoStaking:           "tienes cripto en staking: retírala",
 	BloqueoSaldoRegional:     "tienes saldo en una billetera regional",

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Icons } from '../../components/Icons';
+import { EstadoVacio } from '@/components/EstadoVacio';
 import { Notification } from '../../types';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { fechaYHora } from '@/utils/fechaPlazo';
@@ -84,15 +85,12 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
       )}
 
       {notifications.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="w-16 h-16 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
-            <Icons.Bell size={32} className="uv-text-muted" />
-          </div>
-          <h3 className="text-base font-semibold mb-1">{t('notif_empty_title')}</h3>
-          <p className="uv-text-muted text-sm text-center">
-            {t('notif_empty_desc')}
-          </p>
-        </div>
+        <EstadoVacio
+          ilustracion="sinAvisos"
+          titulo={t('notif_empty_title')}
+          descripcion={t('notif_empty_desc')}
+          className="py-6"
+        />
       ) : (
         <ul role="list" className="space-y-3">
           {notifications.map((notification) => (

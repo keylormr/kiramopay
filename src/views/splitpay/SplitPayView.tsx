@@ -4,6 +4,8 @@ import { Icons } from '@/components/Icons';
 import { BottomSheet } from '@/components/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { CampoMonto } from '@/components/CampoMonto';
+import { EstadoVacio } from '@/components/EstadoVacio';
+import { Monto, BotonOcultarMontos } from '@/components/montos/MontoOcultable';
 import { getApiLayer } from '@/api';
 import { formatMoney } from '@/utils/money';
 import type { SplitGroup, SplitShare } from '@/api/repositories/splitpay.repository';
@@ -310,9 +312,12 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           <Icons.ChevronLeft size={20} />
         </button>
         <h1 className="text-lg font-bold">{t('splitpay_title')}</h1>
-        <button onClick={() => setShowCreate(true)} aria-label={t('splitpay_create')} className="p-2 -mr-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
-          <Icons.Plus size={20} />
-        </button>
+        <div className="flex items-center -mr-2">
+          <BotonOcultarMontos />
+          <button onClick={() => setShowCreate(true)} aria-label={t('splitpay_create')} className="p-2 rounded-full hover:bg-[var(--color-surface-muted)] dark:hover:bg-[var(--color-surface-muted-dark)] transition-colors text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
+            <Icons.Plus size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pb-8">
@@ -333,16 +338,17 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </button>
           </div>
         ) : splits.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-gray-400">
-            <div className="w-24 h-24 rounded-3xl bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] flex items-center justify-center mb-4">
-              <Icons.Users size={48} className="opacity-30" />
-            </div>
-            <p className="text-lg font-bold mb-2 uv-text-primary">{t('splitpay_no_splits')}</p>
-            <p className="text-sm text-center mb-6">{t('splitpay_no_splits_desc')}</p>
+          <EstadoVacio
+            ilustracion="sinDivisiones"
+            titulo={t('splitpay_no_splits')}
+            descripcion={t('splitpay_no_splits_desc')}
+            comoTitulo="h2"
+            className="py-16"
+          >
             <Button variant="primary" size="md" onClick={() => setShowCreate(true)}>
               {t('splitpay_create')}
             </Button>
-          </div>
+          </EstadoVacio>
         ) : (
           <div className="px-4 py-4 space-y-3">
             {splits.map((split, i) => (
@@ -364,7 +370,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-extrabold uv-text-primary">
-                    {formatMoney(split.totalAmount, split.currency as 'CRC' | 'USD')}
+                    <Monto>{formatMoney(split.totalAmount, split.currency as 'CRC' | 'USD')}</Monto>
                   </span>
                   <span className="text-xs text-gray-400">
                     {split.splitType === 'equal' ? t('splitpay_equal') : t('splitpay_custom')}
@@ -380,7 +386,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
       <BottomSheet isOpen={showCreate} onClose={() => setShowCreate(false)} title={t('splitpay_create')}>
         <div className="space-y-4 pb-2">
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('splitpay_desc')}</label>
+            <label className="text-xs font-semibold text-gray-500 block mb-2">{t('splitpay_desc')}</label>
             <input
               type="text"
               value={title}
@@ -391,7 +397,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           </div>
 
           <div>
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-2">{t('amount')}</label>
+            <label className="text-xs font-semibold text-gray-500 block mb-2">{t('amount')}</label>
             <div className="flex items-center bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl px-4 py-3">
               <span className="text-lg font-bold text-gray-400 mr-2">₡</span>
               <CampoMonto value={totalAmount} onChange={setTotalAmount} placeholder="0"
@@ -412,7 +418,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           {/* Participants */}
           <div>
             <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t('splitpay_participants')}</label>
+              <label className="text-xs font-semibold text-gray-500">{t('splitpay_participants')}</label>
               <button onClick={addParticipant} className="text-[var(--color-primary)] dark:text-[var(--color-primary-light)] text-xs font-bold">+ {t('add')}</button>
             </div>
             <div className="space-y-2">
@@ -478,8 +484,9 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
           <div className="space-y-4 pb-2">
             <div>
               <h3 className="font-bold uv-text-primary">{detalle.group.title}</h3>
+              {/* El detalle respeta el ojo, como la lista de la que se abrio. */}
               <p className="text-2xl font-extrabold uv-text-primary mt-1">
-                {formatMoney(detalle.group.totalAmount, detalle.group.currency as 'CRC' | 'USD')}
+                <Monto>{formatMoney(detalle.group.totalAmount, detalle.group.currency as 'CRC' | 'USD')}</Monto>
               </p>
               {/* El estado del grupo: el detalle de una division cancelada no
                   decia que lo estaba. */}
@@ -522,7 +529,7 @@ export const SplitPayView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
                       </p>
                     </div>
                     <span className="text-sm font-bold uv-text-primary flex-shrink-0 ml-3">
-                      {formatMoney(cuota.amount, detalle.group.currency as 'CRC' | 'USD')}
+                      <Monto>{formatMoney(cuota.amount, detalle.group.currency as 'CRC' | 'USD')}</Monto>
                     </span>
                   </div>
                 );

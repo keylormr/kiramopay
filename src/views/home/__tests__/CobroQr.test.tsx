@@ -313,6 +313,54 @@ describe('Pagar un QR — el nonce y el doble cobro', () => {
   });
 });
 
+// La moneda la pone quien creo el codigo y el servidor no deja cambiarla
+// (qrpayment/service.go). La hoja tomaba la de la cuenta base en los codigos de
+// monto abierto: un codigo en dolares se rotulaba "Pagar ₡..." con el saldo de
+// colones al lado.
+describe('Pagar un QR — moneda y saldo de la revision', () => {
+  it('un codigo de monto abierto en dolares se revisa y se paga en dolares', async () => {
+    mocks.resolveQr.mockResolvedValue({
+      success: true,
+      data: { kind: 'code', merchantName: 'Soda Tica', currency: 'USD', amount: 0, qrCodeId: 'code-1' },
+    });
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    expect(screen.getByLabelText('Monto (USD)')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText('0.00'), '10');
+    await user.click(screen.getByRole('button', { name: 'Pagar $10.00' }));
+
+    await waitFor(() => {
+      expect(mocks.scanAndPay).toHaveBeenCalledWith(expect.objectContaining({ amount: 10, currency: 'USD' }));
+    });
+  });
+
+  it('con el saldo en rojo el boton no ofrece un pago que no alcanza', async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole('button', { name: /escanear/i }));
+    await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
+    await screen.findByText('Soda Tica');
+    await user.type(screen.getByPlaceholderText('0.00'), '900000');
+
+    expect(screen.getByText('Fondos insuficientes')).toBeInTheDocument();
+    const pagar = screen.getByRole('button', { name: 'Pagar ₡900,000.00' });
+    expect(pagar).toBeDisabled();
+    await user.click(pagar);
+    expect(mocks.scanAndPay).not.toHaveBeenCalled();
+
+    // Con un monto que alcanza, el mismo boton vuelve a pagar.
+    await user.clear(screen.getByPlaceholderText('0.00'));
+    await user.type(screen.getByPlaceholderText('0.00'), '1000');
+    expect(screen.queryByText('Fondos insuficientes')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pagar ₡1,000.00' })).toBeEnabled();
+  });
+});
+
 // El estado del cobro llegaba en /qr/resolve y nadie lo leia: la hoja pintaba
 // un cobro ya pagado como vigente, con el boton Pagar habilitado, y el motivo
 // aparecia solo despues de intentarlo.
@@ -339,7 +387,7 @@ describe('Pagar un QR — cobro que ya no se puede pagar', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent(aviso);
     expect(screen.getByText('Si todavía debes ese monto, pide a quien te cobra un código nuevo.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pagar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Pagar/ })).toBeNull();
 
     // La unica salida es cerrar, y cerrar no intenta ningun pago.
     // Por su texto: la X de la hoja tambien se llama "Cerrar".
@@ -352,14 +400,14 @@ describe('Pagar un QR — cobro que ya no se puede pagar', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('El cobro cambió. Vuelve a escanear.');
     expect(screen.queryByText(/pide a quien te cobra/)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Pagar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Pagar/ })).toBeNull();
   });
 
   it('un cobro pendiente se paga como siempre', async () => {
     const user = await escanearCobro('pending');
 
     expect(screen.queryByRole('status')).toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
     await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(1));
   });
 });
@@ -374,7 +422,7 @@ describe('Pagar un QR — segundo factor en montos altos', () => {
     await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
     await screen.findByText('Soda Tica');
     await user.type(screen.getByPlaceholderText('0.00'), '150000');
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
   }
 
   it('pide el codigo y, al verificarlo, reintenta EL MISMO pago', async () => {
@@ -415,7 +463,7 @@ describe('Pagar un QR — segundo factor en montos altos', () => {
     expect(mocks.scanAndPay).toHaveBeenCalledTimes(1);
 
     // Volver a tocar Pagar es un intento nuevo, con su propia llave.
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
     await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
     expect(mocks.scanAndPay.mock.calls[1][0].idempotencyKey).not.toBe(mocks.scanAndPay.mock.calls[0][0].idempotencyKey);
   });
@@ -432,7 +480,7 @@ describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
     await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
     await screen.findByText('Soda Tica');
     await user.type(screen.getByPlaceholderText('0.00'), '1000');
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
   }
 
   it.each([
@@ -470,7 +518,7 @@ describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
     await pagar(user);
     expect(await screen.findByText(/^No pudimos confirmar el pago/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
     await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
     const primera = mocks.scanAndPay.mock.calls[0][0].idempotencyKey;
     expect(primera).toBeTruthy();
@@ -491,7 +539,7 @@ describe('Pagar un QR — cada rechazo en el idioma de la app', () => {
     await pagar(user);
     expect(await screen.findByText(/^El pago no quedó registrado/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
     await waitFor(() => expect(mocks.scanAndPay).toHaveBeenCalledTimes(2));
     const primera = mocks.scanAndPay.mock.calls[0][0].idempotencyKey;
     expect(primera).toBeTruthy();
@@ -526,7 +574,7 @@ describe('Pagar y cobrar con QR — el error se anuncia y queda a la vista', () 
     await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
     await screen.findByText('Soda Tica');
     await user.type(screen.getByPlaceholderText('0.00'), '1000');
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
 
     const aviso = await screen.findByRole('alert');
     expect(aviso).toHaveTextContent('Fondos insuficientes');
@@ -622,7 +670,7 @@ describe('Pagar un QR — el comprobante', () => {
     await user.click(await screen.findByRole('button', { name: 'simular-escaneo' }));
     await screen.findByText('Soda Tica');
     await user.type(screen.getByPlaceholderText('0.00'), '1000');
-    await user.click(screen.getByRole('button', { name: 'Pagar' }));
+    await user.click(screen.getByRole('button', { name: /^Pagar/ }));
   }
 
   it('escribe el monto con el formato de la app', async () => {
