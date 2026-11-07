@@ -5717,6 +5717,47 @@ paths:
         '500':
           description: REVOKE_FAILED
 
+  /api/v1/admin/users/{id}/history:
+    get:
+      tags: [Admin]
+      summary: What was done to one account (admin)
+      description: >-
+        Blocks, unblocks, closed sessions, scheduled expiry and plan changes
+        on the account, newest first, with the name of who did each one. Read
+        from the audit trail that every one of those actions already writes;
+        this route records nothing. The trail is written in the background
+        (flushed every two seconds), so an action made a moment ago can take
+        that long to show up. Shares the 30/min per-administrator budget with
+        the rest of account management.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: limit
+          in: query
+          required: false
+          description: Most events to return (default 30, at most 100).
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        '200':
+          description: The history (may be empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminHistoryEntry'
+        '400':
+          description: INVALID_ID (id is not a UUID)
+        '403':
+          description: FORBIDDEN (not an administrator)
+        '404':
+          description: USER_NOT_FOUND
+        '429':
+          description: RATE_LIMITED
+        '500':
+          description: HISTORY_FAILED
+
   # ── Admin: paid plan waiting list ─────────────────────────────────
   /api/v1/admin/plans/interest:
     get:
@@ -7668,6 +7709,53 @@ components:
         it, so none of those devices can renew back in.
       properties:
         revoked: { type: integer, example: 3 }
+
+    AdminHistoryEntry:
+      type: object
+      required: [id, action, actor_name, automatic, created_at]
+      description: >-
+        One thing that was done to an account, read from the audit trail. Only
+        the fields each action needs to be told come back; the raw details of
+        the trail, its IP addresses and user agents, do not.
+      properties:
+        id: { type: string, format: uuid }
+        action:
+          type: string
+          enum:
+            - user_blocked
+            - user_unblocked
+            - user_expiry_set
+            - admin_session_revoked
+            - admin_sessions_revoked_all
+            - admin_user_plan_set
+        actor_name:
+          type: string
+          description: >-
+            Who did it. Empty when no person did (the expiry sweep blocks with
+            `automatic` true) or when that account no longer exists.
+          example: Keilor Martinez
+        automatic:
+          type: boolean
+          description: True for the block the expiry sweep made when the date came.
+        reason:
+          type: string
+          description: The reason written when blocking (user_blocked only).
+        sessions_revoked:
+          type: integer
+          description: >-
+            Sessions closed (user_blocked and admin_sessions_revoked_all).
+            Absent when the trail did not record the count, which is not the
+            same as zero.
+        expires_at:
+          type: string
+          format: date-time
+          description: The scheduled expiry (user_expiry_set, when not cleared).
+        cleared:
+          type: boolean
+          description: The expiry was removed (user_expiry_set).
+        plan_from: { type: string, enum: [free, plus, pro] }
+        plan_to: { type: string, enum: [free, plus, pro] }
+        created_at: { type: string, format: date-time }
 
     EscrowCreateRequest:
       type: object

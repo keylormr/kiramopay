@@ -253,6 +253,24 @@ func (h *Handler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]int{"revoked": n})
 }
 
+// History — GET /api/v1/admin/users/{id}/history?limit=30 (admin)
+func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUserID(w, r)
+	if !ok {
+		return
+	}
+	entries, err := h.service.History(r.Context(), id, queryLimit(r))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "HISTORY_FAILED", "could not read the account history")
+		return
+	}
+	response.JSON(w, http.StatusOK, entries)
+}
+
 // pathUserID valida {id} como UUID antes de tocar el servicio; si no lo es,
 // responde 400 INVALID_ID y devuelve ok=false.
 func pathUserID(w http.ResponseWriter, r *http.Request) (string, bool) {

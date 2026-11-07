@@ -34,6 +34,23 @@ function mapSession(d: SessionDTO): DeviceSession {
   };
 }
 
+/**
+ * Las filas de una lista de sesiones. El stub de E2E responde `data: []` a toda
+ * ruta: lo que no sea un objeto no se mapea, en vez de producir filas vacias.
+ * Lo comparte el panel de administracion, que lee las sesiones de otra cuenta
+ * con la misma forma.
+ */
+export function mapearSesiones(data: unknown): DeviceSession[] {
+  const filas = Array.isArray(data) ? data.filter(esObjeto) : [];
+  return filas.map((d) => mapSession(d as SessionDTO));
+}
+
+/** Lee `{revoked: n}`; 0 si no viene un numero. */
+export function cuantasCerro(data: unknown): number {
+  const n = esObjeto(data) ? Number((data as RevokedDTO).revoked) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
 // El codigo del error viaja intacto: la pantalla traduce por codigo y nunca
 // muestra el texto crudo del servidor.
 function fail<T>(res: ApiResponse<unknown>): ApiResponse<T> {
@@ -46,10 +63,7 @@ export class HttpSessionsRepository implements ISessionsRepository {
   async listar(): Promise<ApiResponse<DeviceSession[]>> {
     const res = await this.client.get<unknown>('/api/v1/auth/sessions');
     if (!res.success) return fail(res);
-    // El stub de E2E responde `data: []` a toda ruta: lo que no sea un objeto
-    // no se mapea, en vez de producir filas vacias.
-    const filas = Array.isArray(res.data) ? res.data.filter(esObjeto) : [];
-    return apiSuccess(filas.map((d) => mapSession(d as SessionDTO)));
+    return apiSuccess(mapearSesiones(res.data));
   }
 
   async cerrar(id: string): Promise<ApiResponse<void>> {
@@ -64,7 +78,6 @@ export class HttpSessionsRepository implements ISessionsRepository {
   async cerrarLasDemas(): Promise<ApiResponse<number>> {
     const res = await this.client.post<unknown>('/api/v1/auth/sessions/revoke-others', {});
     if (!res.success) return fail(res);
-    const n = esObjeto(res.data) ? Number((res.data as RevokedDTO).revoked) : NaN;
-    return apiSuccess(Number.isFinite(n) ? n : 0);
+    return apiSuccess(cuantasCerro(res.data));
   }
 }

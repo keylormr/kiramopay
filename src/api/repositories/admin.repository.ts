@@ -1,5 +1,38 @@
 import type { ApiResponse } from '../types';
 import type { PlanPersonal } from './plans.repository';
+import type { DeviceSession } from './sessions.repository';
+
+/** Lo que el historial de una cuenta sabe contar. */
+export type AccionDeHistorial =
+  | 'user_blocked'
+  | 'user_unblocked'
+  | 'user_expiry_set'
+  | 'admin_session_revoked'
+  | 'admin_sessions_revoked_all'
+  | 'admin_user_plan_set';
+
+/**
+ * Algo que se le hizo a una cuenta, leido del rastro de auditoria. Solo trae lo
+ * que cada accion necesita para contarse: ni IP ni agente de usuario.
+ */
+export interface EventoDeHistorial {
+  id: string;
+  accion: AccionDeHistorial;
+  /** Quien lo hizo. Vacio si fue automatico o si esa cuenta ya no existe. */
+  actor: string;
+  /** El bloqueo que hizo el barrido al llegar el vencimiento. */
+  automatico: boolean;
+  /** Motivo escrito al bloquear; vacio en el resto. */
+  motivo: string;
+  /** Sesiones cerradas; null si el rastro no lo dice (no es lo mismo que cero). */
+  sesionesCerradas: number | null;
+  /** Fecha programada (ISO-8601) de un vencimiento; null si se quito o no aplica. */
+  venceEl: string | null;
+  vencimientoQuitado: boolean;
+  planAntes: PlanPersonal | null;
+  planDespues: PlanPersonal | null;
+  createdAt: string;
+}
 
 export type AdminUserStatus = 'active' | 'blocked' | 'suspended' | 'closed' | 'pending_deletion';
 
@@ -134,7 +167,7 @@ export interface ResultadoDeSolicitud {
 /**
  * Admin repository: remote account blocking. Like kyc/auth this ALWAYS talks
  * to the real backend (the role is enforced server-side); there is no mock
- * adapter.
+ * adapter. Las pruebas de vista lo reemplazan entero con vi.mock('@/api').
  */
 export interface IAdminRepository {
   /** Exact match by cedula/phone/email, or partial match by name (3+ chars). */
@@ -156,6 +189,26 @@ export interface IAdminRepository {
    * Bajar de plan no borra metas ni tarjetas: solo impide crear nuevas.
    */
   setUserPlan(id: string, plan: PlanPersonal): Promise<ApiResponse<PlanAsignado>>;
+
+  // ── Sesiones e historial de una cuenta ajena ──
+  /**
+   * Los dispositivos con sesion abierta de la cuenta, el mas reciente primero.
+   * Ninguno viene marcado como actual: el administrador no es esa persona.
+   */
+  listUserSessions(id: string): Promise<ApiResponse<DeviceSession[]>>;
+  /**
+   * Cierra UN dispositivo sin bloquear la cuenta: los demas siguen dentro.
+   * SESSION_NOT_FOUND si ya estaba cerrado. Queda en la auditoria.
+   */
+  revokeUserSession(id: string, sessionId: string): Promise<ApiResponse<void>>;
+  /** Cierra todos los dispositivos sin bloquear la cuenta. Devuelve cuantos cerro. */
+  revokeAllUserSessions(id: string): Promise<ApiResponse<number>>;
+  /**
+   * Lo que se le hizo a la cuenta (bloqueos, sesiones cerradas, vencimiento,
+   * plan), el mas reciente primero. El rastro se escribe en segundo plano: una
+   * accion recien hecha puede tardar un par de segundos en aparecer.
+   */
+  userHistory(id: string): Promise<ApiResponse<EventoDeHistorial[]>>;
 
   // ── Solicitudes de eliminacion de cuenta (pagina web) ──
   /** La cola: contacto verificado, la mas antigua primero. */
