@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
 import { Button } from '../../components/ui';
@@ -8,11 +8,39 @@ import type { VirtualCard } from '@/api/repositories/cards.repository';
 import { usePlanPersonal, useTarifas } from '@/hooks/usePlanes';
 import { mensajeDeTope, rellenar, topeDelError, type TopeAlcanzado } from '@/utils/planes';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
+import { formatMoney } from '@/utils/money';
 
 // Los rechazos viajan como codigo y el texto lo pone la pantalla: el del
 // servidor va en ingles y, ante un fallo, puede traer el de la base de datos.
 const CLAVES_DE_CREAR: Record<string, string> = { CARDHOLDER_NAME_MISSING: 'card_err_no_name' };
 const SIN_CLAVES_PROPIAS: Record<string, string> = {};
+
+/**
+ * Chip de contacto dibujado: oro con las placas de contacto. El rectangulo
+ * amarillo plano de antes no se leia como chip. Colores fijos: la tarjeta es
+ * la misma en los dos temas.
+ */
+const ChipDeTarjeta: React.FC<{ className?: string }> = ({ className }) => {
+  const id = useId();
+  return (
+    <svg width="44" height="34" viewBox="0 0 44 34" aria-hidden="true" focusable="false" className={`block drop-shadow-sm ${className ?? ''}`}>
+      <defs>
+        <linearGradient id={`${id}-oro`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#F7E7B0" />
+          <stop offset="0.5" stopColor="#DDB866" />
+          <stop offset="1" stopColor="#B8893A" />
+        </linearGradient>
+      </defs>
+      <rect x="0.5" y="0.5" width="43" height="33" rx="6.5" fill={`url(#${id}-oro)`} stroke="rgba(92,64,16,0.4)" />
+      <path
+        d="M14.5 0.5v33M29.5 0.5v33M0.5 11.5h14M0.5 22.5h14M29.5 11.5h14M29.5 22.5h14M14.5 17h15"
+        fill="none"
+        stroke="rgba(92,64,16,0.45)"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+};
 
 export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans }) => {
   const { t } = useLanguage();
@@ -83,8 +111,9 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
   const topeTarjetas = tarifas.planes[plan].topes.tarjetas;
   const enTope = topeTarjetas !== null && ocupan >= topeTarjetas;
 
-  const formatCRC = (n: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currencyDisplay: 'narrowSymbol', currency: 'CRC', maximumFractionDigits: 0 }).format(n);
+  // El formateador de toda la app (miles con coma, decision del dueno en
+  // utils/money.ts), sin decimales: los topes son montos redondos.
+  const formatCRC = (n: number) => formatMoney(n, 'CRC', { decimals: 0 });
 
   const handleCreate = async () => {
     if (!api || busy) return;
@@ -287,11 +316,12 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
                   (titular y marca) quedaba cortada por el borde. */}
               <div className="relative flex justify-between items-start mb-4 z-10">
                 <span className="font-bold text-lg tracking-wide opacity-90">KiramoPay</span>
-                <Icons.SignalHigh size={24} className="opacity-70" />
+                {/* Ondas de pago sin contacto; eran las barras de senal de un telefono. */}
+                <Icons.Nfc size={24} strokeWidth={1.75} className="opacity-80" aria-hidden="true" />
               </div>
 
               <div className="relative mb-4 z-10">
-                <div className="w-12 h-8 rounded-md mb-2 bg-gradient-to-br from-amber-200 to-yellow-400 uv-shadow-soft" />
+                <ChipDeTarjeta className="mb-2" />
                 <div className="font-mono text-2xl tracking-widest drop-shadow-md tabular-nums">
                   •••• •••• •••• {card.last4}
                 </div>
@@ -299,12 +329,12 @@ export const CardsView: React.FC<{ onOpenPlans?: () => void }> = ({ onOpenPlans 
 
               <div className="relative flex justify-between items-end gap-3 z-10">
                 <div className="min-w-0">
-                  <div className="text-[10px] opacity-70 uppercase tracking-widest mb-1">{t('card_holder')}</div>
+                  <div className="text-[11px] font-medium opacity-75 mb-0.5">{t('card_holder')}</div>
                   <div className="font-medium tracking-wide uppercase truncate">{card.cardholderName}</div>
                 </div>
                 {/* Decia VISA: prometia una red de pago a la que la tarjeta no
                     pertenece. Es una tarjeta de KiramoPay y se dice. */}
-                <div className="shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest opacity-80">
+                <div className="shrink-0 whitespace-nowrap text-[11px] font-semibold opacity-85">
                   {t('card_only_in_app')}
                 </div>
               </div>

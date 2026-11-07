@@ -560,7 +560,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
               {catalog.length > 0 && (
                 <div>
                   <label className="text-sm font-medium uv-text-secondary block mb-2">{t('business_catalog')}</label>
-                  <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden max-h-52 overflow-y-auto">
+                  <div className="uv-surface-1 rounded-2xl divide-y divide-[var(--color-border)] dark:divide-[var(--color-border-dark)] overflow-hidden max-h-52 overflow-y-auto overscroll-contain">
                     {catalog.map((c) => (
                       <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                         <div className="min-w-0">

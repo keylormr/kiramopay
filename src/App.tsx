@@ -43,7 +43,6 @@ import { OfflineBanner } from './components/OfflineBanner';
 import { instalarNavegacionPorCapas, retroceder, useCapa } from './navegacion/pilaDeCapas';
 import {
   BarraInferior,
-  BotonDelMenu,
   MenuModal,
   NavegacionLateral,
   useAtajoDelMenu,
@@ -618,6 +617,12 @@ const Layout = () => {
           ariaLabel={t('nav_main_aria')}
           nombreDeLaApp={t('app_name')}
           pie={pieDeNavegacion}
+          control={{
+            modalAbierto: menuModalAbierto,
+            onAlternar: alternarMenu,
+            etiquetas: { plegar: t('nav_menu_collapse'), desplegar: t('nav_menu_expand'), abrir: t('nav_menu_open') },
+          }}
+          refDelBoton={botonDelMenuRef}
         />
       )}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -630,19 +635,9 @@ const Layout = () => {
           max(56, margen + 44) y no margen + 56. */}
       <div className={`flex min-h-14 items-center justify-between gap-2 px-4 pt-safe ${claseDeVentana !== 'compacta' ? 'mx-auto w-full max-w-2xl' : ''}`}>
         {claseDeVentana !== 'compacta' ? (
-          // Con riel o menu lateral, la marca y el cambio de perfil ya estan en
-          // la navegacion: la barra dice donde esta la persona.
-          <div className="flex min-w-0 items-center gap-1.5">
-            <BotonDelMenu
-              ref={botonDelMenuRef}
-              clase={claseDeVentana}
-              plegado={menuPlegado}
-              modalAbierto={menuModalAbierto}
-              onAlternar={alternarMenu}
-              etiquetas={{ plegar: t('nav_menu_collapse'), desplegar: t('nav_menu_expand'), abrir: t('nav_menu_open') }}
-            />
-            <span className="text-lg font-semibold tracking-[-0.01em] uv-text-primary truncate">{tituloDeSeccion}</span>
-          </div>
+          // Con riel o menu lateral, la marca, el boton del menu y el cambio de
+          // perfil ya estan en la navegacion: la barra dice donde esta la persona.
+          <span className="min-w-0 text-lg font-semibold tracking-[-0.01em] uv-text-primary truncate">{tituloDeSeccion}</span>
         ) : (
         <button
           onClick={() => setShowSwitcher(true)}

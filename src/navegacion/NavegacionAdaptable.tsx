@@ -5,6 +5,7 @@ import { MarcaKiramo } from '../components/MarcaKiramo';
 import { IconosLinea } from '../components/Icons';
 import { enfocablesDentro } from './enfocables';
 import { esHojaSuperior, useCapa } from './pilaDeCapas';
+import { bloquearDesplazamiento } from './bloqueoDeDesplazamiento';
 
 /**
  * Navegacion principal segun el tamano de la ventana, con las clases de tamano
@@ -170,14 +171,21 @@ export const BarraInferior: React.FC<PropsComunes> = ({ elementos, actual, onEle
 
 /* ─── Piezas del menu (menu fijo, menu plegado y cajon modal) ────────────── */
 
-interface Pista {
+interface OpcionesDePista {
+  /** Tecla del atajo, al lado del nombre (el boton del menu). */
+  atajo?: string;
+  /** Debajo del elemento en vez de a su derecha (el boton con el menu abierto). */
+  abajo?: boolean;
+}
+
+interface Pista extends OpcionesDePista {
   texto: string;
   detalle?: string;
   top: number;
   left: number;
 }
 
-type MostrarPista = (el: HTMLElement, texto: string, detalle?: string) => void;
+type MostrarPista = (el: HTMLElement, texto: string, detalle?: string, opciones?: OpcionesDePista) => void;
 
 /** Solo con foco de teclado: un clic tambien enfoca, y ahi ya esta el puntero. */
 function tieneFocoVisible(el: HTMLElement): boolean {
@@ -193,16 +201,16 @@ function tieneFocoVisible(el: HTMLElement): boolean {
  * raton o teclado: con el dedo la pista quedaria pegada (un toque no tiene
  * salida del cursor) encima de la pantalla que se abre.
  */
-function manejadoresDePista(plegado: boolean, mostrar: MostrarPista, ocultar: () => void, texto: string, detalle?: string) {
+function manejadoresDePista(plegado: boolean, mostrar: MostrarPista, ocultar: () => void, texto: string, detalle?: string, opciones?: OpcionesDePista) {
   if (!plegado) return {};
   return {
     onPointerEnter: (e: React.PointerEvent<HTMLElement>) => {
       if (e.pointerType === 'touch' || e.pointerType === 'pen') return;
-      mostrar(e.currentTarget, texto, detalle);
+      mostrar(e.currentTarget, texto, detalle, opciones);
     },
     onPointerLeave: ocultar,
     onFocus: (e: React.FocusEvent<HTMLElement>) => {
-      if (tieneFocoVisible(e.currentTarget)) mostrar(e.currentTarget, texto, detalle);
+      if (tieneFocoVisible(e.currentTarget)) mostrar(e.currentTarget, texto, detalle, opciones);
     },
     onBlur: ocultar,
   };
@@ -325,21 +333,27 @@ const PieDelMenu: React.FC<{ pie: PieDeNavegacion; plegado: boolean; mostrarPist
  * accesible ya lo da el aria-label del boton, asi que la pista es solo visual.
  * Escape la cierra sin cerrar la pantalla de abajo (WCAG 1.4.13).
  */
-function usePista(activa: boolean) {
+function usePista(plegado: boolean) {
   const [pista, setPista] = useState<Pista | null>(null);
-  // Al desplegar, la pista se olvida: si no, al volver a plegar reaparece la
-  // ultima en su lugar viejo sin que el cursor este encima.
-  const [activaAntes, setActivaAntes] = useState(activa);
-  if (activaAntes !== activa) {
-    setActivaAntes(activa);
+  // Al plegar o desplegar, la pista se olvida: el elemento cambio de forma, y
+  // al volver a plegar reapareceria la ultima en su lugar viejo sin que el
+  // cursor este encima.
+  const [plegadoAntes, setPlegadoAntes] = useState(plegado);
+  if (plegadoAntes !== plegado) {
+    setPlegadoAntes(plegado);
     setPista(null);
   }
-  const mostrar = useCallback<MostrarPista>((el, texto, detalle) => {
+  const mostrar = useCallback<MostrarPista>((el, texto, detalle, opciones) => {
     const caja = el.getBoundingClientRect();
-    setPista({ texto, detalle, top: caja.top + caja.height / 2, left: caja.right + 12 });
+    // A la derecha, centrada en el alto del elemento; abajo, alineada con su
+    // borde izquierdo (centrada se saldria de la ventana por la izquierda).
+    const punto = opciones?.abajo
+      ? { top: caja.bottom + 6, left: caja.left }
+      : { top: caja.top + caja.height / 2, left: caja.right + 12 };
+    setPista({ texto, detalle, ...opciones, ...punto });
   }, []);
   const ocultar = useCallback(() => setPista(null), []);
-  const visible = activa ? pista : null;
+  const visible = pista;
   useEffect(() => {
     if (!visible) return;
     const alTeclear = (evento: KeyboardEvent) => {
@@ -351,15 +365,26 @@ function usePista(activa: boolean) {
     window.addEventListener('keydown', alTeclear, true);
     return () => window.removeEventListener('keydown', alTeclear, true);
   }, [visible]);
+  // El ancla es un punto sin tamano: a la derecha, una fila de alto 0 que
+  // centra la burbuja en vertical; abajo, la burbuja cuelga de el. Sin
+  // translate: la animacion de entrada usa transform y lo pisaria.
   const nodo = visible ? createPortal(
     <span
       aria-hidden="true"
       data-pista=""
+      data-lado={visible.abajo ? 'abajo' : 'derecha'}
       style={{ top: visible.top, left: visible.left }}
-      className="kp-pista pointer-events-none fixed z-[70] -translate-y-1/2 whitespace-nowrap rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface-3)] px-2.5 py-1.5 text-xs font-medium uv-text-primary uv-shadow-floating dark:border-[var(--color-border-strong-dark)] dark:bg-[var(--color-surface-3-dark)]"
+      className={`pointer-events-none fixed z-[70] flex ${visible.abajo ? 'items-start' : 'h-0 items-center'}`}
     >
-      {visible.texto}
-      {visible.detalle && <span className="block font-normal uv-text-secondary">{visible.detalle}</span>}
+      <span className="kp-pista whitespace-nowrap rounded-lg border border-[var(--color-border-strong)] bg-[var(--color-surface-3)] px-2.5 py-1.5 text-xs font-medium uv-text-primary uv-shadow-floating dark:border-[var(--color-border-strong-dark)] dark:bg-[var(--color-surface-3-dark)]">
+        {visible.texto}
+        {visible.atajo && (
+          <kbd className="ml-2 rounded-md border border-[var(--color-border-strong)] px-1.5 py-px font-sans text-[11px] font-medium uv-text-secondary dark:border-[var(--color-border-strong-dark)]">
+            {visible.atajo}
+          </kbd>
+        )}
+        {visible.detalle && <span className="block font-normal uv-text-secondary">{visible.detalle}</span>}
+      </span>
     </span>,
     document.body,
   ) : null;
@@ -377,13 +402,49 @@ interface PropsLaterales extends PropsComunes {
   /** La cuenta activa, al pie. */
   pie?: PieDeNavegacion;
   nombreDeLaApp: string;
+  /**
+   * Boton del menu, arriba a la izquierda de la propia navegacion: pliega el
+   * menu (expandida) o abre el cajon (mediana). Va aqui y no en la barra
+   * superior porque las pantallas completas tapan esa barra, y la navegacion
+   * sigue a la vista con cualquier pantalla abierta.
+   */
+  control?: ControlDelMenu;
+  /** El cajon devuelve el foco a este boton al cerrarse. */
+  refDelBoton?: React.Ref<HTMLButtonElement>;
+}
+
+export interface ControlDelMenu {
+  modalAbierto: boolean;
+  onAlternar: () => void;
+  etiquetas: { plegar: string; desplegar: string; abrir: string };
 }
 
 /** Riel (mediana) o menu lateral fijo, abierto o plegado (expandida). */
-export const NavegacionLateral: React.FC<PropsLaterales> = ({ clase, plegado = false, elementos, atajos = [], actual, onElegir, ariaLabel, pie, nombreDeLaApp }) => {
+export const NavegacionLateral: React.FC<PropsLaterales> = ({ clase, plegado = false, elementos, atajos = [], actual, onElegir, ariaLabel, pie, nombreDeLaApp, control, refDelBoton }) => {
   const esMenu = clase === 'expandida';
   const plegadoAqui = esMenu && plegado;
   const pista = usePista(plegadoAqui);
+
+  // El boton queda siempre en el mismo punto (centrado sobre la columna de
+  // iconos), abierto o plegado: volver a tocarlo no obliga a buscarlo. Su
+  // pista sale a la derecha sobre el riel y debajo con el menu abierto, para
+  // no tapar la marca.
+  const boton = control ? (
+    <BotonDelMenu
+      ref={refDelBoton}
+      clase={clase}
+      plegado={plegadoAqui}
+      modalAbierto={control.modalAbierto}
+      onAlternar={() => {
+        pista.ocultar();
+        control.onAlternar();
+      }}
+      etiquetas={control.etiquetas}
+      mostrarPista={pista.mostrar}
+      ocultarPista={pista.ocultar}
+      pistaAbajo={esMenu && !plegadoAqui}
+    />
+  ) : null;
 
   // Comun a los tres: el ancho es --kp-nav-ancho y cambia con la curva de hoja;
   // los margenes seguros se suman al relleno (no con .pt-safe/.pl-safe, que
@@ -395,9 +456,22 @@ export const NavegacionLateral: React.FC<PropsLaterales> = ({ clase, plegado = f
     return (
       <nav id={ID_MENU_LATERAL} role="navigation" aria-label={ariaLabel} data-navegacion="menu" data-plegado={plegadoAqui ? 'si' : 'no'} className={marco}>
         {/* Alto de la barra superior: la marca queda a la altura del titulo. */}
-        <div className="flex h-14 shrink-0 items-center gap-2.5 overflow-hidden px-6">
-          <MarcaDelMenu nombre={nombreDeLaApp} plegado={plegadoAqui} />
-        </div>
+        {boton ? (
+          <div className="flex h-14 shrink-0 items-center overflow-hidden px-4">
+            <span className="flex w-14 shrink-0 justify-center">{boton}</span>
+            {/* Plegado, la marca se va entera: el riel empieza con el boton. */}
+            <span
+              aria-hidden={plegadoAqui || undefined}
+              className={`flex items-center gap-2.5 transition-opacity duration-[var(--kp-mov-estado)] ease-kp ${plegadoAqui ? 'opacity-0' : 'opacity-100'}`}
+            >
+              <MarcaDelMenu nombre={nombreDeLaApp} plegado={false} />
+            </span>
+          </div>
+        ) : (
+          <div className="flex h-14 shrink-0 items-center gap-2.5 overflow-hidden px-6">
+            <MarcaDelMenu nombre={nombreDeLaApp} plegado={plegadoAqui} />
+          </div>
+        )}
         <ListaDelMenu
           elementos={elementos}
           atajos={atajos}
@@ -415,10 +489,14 @@ export const NavegacionLateral: React.FC<PropsLaterales> = ({ clase, plegado = f
 
   return (
     <nav id={ID_MENU_LATERAL} role="navigation" aria-label={ariaLabel} data-navegacion="riel" className={`${marco} items-center`}>
+      {/* Riel de Material 3: el boton del menu arriba y los destinos debajo.
+          El cajon abre con su propio boton de cerrar en este mismo punto. */}
       <div className="flex h-14 shrink-0 items-center">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl uv-gradient-brand">
-          <MarcaKiramo size={22} />
-        </span>
+        {boton ?? (
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl uv-gradient-brand">
+            <MarcaKiramo size={22} />
+          </span>
+        )}
       </div>
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto pt-3 [scrollbar-width:none]">
         {elementos.map(({ id, Icono, etiqueta }) => {
@@ -452,11 +530,12 @@ export const NavegacionLateral: React.FC<PropsLaterales> = ({ clase, plegado = f
           </button>
         </div>
       )}
+      {pista.nodo}
     </nav>
   );
 };
 
-/* ─── Boton del menu (barra superior) ────────────────────────────────────── */
+/* ─── Boton del menu ─────────────────────────────────────────────────────── */
 
 interface PropsBoton {
   clase: Exclude<ClaseDeVentana, 'compacta'>;
@@ -464,17 +543,30 @@ interface PropsBoton {
   modalAbierto: boolean;
   onAlternar: () => void;
   etiquetas: { plegar: string; desplegar: string; abrir: string };
+  /** Pista con el nombre y el atajo (raton y teclado). */
+  mostrarPista?: MostrarPista;
+  ocultarPista?: () => void;
+  pistaAbajo?: boolean;
 }
+
+const ningunaPista = () => {};
 
 /**
  * En expandida pliega o despliega el menu fijo; en mediana abre el menu
- * completo como cajon modal. La flecha del icono dice lo que va a pasar.
+ * completo como cajon modal. La flecha del icono dice lo que va a pasar, y la
+ * pista lo dice con palabras y con el atajo de teclado.
  */
-export const BotonDelMenu = forwardRef<HTMLButtonElement, PropsBoton>(function BotonDelMenu({ clase, plegado, modalAbierto, onAlternar, etiquetas }, ref) {
+export const BotonDelMenu = forwardRef<HTMLButtonElement, PropsBoton>(function BotonDelMenu(
+  { clase, plegado, modalAbierto, onAlternar, etiquetas, mostrarPista, ocultarPista = ningunaPista, pistaAbajo = false },
+  ref,
+) {
   const esModal = clase === 'mediana';
   const abierto = esModal ? modalAbierto : !plegado;
   const etiqueta = esModal ? etiquetas.abrir : plegado ? etiquetas.desplegar : etiquetas.plegar;
   const Icono = abierto && !esModal ? IconosLinea.MenuPlegar : IconosLinea.MenuDesplegar;
+  const pista = mostrarPista
+    ? manejadoresDePista(true, mostrarPista, ocultarPista, etiqueta, undefined, { atajo: teclaDelAtajo(), abajo: pistaAbajo })
+    : {};
   return (
     <button
       ref={ref}
@@ -485,9 +577,9 @@ export const BotonDelMenu = forwardRef<HTMLButtonElement, PropsBoton>(function B
       aria-controls={esModal ? ID_MENU_MODAL : ID_MENU_LATERAL}
       aria-haspopup={esModal ? 'dialog' : undefined}
       aria-keyshortcuts="Control+B Meta+B"
-      title={`${etiqueta} (${teclaDelAtajo()})`}
       data-boton-menu=""
-      className={`kp-toque kp-foco -ml-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full uv-text-secondary ${HOVER_SUAVE}`}
+      {...pista}
+      className={`kp-toque kp-foco flex h-11 w-11 shrink-0 items-center justify-center rounded-full uv-text-secondary ${HOVER_SUAVE}`}
     >
       <Icono size={22} />
     </button>
@@ -522,14 +614,7 @@ export const MenuModal: React.FC<PropsModal> = ({ abierto, onCerrar, elementos, 
   const idCapa = useCapa(abierto, 'hoja', onCerrar);
   const sinPista = useCallback(() => {}, []);
 
-  useEffect(() => {
-    if (!abierto) return;
-    const anterior = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = anterior;
-    };
-  }, [abierto]);
+  useEffect(() => (abierto ? bloquearDesplazamiento() : undefined), [abierto]);
 
   // Foco: entra al destino actual (o al primero) y al cerrar vuelve al boton.
   useEffect(() => {
@@ -537,6 +622,8 @@ export const MenuModal: React.FC<PropsModal> = ({ abierto, onCerrar, elementos, 
     const previo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const boton = devolverFocoA?.current ?? null;
     const panel = panelRef.current;
+    // La pantalla completa que ya estaba abierta antes del cajon.
+    const capaAntes = document.querySelector<HTMLElement>('.kp-capa');
     const temporizador = setTimeout(() => {
       if (!panel || panel.contains(document.activeElement)) return;
       const destino = panel.querySelector<HTMLElement>('[aria-current="page"]') ?? enfocablesDentro(panel)[0] ?? panel;
@@ -547,10 +634,12 @@ export const MenuModal: React.FC<PropsModal> = ({ abierto, onCerrar, elementos, 
       const activo = document.activeElement;
       const focoPerdido = !activo || activo === document.body || (panel !== null && panel.contains(activo));
       if (!focoPerdido) return;
-      // Si el destino abrio una pantalla completa, el boton del menu quedo
-      // debajo de ella: el foco entra a la pantalla.
+      // Si el destino abrio una pantalla completa, el foco entra a ella: es lo
+      // que la persona eligio. Si la pantalla ya estaba abierta (cerrar el
+      // cajon con Escape o la X encima de Tarjetas), vuelve al boton del riel,
+      // que sigue a la vista.
       const capa = document.querySelector<HTMLElement>('.kp-capa');
-      const enCapa = capa ? enfocablesDentro(capa)[0] : undefined;
+      const enCapa = capa && capa !== capaAntes ? enfocablesDentro(capa)[0] : undefined;
       if (enCapa) {
         enCapa.focus({ preventScroll: true });
         return;
@@ -619,16 +708,22 @@ export const MenuModal: React.FC<PropsModal> = ({ abierto, onCerrar, elementos, 
           abierto ? 'visible translate-x-0 transition-transform' : 'invisible -translate-x-full transition-[transform,visibility]'
         }`}
       >
-        <div className="flex h-14 shrink-0 items-center gap-2.5 pl-6 pr-3">
-          <MarcaDelMenu nombre={nombreDeLaApp} plegado={false} />
-          <button
-            type="button"
-            onClick={onCerrar}
-            aria-label={etiquetaCerrar}
-            className={`kp-toque kp-foco ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full uv-text-secondary ${HOVER_SUAVE}`}
-          >
-            <IconosLinea.MenuPlegar size={22} />
-          </button>
+        {/* La misma cabecera que el menu fijo: cerrar queda justo encima del
+            boton del riel que lo abrio, y la marca a su derecha. */}
+        <div className="flex h-14 shrink-0 items-center px-4">
+          <span className="flex w-14 shrink-0 justify-center">
+            <button
+              type="button"
+              onClick={onCerrar}
+              aria-label={etiquetaCerrar}
+              className={`kp-toque kp-foco flex h-11 w-11 shrink-0 items-center justify-center rounded-full uv-text-secondary ${HOVER_SUAVE}`}
+            >
+              <IconosLinea.MenuPlegar size={22} />
+            </button>
+          </span>
+          <span className="flex min-w-0 items-center gap-2.5">
+            <MarcaDelMenu nombre={nombreDeLaApp} plegado={false} />
+          </span>
         </div>
         <ListaDelMenu elementos={elementos} atajos={atajos} actual={actual} plegado={false} onElegir={elegir} mostrarPista={sinPista} ocultarPista={sinPista} />
         {elegirPie && <PieDelMenu pie={elegirPie} plegado={false} mostrarPista={sinPista} ocultarPista={sinPista} />}

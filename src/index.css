@@ -291,6 +291,29 @@ input[inputmode='numeric'] {
   container: capa / inline-size;
 }
 
+/* Con una pantalla completa abierta, lo unico que se desplaza es ella. La
+   pestana de abajo es el documento: seguia con su barra en el borde de la
+   ventana (dos barras, una dentro de la otra) y la rueda del raton sobre los
+   costados movia la pagina escondida. Bloquear la raiz quita las dos cosas sin
+   que cada vista lo pida, y se suelta solo cuando la capa se desmonta. Las
+   pantallas completas tapan la barra superior y el contenido, asi que el
+   ancho que deja la barra al irse no se ve moverse.
+   La raiz guarda siempre el hueco de su barra: al bloquearla, la barra se va
+   pero el ancho no cambia, y la pestana de abajo no salta de lado mientras la
+   capa entra. Con barras superpuestas (telefonos, macOS) el hueco mide cero.
+   El contenedor principal de la capa no le pasa el gesto a la raiz al llegar
+   al final (el tirar para recargar del navegador movil); las listas de
+   adentro si se lo pasan a el. */
+html {
+  scrollbar-gutter: stable;
+}
+html:has(.kp-capa) {
+  overflow: hidden;
+}
+.kp-capa > .overflow-y-auto {
+  overscroll-behavior-y: contain;
+}
+
 /* Pantallas completas en pantalla ancha: la misma columna que las pestanas
    (42rem, el max-w-2xl de <main>). Sin esto, en un escritorio las tarjetas de
    Metas o de Movimientos median 1.600 px y la flecha de volver quedaba lejos
@@ -339,11 +362,19 @@ input[inputmode='numeric'] {
 /* Pista con el nombre de un icono del menu plegado: aparece corriendose 4 px
    desde el riel. Con movimiento reducido aparece sin mas. */
 @keyframes kp-pista-entra {
-  from { opacity: 0; transform: translate(-4px, -50%); }
-  to   { opacity: 1; transform: translate(0, -50%); }
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+/* La del boton del menu con el menu abierto sale debajo: baja 4 px. */
+@keyframes kp-pista-baja {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
 }
 .kp-pista {
   animation: kp-pista-entra var(--kp-mov-estado) var(--kp-curva) both;
+}
+[data-lado='abajo'] > .kp-pista {
+  animation-name: kp-pista-baja;
 }
 
 /* Marco de la app autenticada: fija el ancho de la navegacion lateral. Es la

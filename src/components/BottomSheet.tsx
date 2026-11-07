@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { esHojaSuperior, useCapa } from '@/navegacion/pilaDeCapas';
+import { bloquearDesplazamiento } from '@/navegacion/bloqueoDeDesplazamiento';
 import { enfocablesDentro } from '@/navegacion/enfocables';
 
 interface BottomSheetProps {
@@ -55,14 +56,12 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({ isOpen, onClose, child
   // navegacion/pilaDeCapas para que pantallas y hojas compartan un solo orden.
   const idCapa = useCapa(isOpen, 'hoja', onClose, () => dismissable);
 
+  // La pagina de abajo no se desplaza mientras la hoja esta abierta. El
+  // bloqueo cuenta las hojas: cerrar o montar una no suelta el de otra.
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-      const timer = setTimeout(() => setVisible(false), 300);
-      return () => clearTimeout(timer);
-    }
+    if (isOpen) return bloquearDesplazamiento();
+    const timer = setTimeout(() => setVisible(false), 300);
+    return () => clearTimeout(timer);
   }, [isOpen]);
 
   // Foco: la hoja declara aria-modal, asi que al abrirse el foco entra en ella

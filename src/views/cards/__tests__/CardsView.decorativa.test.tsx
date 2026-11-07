@@ -76,3 +76,24 @@ describe('CardsView — la tarjeta no finge ser de una red de pago', () => {
     expect(screen.queryByText(/comprar en línea/i)).toBeNull();
   });
 });
+
+describe('CardsView — la cara de la tarjeta', () => {
+  it('lleva chip dibujado, ondas de pago sin contacto y rotulos sin mayusculas', async () => {
+    mocks.getCards.mockResolvedValue({ success: true, data: [tarjeta] });
+    const { container } = pintar();
+    const titular = await screen.findByText('Titular');
+    // Antes: barras de senal de un telefono y un rectangulo amarillo plano.
+    expect(container.querySelector('svg.lucide-nfc')).not.toBeNull();
+    expect(container.querySelector('svg.lucide-signal-high')).toBeNull();
+    expect(container.querySelector('svg linearGradient')).not.toBeNull();
+    // "TITULAR" y "SOLO EN KIRAMOPAY" salian en mayusculas por CSS.
+    expect(titular.className).not.toMatch(/\buppercase\b/);
+    expect(screen.getByText('Solo en KiramoPay').className).not.toMatch(/\buppercase\b/);
+  });
+
+  it('los topes salen con el formateador de la app (miles con coma)', async () => {
+    mocks.getCards.mockResolvedValue({ success: true, data: [{ ...tarjeta, dailyLimit: 500000, dailySpent: 1250 }] });
+    pintar();
+    expect(await screen.findByText('₡1,250 / ₡500,000')).toBeInTheDocument();
+  });
+});

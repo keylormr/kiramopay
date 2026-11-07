@@ -1309,7 +1309,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
         onClose={() => setShowAboutSheet(false)}
         title={`${t('about')} KiramoPay`}
       >
-        <div className="space-y-6 max-h-[60vh] overflow-y-auto">
+        {/* Sin alto propio: la hoja ya se desplaza (dos barras, una dentro de
+            la otra). */}
+        <div className="space-y-6">
           {/* Logo y version */}
           <div className="text-center">
             <div className="w-20 h-20 uv-gradient-brand rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">

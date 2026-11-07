@@ -108,9 +108,9 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
   const toggleExpand = (id: string) => setExpandedId(expandedId === id ? null : id);
 
   return (
-    <div className="fixed inset-0 kp-capa z-50 bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="sticky top-0 z-10 px-4 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+      <div className="z-10 shrink-0 px-4 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
         <div className="flex items-center justify-between h-14">
           <button
             onClick={onClose}
@@ -157,8 +157,10 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
         </div>
       </div>
 
-      {/* Contenido */}
-      <div className="p-4 pb-24 overflow-y-auto h-[calc(100vh-200px)]">
+      {/* Contenido. Ocupa lo que deja la cabecera: con un alto fijo de
+          100vh - 200px sobraba o faltaba espacio segun el alto real de la
+          cabecera, y el final de la lista quedaba fuera de la pantalla. */}
+      <div className="min-h-0 flex-1 p-4 pb-24 overflow-y-auto">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-20 h-20 bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-full flex items-center justify-center mb-4">
