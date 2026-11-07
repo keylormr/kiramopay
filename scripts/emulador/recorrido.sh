@@ -7,8 +7,8 @@
 #
 # Falla si logcat trae un FATAL EXCEPTION o una linea de AndroidRuntime del
 # paquete, si el proceso de la app ya no existe al final, si el recorrido
-# fallo o si al arrancar hubo un destello blanco despues del splash
-# (sin-destello.mjs). Las capturas (las del arranque en arranque/), logcat y el
+# fallo o si el arranque no paso de splash a primera pantalla sin un destello
+# blanco (sin-destello.mjs). Las capturas (las del arranque en arranque/), logcat y el
 # resumen quedan en la carpeta de salida para subirlos como artefacto pase lo
 # que pase.
 
@@ -35,14 +35,12 @@ adb install -r -g "$APK"
 
 # El arranque, en una rafaga de capturas desde que se abre la app: el splash y
 # lo que viene despues. Sin -W, para capturar mientras arranca. sin-destello.mjs
-# falla si despues del splash aparece un cuadro mayormente blanco o una franja
-# clara en las barras.
-mkdir -p "$SALIDA/arranque"
+# captura hasta unos segundos despues de que el splash da paso a la primera
+# pantalla (con un tope de tiempo) y falla si no llego a verla, si despues del
+# splash aparece un cuadro mayormente blanco o si hay una franja clara en las
+# barras.
 adb shell am start -n "$PAQUETE/.MainActivity"
-for i in $(seq -w 1 14); do
-  adb exec-out screencap -p > "$SALIDA/arranque/$i.png" || true
-done
-if ! node scripts/emulador/sin-destello.mjs "$SALIDA/arranque"; then
+if ! node scripts/emulador/sin-destello.mjs --capturar "$SALIDA/arranque"; then
   fallas+=("el arranque no paso la revision de destellos (ver arranque/resumen.json)")
 fi
 
