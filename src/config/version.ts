@@ -72,7 +72,7 @@ export const APP_VERSION: AppVersion = {
     {
       version: '2.10.0',
       buildNumber: 20,
-      releaseDate: '2026-11-07',
+      releaseDate: '2026-11-06',
       changes: [
         'Rediseño, fase 1: nueva apariencia oscura y premium, con letra nueva, iconos de línea y movimiento cuidado. El oscuro es ahora el tema por defecto y el claro sigue disponible en Perfil',
         'Los botones y los textos azules y rojos se leen con más contraste, tanto en el tema oscuro como en el claro',
