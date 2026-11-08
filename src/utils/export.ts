@@ -231,7 +231,7 @@ function fechaLocal(iso: string | undefined): string {
 // ejecutaria como formula (= + - @, tabulador, retorno): el titulo puede ser el
 // nombre que escribio otra persona. Mismo criterio que celdaSegura del reporte
 // del comercio (backend/internal/qrpayment/reporte.go).
-function celda(texto: string): string {
+export function celda(texto: string): string {
   const seguro = /^[=+\-@\t\r]/.test(texto) ? `'${texto}` : texto;
   return `"${seguro.replace(/"/g, '""')}"`;
 }
