@@ -29,7 +29,7 @@ export const OverlayShell: React.FC<OverlayShellProps> = ({ title, onClose, chil
       className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-fade-in"
       style={columna ? ({ '--kp-columna': columna } as React.CSSProperties) : undefined}
     >
-      <div className="sticky top-0 z-10 bg-white/80 dark:bg-[var(--color-background-dark)]/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 pt-safe flex items-center gap-2 flex-shrink-0">
+      <div className="sticky top-0 z-10 bg-white/80 dark:bg-[var(--color-background-dark)]/80 backdrop-blur-md border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)] px-4 min-h-14 flex items-center gap-2 flex-shrink-0">
         <button
           onClick={onClose}
           aria-label={t('back')}

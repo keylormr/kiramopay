@@ -553,3 +553,80 @@ describe('AssistantView — la llave de la recarga y del recibo', () => {
     expect(screen.queryByText('Confirmado')).not.toBeInTheDocument();
   });
 });
+
+describe('AssistantView — las conversaciones guardadas', () => {
+  const guardadas = [
+    { id: 'reciente', title: 'Mi saldo', messageCount: 2, updatedAt: '2026-11-08T10:00:00Z' },
+    { id: 'vieja', title: 'Una recarga', messageCount: 2, updatedAt: '2026-11-01T10:00:00Z' },
+  ];
+
+  beforeEach(() => {
+    mockApi.assistant.listConversations.mockResolvedValue({ success: true, data: guardadas });
+    mockApi.assistant.getConversation.mockReset();
+    mockApi.assistant.getConversation.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'reciente',
+        messages: [
+          { role: 'user', text: '¿Cuánto tengo?' },
+          { role: 'assistant', text: 'Tienes ₡12,000.' },
+        ],
+      },
+    });
+    mockApi.assistant.deleteConversation.mockReset();
+    mockApi.assistant.deleteConversation.mockResolvedValue({ success: true });
+    mockApi.assistant.chat.mockResolvedValue({ success: true, data: { reply: 'Claro.', toolsUsed: [], proposals: [] } });
+  });
+
+  it('al volver sigue la última conversación y la pregunta nueva va en esa', async () => {
+    const user = userEvent.setup();
+    setup();
+    expect(await screen.findByText('Tienes ₡12,000.')).toBeInTheDocument();
+    expect(mockApi.assistant.getConversation).toHaveBeenCalledWith('reciente');
+    await user.type(screen.getByPlaceholderText(es.assistant_placeholder), 'Y en dólares?');
+    await user.click(screen.getByLabelText(es.assistant_send));
+    await waitFor(() => expect(mockApi.assistant.chat).toHaveBeenCalled());
+    expect(mockApi.assistant.chat.mock.calls.at(-1)?.[1]).toBe('reciente');
+  });
+
+  it('sin conversaciones guardadas no abre ninguna', async () => {
+    mockApi.assistant.listConversations.mockResolvedValue({ success: true, data: [] });
+    setup();
+    expect(await screen.findByText(es.assistant_example_1)).toBeInTheDocument();
+    expect(mockApi.assistant.getConversation).not.toHaveBeenCalled();
+  });
+
+  it('una conversación nueva pedida a tiempo no la tapa la última', async () => {
+    const user = userEvent.setup();
+    let entregar: (v: unknown) => void = () => {};
+    mockApi.assistant.getConversation.mockReturnValue(new Promise((r) => (entregar = r)));
+    setup();
+    await waitFor(() => expect(mockApi.assistant.getConversation).toHaveBeenCalled());
+    await user.click(screen.getByLabelText(es.assistant_new_conversation));
+    entregar({ success: true, data: { id: 'reciente', messages: [{ role: 'assistant', text: 'Tienes ₡12,000.' }] } });
+    expect(await screen.findByText(es.assistant_example_1)).toBeInTheDocument();
+    expect(screen.queryByText('Tienes ₡12,000.')).not.toBeInTheDocument();
+  });
+
+  it('al tope del plan avisa, devuelve la pregunta a la caja y abre las conversaciones', async () => {
+    const user = userEvent.setup();
+    mockApi.assistant.chat.mockResolvedValue({ success: false, error: { code: 'CONVERSATION_LIMIT', message: 'x' } });
+    setup();
+    await screen.findByText('Tienes ₡12,000.');
+    await user.click(screen.getByLabelText(es.assistant_new_conversation));
+    const caja = screen.getByPlaceholderText(es.assistant_placeholder);
+    await user.type(caja, 'Otra pregunta');
+    await user.click(screen.getByLabelText(es.assistant_send));
+
+    const aviso = await screen.findByRole('status');
+    expect(within(aviso).getByText(es.assistant_conv_limit)).toBeInTheDocument();
+    expect(caja).toHaveValue('Otra pregunta');
+    expect(screen.queryByText('Otra pregunta', { ignore: 'textarea' })).not.toBeInTheDocument();
+
+    await user.click(within(aviso).getByRole('button', { name: es.assistant_history }));
+    expect(await screen.findByText('Una recarga')).toBeInTheDocument();
+    await user.click(screen.getAllByLabelText(es.delete)[1]);
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+    expect(mockApi.assistant.deleteConversation).toHaveBeenCalledWith('vieja');
+  });
+});

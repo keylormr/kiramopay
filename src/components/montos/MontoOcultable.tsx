@@ -50,10 +50,12 @@ interface BotonOcultarMontosProps {
   tamano?: number;
   /** Sobre la tarjeta metal (oscura en los dos temas): letra clara. */
   sobreOscuro?: boolean;
+  /** Sobre un encabezado que solo es oscuro con el tema oscuro (SINPE y Cripto). */
+  sobreEncabezado?: boolean;
 }
 
 /** El ojo: alterna la preferencia para toda la app. */
-export const BotonOcultarMontos: React.FC<BotonOcultarMontosProps> = ({ className = '', tamano = 20, sobreOscuro = false }) => {
+export const BotonOcultarMontos: React.FC<BotonOcultarMontosProps> = ({ className = '', tamano = 20, sobreOscuro = false, sobreEncabezado = false }) => {
   const { t } = useLanguage();
   const oculto = useMontosOcultos();
   const alternar = useSettingsStore((s) => s.alternarSaldoOculto);
@@ -67,7 +69,9 @@ export const BotonOcultarMontos: React.FC<BotonOcultarMontosProps> = ({ classNam
       className={`kp-toque kp-foco flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
         sobreOscuro
           ? 'text-white/70 hover:bg-white/10 hover:text-white'
-          : 'uv-text-secondary hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]'
+          : sobreEncabezado
+            ? 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-2)] dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white'
+            : 'uv-text-secondary hover:bg-[var(--color-surface-2)] dark:hover:bg-[var(--color-surface-2-dark)]'
       } ${className}`}
     >
       {oculto ? <IconosLinea.OjoTachado size={tamano} /> : <IconosLinea.Ojo size={tamano} />}

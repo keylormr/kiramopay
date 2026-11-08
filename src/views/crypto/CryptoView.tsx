@@ -1009,16 +1009,16 @@ export const CryptoView: React.FC = () => {
       <div className="flex min-w-0 flex-col gap-6">
 
       {/* Portfolio Header — Unified Vision hero */}
-      <section aria-label={t('total_portfolio')} className="kp-tarjeta-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary-dark)] @min-[56rem]/cripto:p-6">
+      <section aria-label={t('total_portfolio')} className="kp-encabezado-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary)] dark:text-[var(--color-text-primary-dark)] @min-[56rem]/cripto:p-6">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-50 dark:opacity-100"
           style={{ background: 'radial-gradient(closest-side, rgba(45,123,255,0.30), transparent)' }}
         />
         <div className="relative flex flex-col gap-3 min-[420px]:flex-row min-[420px]:justify-between min-[420px]:items-start mb-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="text-[13px] text-white/70 whitespace-nowrap">{t('total_portfolio')}</p>
+              <p className="text-[13px] text-[var(--color-text-secondary)] dark:text-white/70 whitespace-nowrap">{t('total_portfolio')}</p>
               <div aria-live="polite">
                 {isLoading ? (
                   <div className="w-2 h-2 rounded-full bg-[var(--color-warning)] animate-pulse" title={t('crypto_updating')} role="status" aria-label={t('crypto_updating')} />
@@ -1028,7 +1028,7 @@ export const CryptoView: React.FC = () => {
                   <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" title={t('crypto_prices_updated')} role="status" aria-label={t('crypto_prices_updated')} />
                 )}
               </div>
-              <BotonOcultarMontos tamano={18} sobreOscuro className="-my-2" />
+              <BotonOcultarMontos tamano={18} sobreEncabezado className="-my-2" />
             </div>
             {/* El guion no se lee: un lector de pantalla anuncia "raya" o
                 nada. Sin el aria-label, quien no ve la pantalla escucha un
@@ -1042,7 +1042,7 @@ export const CryptoView: React.FC = () => {
               {sinPrecios ? SIN_DATO : <Monto puntos="••••••">{formatUsd(totalUsdValue)}</Monto>}
             </h1>
             {!sinPrecios && (
-              <p className="text-white/70 text-sm mt-1 tabular-nums">
+              <p className="text-[var(--color-text-secondary)] dark:text-white/70 text-sm mt-1 tabular-nums">
                 {totalCrcValue === null ? t('crypto_crc_unavailable') : <Monto>{formatCrc(totalCrcValue)}</Monto>}
               </p>
             )}
@@ -1051,19 +1051,19 @@ export const CryptoView: React.FC = () => {
             {/* Sin precios, la ganancia se calcula contra cero y sale una
                 perdida enorme que nadie tuvo: es la mentira mas cara de esta
                 pantalla, peor que el total. Se muestra neutra. */}
-            <div className={`inline-block px-3 py-1.5 rounded-full text-sm font-semibold backdrop-blur-sm border tabular-nums ${sinPrecios ? 'bg-white/15 border-white/25 text-white' : totalProfitLoss >= 0 ? 'bg-[var(--color-success)]/25 border-[var(--color-success)]/40 text-white' : 'bg-[var(--color-danger)]/25 border-[var(--color-danger)]/40 text-white'}`}>
+            <div className={`inline-block px-3 py-1.5 rounded-full text-sm font-semibold backdrop-blur-sm border tabular-nums ${sinPrecios ? 'bg-[var(--color-surface-2)] border-[var(--color-border)] text-[var(--color-text-secondary)] dark:bg-white/15 dark:border-white/25 dark:text-white' : totalProfitLoss >= 0 ? 'bg-[var(--color-success-soft)] border-[var(--color-success)]/40 text-[var(--color-success-strong)] dark:bg-[var(--color-success)]/25 dark:text-white' : 'bg-[var(--color-danger-soft)] border-[var(--color-danger)]/40 text-[var(--color-danger-strong)] dark:bg-[var(--color-danger)]/25 dark:text-white'}`}>
               {sinPrecios ? SIN_DATO : <Monto>{`${totalProfitLoss >= 0 ? '+' : ''}${formatUsd(totalProfitLoss)} (${totalProfitLossPercent.toFixed(2)}%)`}</Monto>}
             </div>
             {/* La ganancia o perdida de la pastilla es contra lo que se pago al
                 comprar; sin precios no hay cifra y tampoco rotulo. */}
             {!sinPrecios && (
-              <p className="text-[10px] text-white/70 mt-1">{t('crypto_since_purchase')}</p>
+              <p className="text-[10px] text-[var(--color-text-secondary)] dark:text-white/70 mt-1">{t('crypto_since_purchase')}</p>
             )}
             {lastUpdated && (
               <button
                 onClick={() => { setIsLoading(true); fetchPrices(); }}
                 aria-label={t('crypto_refresh_prices')}
-                className="flex items-center gap-1 mt-2 text-xs text-white/70 hover:text-white transition-colors min-[420px]:ml-auto"
+                className="flex items-center gap-1 mt-2 text-xs text-[var(--color-text-secondary)] dark:text-white/70 hover:text-[var(--color-text-primary)] dark:hover:text-white transition-colors min-[420px]:ml-auto"
               >
                 <Icons.RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
                 {formatTimeAgo(lastUpdated)}
@@ -1075,12 +1075,12 @@ export const CryptoView: React.FC = () => {
         {priceError && (
           <div
             role="status"
-            className="relative mt-4 flex gap-2.5 rounded-xl bg-white/15 backdrop-blur-sm border border-white/25 p-3"
+            className="relative mt-4 flex gap-2.5 rounded-xl bg-[var(--color-surface-2)] border-[var(--color-border)] dark:bg-white/15 backdrop-blur-sm border dark:border-white/25 p-3"
           >
             <Icons.AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
             <div className="min-w-0">
               <p className="text-sm font-bold">{t('crypto_prices_unavailable')}</p>
-              <p className="text-xs text-white/80 mt-0.5">{t('crypto_prices_unavailable_hint')}</p>
+              <p className="text-xs text-[var(--color-text-secondary)] dark:text-white/80 mt-0.5">{t('crypto_prices_unavailable_hint')}</p>
             </div>
           </div>
         )}
@@ -1089,19 +1089,19 @@ export const CryptoView: React.FC = () => {
         <div className="relative flex gap-2 mt-4">
           <button
             onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
-            className="kp-toque kp-foco flex-1 min-w-0 bg-white/[0.08] hover:bg-white/[0.13] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)] py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
+            className="kp-toque kp-foco flex-1 min-w-0 kp-encabezado-accion py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.Plus size={16} /> {t('buy')}
           </button>
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
-            className="kp-toque kp-foco flex-1 min-w-0 bg-white/[0.08] hover:bg-white/[0.13] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)] py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
+            className="kp-toque kp-foco flex-1 min-w-0 kp-encabezado-accion py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.Minus size={16} /> {t('sell')}
           </button>
           <button
             onClick={openConvertSheet}
-            className="kp-toque kp-foco flex-1 min-w-0 bg-white/[0.08] hover:bg-white/[0.13] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)] py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
+            className="kp-toque kp-foco flex-1 min-w-0 kp-encabezado-accion py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.RefreshCw size={16} /> {t('convert')}
           </button>

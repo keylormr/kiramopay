@@ -110,7 +110,7 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 kp-capa z-50 flex flex-col bg-[var(--color-background)] dark:bg-[var(--color-background-dark)] animate-in slide-in-from-right duration-300">
       {/* Header */}
-      <div className="z-10 shrink-0 px-4 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
+      <div className="sticky top-0 z-10 shrink-0 px-4 bg-white/95 dark:bg-surface-dark/95 backdrop-blur-lg border-b border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
         <div className="flex items-center justify-between h-14">
           <button
             onClick={onClose}

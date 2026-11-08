@@ -10,6 +10,7 @@ import { useCapa } from '@/navegacion/pilaDeCapas';
 import { BotonIdioma } from './BotonIdioma';
 import { Bandera } from '@/components/Bandera';
 import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
+import { useSuperficieOscura } from '@/hooks/useBarrasDelSistema';
 
 interface RegisterViewProps {
   onComplete: () => void;
@@ -75,6 +76,8 @@ const claveErrorRegistro = (code?: string): string =>
   (code && CLAVE_POR_CODIGO_REGISTRO[code]) || 'reg_err_generic';
 
 export const RegisterView: React.FC<RegisterViewProps> = ({ onComplete, onBack, referralCode }) => {
+  // Oscura con cualquier tema, como el login: las barras del sistema tambien.
+  useSuperficieOscura();
   const { t } = useLanguage();
   const [step, setStep] = useState<Step>('phone');
   // Editable: el invitado puede corregirlo o borrarlo si el backend lo rechaza.

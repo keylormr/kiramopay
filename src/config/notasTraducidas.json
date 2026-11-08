@@ -1,4 +1,48 @@
 {
+  "2.15.1": {
+    "en": [
+      "Full-screen pages no longer sit under the phone's status bar or camera, and the back button can be tapped",
+      "The assistant picks up your last conversation when you open it again; to start another, use the plus button",
+      "If you already have all the conversations your plan includes, the notice takes you to them so you can delete one, and you keep what you wrote",
+      "When signing up and updating the app, the phone's bar matches the dark background",
+      "In light mode, the SINPE, Crypto and Devices headers are now light; only the cards stay dark"
+    ],
+    "fr": [
+      "Les pages en plein écran ne passent plus sous la barre du téléphone ni sous la caméra, et le bouton retour répond au toucher",
+      "L'assistant reprend votre dernière conversation quand vous le rouvrez ; pour en commencer une autre, utilisez le bouton plus",
+      "Si vous avez déjà toutes les conversations prévues par votre forfait, l'avis vous y mène pour en supprimer une, et vous gardez ce que vous avez écrit",
+      "À l'inscription et lors de la mise à jour de l'application, la barre du téléphone s'accorde au fond sombre",
+      "En mode clair, les en-têtes de SINPE, Crypto et Appareils sont désormais clairs ; seules les cartes restent sombres"
+    ],
+    "pt": [
+      "As telas inteiras não ficam mais debaixo da barra do telefone nem da câmera, e o botão de voltar pode ser tocado",
+      "O assistente continua a sua última conversa quando você o abre de novo; para começar outra, use o botão de mais",
+      "Se você já tem todas as conversas do seu plano, o aviso leva você até elas para apagar uma, e você não perde o que escreveu",
+      "Ao se cadastrar e ao atualizar o aplicativo, a barra do telefone combina com o fundo escuro",
+      "No modo claro, os cabeçalhos de SINPE, Crypto e Dispositivos agora são claros; só os cartões continuam escuros"
+    ],
+    "zh-cn": [
+      "全屏页面不再被手机状态栏或摄像头遮挡，返回按钮可以正常点按",
+      "再次打开助手时会继续上一次对话；要开始新对话，请点按加号按钮",
+      "如果对话数量已达到您套餐的上限，提示会带您前往对话列表删除一个，您输入的内容也不会丢失",
+      "注册和更新应用时，手机状态栏与深色背景保持一致",
+      "浅色模式下，SINPE、加密货币和设备页面的顶部区域现在为浅色；只有卡片仍为深色"
+    ],
+    "ja": [
+      "全画面のページがスマートフォンのバーやカメラの下に隠れなくなり、戻るボタンをタップできるようになりました",
+      "アシスタントを開き直すと前回の会話の続きから始まります。新しい会話はプラスボタンから始められます",
+      "ご利用のプランの会話数が上限に達している場合は、案内から会話の一覧を開いて1件削除できます。入力した内容は消えません",
+      "登録時とアプリの更新時に、スマートフォンのバーが暗い背景に合うようになりました",
+      "ライトモードでは、SINPE、暗号資産、端末の各画面の上部が明るくなりました。暗いままなのはカードだけです"
+    ],
+    "hi": [
+      "पूरी स्क्रीन वाले पेज अब फ़ोन की बार या कैमरे के नीचे नहीं आते, और वापस जाने वाला बटन दबाया जा सकता है",
+      "असिस्टेंट दोबारा खोलने पर आपकी पिछली बातचीत जारी रहती है; नई बातचीत के लिए प्लस बटन का उपयोग करें",
+      "अगर आपके प्लान की सभी बातचीत पूरी हो चुकी हैं, तो सूचना आपको उन तक ले जाती है ताकि आप एक हटा सकें, और आपका लिखा हुआ नहीं मिटता",
+      "साइन अप करते समय और ऐप अपडेट करते समय, फ़ोन की बार गहरे बैकग्राउंड से मेल खाती है",
+      "लाइट मोड में SINPE, क्रिप्टो और डिवाइस के हेडर अब हल्के रंग के हैं; केवल कार्ड गहरे रंग के रहते हैं"
+    ]
+  },
   "2.15.0": {
     "en": [
       "Redesign, phase 6: the app starts in the dark style",

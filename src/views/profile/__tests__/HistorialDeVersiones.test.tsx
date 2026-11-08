@@ -97,11 +97,13 @@ describe('changelog del rediseno', () => {
   // La 2.9.0 junta lo anterior al rediseno; de la 2.10.0 en adelante, una por fase.
   const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0', '2.13.0', '2.14.0', '2.15.0'];
   const fases = nuevas.slice(1);
+  // Lo que salio despues de la fase 6: sigue la numeracion, pero no es una fase.
+  const todas = [...nuevas, '2.15.1'];
   const por = (v: string) => getAllVersions().find((x) => x.version === v)!;
 
   it('una version por fase, con buildNumber consecutivo y la ultima vigente', () => {
-    expect(APP_VERSION.current.version).toBe(nuevas[nuevas.length - 1]);
-    nuevas.forEach((v, i) => expect(por(v).buildNumber).toBe(19 + i));
+    expect(APP_VERSION.current.version).toBe(todas[todas.length - 1]);
+    todas.forEach((v, i) => expect(por(v).buildNumber).toBe(19 + i));
   });
 
   it('entre 3 y 7 cambios por version, sin emojis y con su traduccion', () => {

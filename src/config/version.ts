@@ -42,19 +42,31 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.15.0',
-    buildNumber: 25,
-    releaseDate: '2026-11-07',
+    version: '2.15.1',
+    buildNumber: 26,
+    releaseDate: '2026-11-08',
     changes: [
-      'Rediseño, fase 6: la aplicación arranca en el tono oscuro',
-      'Al abrir KiramoPay ves la K de la marca sobre el fondo oscuro de la aplicación, sin un destello blanco antes de la primera pantalla',
-      'El icono tiene el fondo oscuro nuevo, el mismo de la marca dentro de la aplicación',
-      'En Android 13 o posterior, si usas iconos temáticos, el icono de KiramoPay también toma los colores de tu teléfono',
-      'La barra de estado y la de navegación combinan con el tema que elijas en la aplicación, aunque tu teléfono use otro',
-      'Si instalas KiramoPay desde el navegador, el icono y la pantalla de inicio también son oscuros',
+      'Las pantallas completas ya no quedan debajo de la barra del teléfono ni de la cámara, y el botón de volver se puede tocar',
+      'El asistente sigue tu última conversación cuando vuelves a abrirlo; para empezar otra, usa el botón de más',
+      'Si ya tienes todas las conversaciones de tu plan, el aviso te lleva a ellas para borrar una y no pierdes lo que escribiste',
+      'Al registrarte y al actualizar la aplicación, la barra del teléfono combina con el fondo oscuro',
+      'En modo claro, los encabezados de SINPE, Cripto y Dispositivos ahora son claros; solo las tarjetas siguen oscuras',
     ],
   },
   history: [
+    {
+      version: '2.15.0',
+      buildNumber: 25,
+      releaseDate: '2026-11-07',
+      changes: [
+        'Rediseño, fase 6: la aplicación arranca en el tono oscuro',
+        'Al abrir KiramoPay ves la K de la marca sobre el fondo oscuro de la aplicación, sin un destello blanco antes de la primera pantalla',
+        'El icono tiene el fondo oscuro nuevo, el mismo de la marca dentro de la aplicación',
+        'En Android 13 o posterior, si usas iconos temáticos, el icono de KiramoPay también toma los colores de tu teléfono',
+        'La barra de estado y la de navegación combinan con el tema que elijas en la aplicación, aunque tu teléfono use otro',
+        'Si instalas KiramoPay desde el navegador, el icono y la pantalla de inicio también son oscuros',
+      ],
+    },
     {
       version: '2.14.0',
       buildNumber: 24,
