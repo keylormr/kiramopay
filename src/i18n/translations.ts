@@ -2341,6 +2341,11 @@ export type TranslationKeys = {
   contador_continuar: string;
   contador_mes: string;
   contador_moneda: string;
+  contador_moneda_cuenta: string;
+  contador_moneda_ayuda: string;
+  contador_colones: string;
+  contador_dolares: string;
+  contador_sin_signo: string;
   contador_total_ventas: string;
   contador_cantidad_una: string;
   contador_cantidad_otras: string;

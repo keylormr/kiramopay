@@ -56,4 +56,8 @@ export interface ResultadoDeIngresos {
   ingresos: Ingreso[];
   /** Filas con ingreso cuya fecha o monto no se pudo leer. */
   omitidas: number;
+  /** El archivo dice la moneda en algun renglon. Si no, la persona la confirma. */
+  monedaDeclarada: boolean;
+  /** Una sola columna de montos y ninguno negativo: no se distinguen las salidas. */
+  sinSigno: boolean;
 }

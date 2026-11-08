@@ -223,3 +223,33 @@ describe('HTML guardado como .xls', () => {
     expect((globalThis as { __x?: number }).__x).toBe(0);
   });
 });
+
+describe('Resumen para el contador: lo que el archivo no dice', () => {
+  const SIN_MONEDA = 'Fecha;Detalle;Credito\n01/11/2026;SINPE MOVIL;1500.00\n';
+  const SIN_SIGNO = 'Fecha;Detalle;Monto\n01/11/2026;SINPE MOVIL RECIBIDO;1500.00\n02/11/2026;SINPE MOVIL ENVIADO;900.00\n';
+
+  it('sin moneda en el archivo deja confirmarla y cambia el simbolo de todo', async () => {
+    const u = userEvent.setup();
+    pintar();
+    subir(SIN_MONEDA);
+    const selector = await screen.findByLabelText(/Moneda de esta cuenta/);
+    expect(document.body.textContent).toContain('₡1,500.00');
+
+    await u.selectOptions(selector, 'USD');
+    expect(document.body.textContent).toContain('$1,500.00');
+    expect(document.body.textContent).not.toContain('₡1,500.00');
+  });
+
+  it('con moneda en el archivo no la pregunta', async () => {
+    pintar();
+    subir('Fecha;Detalle;Credito;Moneda\n01/11/2026;SINPE MOVIL;1500.00;CRC\n');
+    await screen.findByText('Cobros marcados como venta');
+    expect(screen.queryByLabelText(/Moneda de esta cuenta/)).not.toBeInTheDocument();
+  });
+
+  it('avisa cuando el archivo no distingue entradas de salidas', async () => {
+    pintar();
+    subir(SIN_SIGNO);
+    expect(await screen.findByText(/no distingue entradas de salidas/)).toBeInTheDocument();
+  });
+});

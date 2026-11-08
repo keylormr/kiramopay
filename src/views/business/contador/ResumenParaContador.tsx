@@ -8,6 +8,7 @@ import { formatMoney, type CurrencyCode } from '@/utils/money';
 import { entregarArchivo, type EstadoExport } from '@/utils/entregarArchivo';
 import { leerEstadoDeCuenta, leerIngresos, type Lectura } from './lector';
 import { mesesDe, monedasDe, sumar } from './ingresos';
+import type { ResultadoDeIngresos } from './tipos';
 import { construirCsv } from './csvSalida';
 import { ErrorDeLectura, type CodigoError, type Ingreso } from './tipos';
 
@@ -54,6 +55,8 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
   const [seleccion, setSeleccion] = useState<Seleccion>({ fecha: null, descripcion: null, ingreso: null, moneda: null });
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
   const [omitidas, setOmitidas] = useState(0);
+  const [monedaDeclarada, setMonedaDeclarada] = useState(true);
+  const [sinSigno, setSinSigno] = useState(false);
   const [mes, setMes] = useState('');
   const [moneda, setMoneda] = useState('');
   // Solo lo que la persona cambio; lo demas sigue a "es SINPE".
@@ -92,17 +95,27 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
 
   const fechaCorta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 
-  const aResumen = (lista: Ingreso[], perdidas: number) => {
+  const aResumen = ({ ingresos: lista, omitidas: perdidas, monedaDeclarada: declarada, sinSigno: salidas }: ResultadoDeIngresos) => {
     const ms = mesesDe(lista);
     const mn = monedasDe(lista);
     setIngresos(lista);
     setOmitidas(perdidas);
+    setMonedaDeclarada(declarada);
+    setSinSigno(salidas);
     setMes(ms[ms.length - 1]);
     setMoneda(mn.includes('CRC') ? 'CRC' : mn[0]);
     setMarcas({});
     setOtrosAbiertos(false);
     setEntrega('quieto');
     setFase('resumen');
+  };
+
+  // Sin moneda en el archivo se parte de colones, pero una cuenta en dolares
+  // no puede llegarle al contador con el simbolo equivocado.
+  const cambiarMonedaDeLaCuenta = (codigo: string) => {
+    setIngresos((lista) => lista.map((x) => ({ ...x, moneda: codigo })));
+    setMoneda(codigo);
+    setEntrega('quieto');
   };
 
   const fallar = (e: unknown) => {
@@ -123,7 +136,7 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
       const c = l.deteccion.columnas;
       if (l.deteccion.confiable) {
         const r = leerIngresos(l, c);
-        aResumen(r.ingresos, r.omitidas);
+        aResumen(r);
       } else {
         setSeleccion({ fecha: c.fecha, descripcion: c.descripcion, ingreso: c.credito ?? c.monto, moneda: c.moneda });
         setFase('columnas');
@@ -144,7 +157,7 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
         monto: null,
         moneda: seleccion.moneda,
       });
-      aResumen(r.ingresos, r.omitidas);
+      aResumen(r);
     } catch (err) {
       fallar(err);
     }
@@ -372,13 +385,23 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
 
         {fase === 'resumen' && (
           <section className="space-y-5" aria-label={t('contador_titulo')}>
-            <div className={`grid grid-cols-1 gap-3 ${monedas.length > 1 ? 'min-[360px]:grid-cols-2' : ''}`}>
+            <div className={`grid grid-cols-1 gap-3 ${monedas.length > 1 || !monedaDeclarada ? 'min-[440px]:grid-cols-2' : ''}`}>
               <label className="block">
                 <span className="mb-1 block text-xs font-semibold uv-text-muted">{t('contador_mes')}</span>
                 <select className={CAMPO} value={mes} onChange={(e) => { setMes(e.target.value); setEntrega('quieto'); }}>
                   {meses.map((m) => <option key={m} value={m}>{etiquetaDeMes(m)}</option>)}
                 </select>
               </label>
+              {!monedaDeclarada && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold uv-text-muted">{t('contador_moneda_cuenta')}</span>
+                  <select className={CAMPO} value={moneda} onChange={(e) => cambiarMonedaDeLaCuenta(e.target.value)}>
+                    <option value="CRC">{t('contador_colones')}</option>
+                    <option value="USD">{t('contador_dolares')}</option>
+                  </select>
+                  <span className="mt-1 block text-xs uv-text-muted">{t('contador_moneda_ayuda')}</span>
+                </label>
+              )}
               {monedas.length > 1 && (
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold uv-text-muted">{t('contador_moneda')}</span>
@@ -436,6 +459,9 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
               </div>
             )}
 
+            {sinSigno && (
+              <p className="text-xs leading-relaxed uv-text-secondary">{t('contador_sin_signo')}</p>
+            )}
             {omitidas > 0 && (
               <p className="text-xs leading-relaxed uv-text-muted">{rellenar(t('contador_omitidas'), { n: String(omitidas) })}</p>
             )}

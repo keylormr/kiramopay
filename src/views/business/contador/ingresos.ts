@@ -24,10 +24,14 @@ export function extraerIngresos(
 ): ResultadoDeIngresos {
   const colIngreso = columnas.credito ?? columnas.monto;
   const filas = tabla.slice(filaEncabezado + 1);
-  if (colIngreso === null || columnas.fecha === null) return { ingresos: [], omitidas: 0 };
+  if (colIngreso === null || columnas.fecha === null) {
+    return { ingresos: [], omitidas: 0, monedaDeclarada: false, sinSigno: false };
+  }
   const decimal = inferirSeparador(filas.map((f) => f[colIngreso] ?? ''));
   const ingresos: Ingreso[] = [];
   let omitidas = 0;
+  let monedaDeclarada = false;
+  let hayNegativos = false;
   filas.forEach((fila, i) => {
     const crudo = fila[colIngreso];
     if (crudo === undefined || String(crudo).trim() === '') return;
@@ -38,11 +42,13 @@ export function extraerIngresos(
       if (leerFecha(fila[columnas.fecha!]) !== null) omitidas += 1;
       return;
     }
+    if (monto.centimos < 0) hayNegativos = true;
     if (monto.centimos <= 0) return;
     const fecha = leerFecha(fila[columnas.fecha!]);
     if (!fecha) { omitidas += 1; return; }
     const descripcion = columnas.descripcion !== null ? String(fila[columnas.descripcion] ?? '').trim() : '';
     const deColumna = columnas.moneda !== null ? normalizarMoneda(String(fila[columnas.moneda] ?? '')) : '';
+    if (monto.moneda || deColumna) monedaDeclarada = true;
     ingresos.push({
       id: `f${filaEncabezado + 1 + i}`,
       fecha,
@@ -50,10 +56,17 @@ export function extraerIngresos(
       descripcion,
       centimos: monto.centimos,
       moneda: monto.moneda ?? (deColumna || 'CRC'),
-      esSinpe: normalizar(descripcion).includes('sinpe'),
+      // En cualquier columna de texto: hay bancos que lo ponen en el tipo de
+      // movimiento y dejan en la descripcion solo un numero.
+      esSinpe: fila.some((c) => typeof c === 'string' && normalizar(c).includes('sinpe')),
     });
   });
-  return { ingresos, omitidas };
+  return {
+    ingresos,
+    omitidas,
+    monedaDeclarada,
+    sinSigno: columnas.credito === null && !hayNegativos && ingresos.length > 1,
+  };
 }
 
 export function mesesDe(ingresos: Ingreso[]): string[] {

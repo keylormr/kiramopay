@@ -10,7 +10,7 @@ const SINONIMOS: Array<[Rol, string[]]> = [
   ['debito', ['debito', 'cargo', 'retiro', 'debe']],
   ['moneda', ['moneda']],
   ['monto', ['monto', 'importe', 'valor']],
-  ['descripcion', ['descripcion', 'detalle', 'concepto', 'movimiento', 'referencia']],
+  ['descripcion', ['descripcion', 'detalle', 'concepto', 'movimiento']],
 ];
 
 const FILAS_A_MIRAR = 40;
@@ -47,6 +47,11 @@ function asignar(fila: Array<string | number>): MapaDeColumnas {
       if (p > mejor) { mejor = p; mejorCol = col; }
     });
     if (mejorCol >= 0) { mapa[rol] = mejorCol; usadas.add(mejorCol); }
+  }
+  // Un numero de referencia describe el movimiento solo si no hay nada mejor.
+  if (mapa.descripcion === null) {
+    const col = fila.findIndex((c, i) => !usadas.has(i) && typeof c === 'string' && puntaje(c, ['referencia']) > 0);
+    if (col >= 0) mapa.descripcion = col;
   }
   return mapa;
 }
