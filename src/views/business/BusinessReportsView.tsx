@@ -16,6 +16,7 @@ import { diaCorto, rellenar } from '@/utils/planes';
 import { mensajeDeRechazo } from '@/i18n/mensajesDeError';
 import { entregarArchivo, type EstadoExport } from '@/utils/entregarArchivo';
 import { ChipVariacion } from './ChipVariacion';
+import { ResumenParaContador } from './contador/ResumenParaContador';
 
 interface Props {
   merchant: QRMerchant;
@@ -61,6 +62,8 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
 
   const [exportacion, setExportacion] = useState<EstadoExport>('quieto');
   const exportandoRef = useRef(false);
+
+  const [contadorAbierto, setContadorAbierto] = useState(false);
 
   const [interes, setInteres] = useState<'quieto' | 'enviando' | 'anotado' | 'error'>('quieto');
   const interesRef = useRef(false);
@@ -375,6 +378,22 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
             )}
           </section>
         )}
+
+        {/* Ordenar los cobros SINPE del banco para el contador: se lee en el
+            telefono, no mueve dinero y esta al alcance de dueno y gerente. */}
+        <button
+          type="button"
+          onClick={() => setContadorAbierto(true)}
+          className="uv-surface-1 rounded-2xl uv-shadow-soft w-full min-h-14 px-4 py-3 flex items-center gap-3 text-left uv-focus-ring"
+        >
+          <Icons.FileText size={20} className="shrink-0 uv-text-secondary" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold uv-text-primary">{t('contador_titulo')}</span>
+            <span className="block text-xs uv-text-muted">{t('contador_entrada_desc')}</span>
+          </span>
+          <Icons.ChevronRight size={18} className="shrink-0 uv-text-muted" aria-hidden="true" />
+        </button>
+        {contadorAbierto && <ResumenParaContador onClose={() => setContadorAbierto(false)} />}
 
         {empty ? (
           <div className="flex flex-col items-center py-10 text-center">
