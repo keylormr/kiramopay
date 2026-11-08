@@ -289,6 +289,21 @@ input[inputmode='numeric'] {
   transition: left var(--kp-mov-hoja) var(--kp-curva-hoja);
   /* Contenedor de la regla de columna de mas abajo. */
   container: capa / inline-size;
+  /* La lista y la caja de abajo terminan encima de la barra del telefono. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* La pagina llega hasta los bordes de la pantalla: en Android 15 o posterior
+   con WebView 140 o posterior, y siempre en iOS (viewport-fit=cover). Sin esto
+   la cabecera de cada capa quedaba debajo de la barra de estado o de la camara,
+   y el boton de volver no se podia tocar. El alto de la cabecera (h-14) es el
+   del contenido, para que la barra mida lo mismo en todos los telefonos y el
+   relleno se sume encima, pintado con el fondo de la cabecera. Las capas no se
+   desplazan (lo hace la lista de adentro): por eso alcanza con la cabecera. */
+.kp-capa > .sticky.top-0,
+.kp-capa > header {
+  box-sizing: content-box;
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 /* Con una pantalla completa abierta, lo unico que se desplaza es ella. La

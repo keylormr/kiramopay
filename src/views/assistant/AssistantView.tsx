@@ -32,7 +32,6 @@ type ProposalState = 'idle' | 'pending' | 'done' | 'error';
 const CLAVES_DEL_RECHAZO_DEL_CHAT: Readonly<Record<string, string>> = {
   ASSISTANT_QUOTA: 'assistant_quota_reached',
   ASSISTANT_BUSY: 'assistant_busy',
-  CONVERSATION_LIMIT: 'assistant_conv_limit',
   ASSISTANT_UNAVAILABLE: 'assistant_unavailable',
 };
 
@@ -100,6 +99,14 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   // suelta esa.
   const mfaRetryRef = useRef<{ key: string; p: AssistantProposal; llave: string; ambito: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // Ya hizo algo en esta pantalla: abrirle encima la ultima conversacion se lo
+  // borraria.
+  const tocadoRef = useRef(false);
+  // Mientras llega la ultima conversacion no se muestra la pantalla vacia, que
+  // saldria un instante y se iria.
+  const [retomando, setRetomando] = useState(true);
+  // Ya tiene todas las conversaciones que da su plan y quiso empezar otra.
+  const [alTope, setAlTope] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,12 +117,27 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
       setAvailable(ok);
       if (ok) {
         const list = await getApiLayer().assistant.listConversations();
-        if (!cancelled && list.success && list.data) setConversations(list.data);
+        if (cancelled || !list.success || !list.data) return;
+        setConversations(list.data);
+        // Volver al asistente sigue la conversacion de antes (la lista viene de
+        // la mas reciente a la mas vieja). Cada entrada empezaba una en blanco
+        // y, con las 2 del plan gratis, a la tercera visita ya pedia borrar
+        // una. Una conversacion nueva es la del boton de mas.
+        const ultima = list.data[0];
+        if (!ultima || tocadoRef.current) return;
+        const hilo = await getApiLayer().assistant.getConversation(ultima.id);
+        if (cancelled || tocadoRef.current || !hilo.success || !hilo.data) return;
+        setActiveConvId(ultima.id);
+        setMessages(hilo.data.messages.map((m) => ({ role: m.role, text: m.text })));
       }
     };
     // Swallow failures: a status/history load error must not become an unhandled
     // rejection or block the chat — the assistant still works without the list.
-    run().catch(() => {});
+    run()
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setRetomando(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -128,6 +150,8 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
   // Open a saved thread: load its messages and make it active.
   const selectConversation = async (id: string) => {
+    tocadoRef.current = true;
+    setAlTope(false);
     setShowConvs(false);
     if (id === activeConvId) return;
     const res = await getApiLayer().assistant.getConversation(id);
@@ -140,6 +164,8 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
   // Start a fresh thread; the server creates it on the first message.
   const newConversation = () => {
+    tocadoRef.current = true;
+    setAlTope(false);
     setShowConvs(false);
     setActiveConvId('');
     setMessages([]);
@@ -149,6 +175,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const deleteConversation = async (id: string) => {
     const res = await getApiLayer().assistant.deleteConversation(id);
     if (res.success) {
+      setAlTope(false);
       await reloadConversations();
       if (id === activeConvId) newConversation();
     }
@@ -164,6 +191,8 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const send = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
+    tocadoRef.current = true;
+    setAlTope(false);
     const history: AssistantTurn[] = messages.map((m) => ({ role: m.role, text: m.text }));
     const next: ChatMsg[] = [...messages, { role: 'user', text: trimmed }];
     setMessages(next);
@@ -179,6 +208,12 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         if (!activeConvId) setActiveConvId(res.data.conversationId);
         reloadConversations();
       }
+    } else if (res.error?.code === 'CONVERSATION_LIMIT') {
+      // No es una respuesta del asistente y no se pierde nada: la pregunta
+      // vuelve a la caja y el aviso lleva a las conversaciones desde ahi mismo.
+      setMessages(messages);
+      setInput(trimmed);
+      setAlTope(true);
     } else {
       // Por codigo; uno que no se conoce cae al generico, nunca al texto del
       // servidor ("the assistant could not answer right now").
@@ -372,7 +407,7 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           <div className="text-center py-16 uv-text-muted text-sm">{t('assistant_unavailable')}</div>
         )}
 
-        {available !== false && messages.length === 0 && (
+        {available !== false && !retomando && messages.length === 0 && (
           <div className="py-8 text-center space-y-4">
             <div className="w-16 h-16 mx-auto rounded-2xl uv-gradient-brand flex items-center justify-center">
               <Icons.MessageCircle size={32} className="text-white" />
@@ -490,6 +525,24 @@ export const AssistantView: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         )}
         <div ref={bottomRef} />
       </div>
+
+      {alTope && (
+        <div className="flex-shrink-0 px-3 pb-2">
+          <div
+            role="status"
+            className="rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] px-3 pt-3 pb-1"
+          >
+            <p className="text-sm uv-text-primary">{t('assistant_conv_limit')}</p>
+            <button
+              type="button"
+              onClick={() => setShowConvs(true)}
+              className="min-h-11 text-sm font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]"
+            >
+              {t('assistant_history')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-3 flex items-end gap-2 flex-shrink-0">

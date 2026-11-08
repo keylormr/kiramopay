@@ -4,6 +4,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useActualizacion, type FaseInterna } from '../hooks/useActualizacion';
 import type { PlataformaApp } from '../api/repositories/appversion.repository';
 import { localeDe } from '../utils/periodos';
+import { useSuperficieOscura } from '../hooks/useBarrasDelSistema';
 
 // Toda version nueva de la app instalada es obligatoria.
 //
@@ -140,6 +141,8 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
   interna,
   onReintentar,
 }) => {
+  // Oscura con cualquier tema: las barras del sistema tambien.
+  useSuperficieOscura();
   const { t, language } = useLanguage();
   const ios = plataforma === 'ios';
   // El idioma de la persona si el release lo trae; si no, el espanol de siempre.
