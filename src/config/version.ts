@@ -50,6 +50,7 @@ export const APP_VERSION: AppVersion = {
       'El asistente sigue tu última conversación cuando vuelves a abrirlo; para empezar otra, usa el botón de más',
       'Si ya tienes todas las conversaciones de tu plan, el aviso te lleva a ellas para borrar una y no pierdes lo que escribiste',
       'Al registrarte y al actualizar la aplicación, la barra del teléfono combina con el fondo oscuro',
+      'En modo claro, los encabezados de SINPE, Cripto y Dispositivos ahora son claros; solo las tarjetas siguen oscuras',
     ],
   },
   history: [

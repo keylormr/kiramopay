@@ -285,13 +285,13 @@ export const SessionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => 
             </div>
           ) : (
             <div className="flex flex-col gap-6">
-              <section className="kp-resumen-sesiones rounded-3xl p-[18px] text-white flex items-start gap-3.5">
-                <span className="w-11 h-11 rounded-[15px] bg-white/10 flex items-center justify-center shrink-0 text-[#7EE2B4]">
+              <section className="kp-resumen-sesiones rounded-3xl p-[18px] text-[var(--color-text-primary)] dark:text-white flex items-start gap-3.5">
+                <span className="w-11 h-11 rounded-[15px] bg-[var(--color-success-soft)] text-[var(--color-success-strong)] dark:bg-white/10 dark:text-[#7EE2B4] flex items-center justify-center shrink-0">
                   <Icons.Shield size={22} aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
                   {resumen && <p className="mb-1 text-[17px] font-semibold kp-num">{resumen}</p>}
-                  <p className="text-[13px] leading-relaxed text-[#C9D4E6]">{t('sessions_intro')}</p>
+                  <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)] dark:text-[#C9D4E6]">{t('sessions_intro')}</p>
                 </div>
               </section>
 

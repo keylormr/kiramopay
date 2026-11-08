@@ -238,3 +238,73 @@ describe('una sola barra de desplazamiento con una pantalla completa abierta', (
     expect(css).toMatch(/\[data-lado='abajo'\] > \.kp-pista\s*{\s*animation-name: kp-pista-baja;/);
   });
 });
+
+describe('lo que sigue oscuro con el tema claro', () => {
+  // Decision del dueno del 2026-11-08: con los dos temas solo son oscuras las
+  // tarjetas. SINPE, Cripto y Dispositivos son encabezados de pantalla.
+  const vista = (ruta: string) => readFileSync(join(RAIZ, ruta), 'utf8');
+  function regla(selector: string): string {
+    const inicio = css.indexOf(`\n${selector} {`);
+    if (inicio < 0) throw new Error(`falta la regla ${selector}`);
+    return css.slice(inicio, css.indexOf('}', inicio)).replace(/\s+/g, ' ');
+  }
+  const propiedad = (bloque: string, nombre: string) => new RegExp(` ${nombre}: ([^;]+);`).exec(bloque)?.[1];
+
+  it('el saldo del Inicio y la tarjeta de Perfil siguen con la superficie de los dos temas', () => {
+    expect(vista('components/home/TarjetaDeSaldo.tsx')).toContain('kp-tarjeta-metal');
+    expect(vista('views/profile/ProfileView.tsx')).toContain('kp-tarjeta-metal');
+  });
+
+  it('SINPE y Cripto usan el encabezado que se aclara', () => {
+    for (const ruta of ['views/sinpe/SinpeView.tsx', 'views/crypto/CryptoView.tsx']) {
+      expect(vista(ruta), ruta).toContain('kp-encabezado-metal');
+      expect(vista(ruta), ruta).not.toContain('kp-tarjeta-metal');
+    }
+  });
+
+  it('en oscuro el encabezado es la misma superficie de la tarjeta de saldo', () => {
+    const tarjeta = regla('.kp-tarjeta-metal');
+    const encabezado = regla('.dark .kp-encabezado-metal');
+    expect(propiedad(encabezado, 'background')).toBe(propiedad(tarjeta, 'background'));
+    expect(propiedad(encabezado, 'box-shadow')).toBe(propiedad(tarjeta, 'box-shadow'));
+  });
+
+  it('en claro el encabezado y el resumen de Dispositivos parten de la superficie clara', () => {
+    expect(regla('.kp-encabezado-metal')).toContain('background: var(--color-surface-1)');
+    expect(regla('.kp-resumen-sesiones')).toContain('var(--color-surface-1)');
+    expect(regla('.dark .kp-resumen-sesiones')).toContain('#12213F');
+  });
+
+  it('dentro de los encabezados, los blancos translucidos solo aplican en oscuro', () => {
+    for (const ruta of ['views/sinpe/SinpeView.tsx', 'views/crypto/CryptoView.tsx']) {
+      const texto = vista(ruta);
+      const desde = texto.indexOf('kp-encabezado-metal');
+      const bloque = texto.slice(desde, texto.indexOf('</section>', desde));
+      expect(bloque, ruta).not.toMatch(/(?<!dark:)(?<!dark:hover:)(text|bg|border)-white\//);
+    }
+  });
+
+  it('AA: la letra de esos bloques sobre las superficies claras y su resplandor', () => {
+    const superficies = [
+      rgb(token('color-surface-1')),
+      rgb(token('color-surface-2')),
+      mezclar([45, 123, 255], 0.14, BLANCO),
+      mezclar([25, 195, 125], 0.12, BLANCO),
+    ];
+    for (const fondo of superficies) {
+      for (const letra of ['color-text-primary', 'color-text-secondary']) {
+        expect(contraste(rgb(token(letra)), fondo), `${letra} sobre ${fondo}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('AA: la ganancia y la perdida de Cripto sobre su pastilla clara', () => {
+    for (const [suave, fuerte] of [
+      ['color-success-soft', 'color-success-strong'],
+      ['color-danger-soft', 'color-danger-strong'],
+    ]) {
+      const { color, alfa } = rgba(token(suave));
+      expect(contraste(rgb(token(fuerte)), mezclar(color, alfa, BLANCO)), fuerte).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});

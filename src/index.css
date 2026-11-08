@@ -439,12 +439,20 @@ html:has(.kp-capa) {
   .kp-vivo { animation: none; }
 }
 
-/* Resumen de "Dispositivos conectados": la misma tarjeta oscura en los dos
-   temas, con un brillo verde de "todo en orden" en la esquina. */
+/* Resumen de "Dispositivos conectados", con un brillo verde de "todo en orden"
+   en la esquina. Claro en tema claro y oscuro en tema oscuro: no es una
+   tarjeta (decision del dueno, 2026-11-08). */
 .kp-resumen-sesiones {
+  background:
+    radial-gradient(110% 90% at 100% 0%, rgba(25, 195, 125, 0.12) 0%, rgba(25, 195, 125, 0) 55%),
+    var(--color-surface-1);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.dark .kp-resumen-sesiones {
   background:
     radial-gradient(110% 90% at 100% 0%, rgba(25, 195, 125, 0.28) 0%, rgba(25, 195, 125, 0) 55%),
     linear-gradient(160deg, #12213F 0%, #0B1730 70%);
+  box-shadow: none;
 }
 
 /* Filas de las tablas del panel: el resaltado de la elegida y del paso del
@@ -798,6 +806,41 @@ input[type='number']::-webkit-inner-spin-button {
     inset 0 1px 0 rgba(255, 255, 255, 0.09),
     inset 0 0 0 1px rgba(125, 170, 255, 0.10),
     0 18px 36px -14px rgba(7, 13, 28, 0.45);
+}
+
+/* Encabezado de pantalla de SINPE y Cripto. En oscuro es la misma superficie de
+   la tarjeta de saldo; en claro es una superficie clara, porque con los dos
+   temas solo las tarjetas son oscuras (decision del dueno, 2026-11-08). */
+.kp-encabezado-metal {
+  background: var(--color-surface-1);
+  box-shadow:
+    inset 0 0 0 1px var(--color-border),
+    0 18px 36px -24px rgba(7, 13, 28, 0.22);
+}
+.dark .kp-encabezado-metal {
+  background: linear-gradient(155deg, #18294F 0%, #0D1833 45%, #070F22 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 1px rgba(125, 170, 255, 0.10),
+    0 24px 44px -18px rgba(0, 0, 0, 0.85);
+}
+
+/* Los botones secundarios de esos encabezados, con la mezcla que usan las
+   utilidades bg-white/[0.08] de Tailwind. El color de la letra lo pone
+   cada boton o lo hereda del encabezado. */
+.kp-encabezado-accion {
+  background-color: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.dark .kp-encabezado-accion {
+  background-color: color-mix(in oklab, #fff 8%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+@media (hover: hover) {
+  .kp-encabezado-accion:hover { background-color: var(--color-surface-muted); }
+  .dark .kp-encabezado-accion:hover { background-color: color-mix(in oklab, #fff 13%, transparent); }
 }
 
 /* Un reflejo que cruza la tarjeta cada 6 s. Con movimiento reducido no esta. */

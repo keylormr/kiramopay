@@ -622,36 +622,36 @@ export const SinpeView: React.FC<SinpeViewProps> = ({ initialTab = 'send' }) => 
           columna ancha: entre 42 y 56rem se estiraba la tarjeta. */}
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 @min-[56rem]/sinpe:max-w-none @min-[56rem]/sinpe:grid @min-[56rem]/sinpe:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] @min-[56rem]/sinpe:items-start @min-[56rem]/sinpe:gap-8">
       <div className="flex min-w-0 flex-col gap-6">
-      {/* Tarjeta de saldo: la metal oscura del Inicio */}
-      <section aria-label={t('sinpe_mobile')} className="kp-tarjeta-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary-dark)] @min-[56rem]/sinpe:p-6">
+      {/* Encabezado: claro con el tema claro, metal con el oscuro */}
+      <section aria-label={t('sinpe_mobile')} className="kp-encabezado-metal relative overflow-hidden rounded-[28px] p-5 text-[var(--color-text-primary)] dark:text-[var(--color-text-primary-dark)] @min-[56rem]/sinpe:p-6">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -bottom-16 -right-16 h-52 w-52 rounded-full"
+          className="pointer-events-none absolute -bottom-16 -right-16 h-52 w-52 rounded-full opacity-50 dark:opacity-100"
           style={{ background: 'radial-gradient(closest-side, rgba(45,123,255,0.28), transparent)' }}
         />
         <div className="relative mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.08] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)] shadow-[inset_0_0_0_1px_var(--color-border)] dark:bg-white/[0.08] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
             <Bandera pais="CR" className="text-base" />
           </div>
-          <span className="text-[13px] text-white/70">{t('sinpe_mobile')}</span>
-          <BotonOcultarMontos tamano={18} sobreOscuro className="-my-2 ml-auto -mr-2" />
+          <span className="text-[13px] text-[var(--color-text-secondary)] dark:text-white/70">{t('sinpe_mobile')}</span>
+          <BotonOcultarMontos tamano={18} sobreEncabezado className="-my-2 ml-auto -mr-2" />
         </div>
         <div className="kp-num relative mb-1 text-[34px] font-semibold leading-tight tracking-[-0.035em] tabular-nums">
           <Monto puntos="••••••">{formatCurrency(balance)}</Monto>
         </div>
-        <div className="relative text-white/70 text-sm">{t('available_to_send')}</div>
+        <div className="relative text-[var(--color-text-secondary)] dark:text-white/70 text-sm">{t('available_to_send')}</div>
 
         <div className="relative flex gap-2.5 mt-5">
           <button
             onClick={() => setShowSendSheet(true)}
-            className="kp-toque kp-foco flex-1 bg-white text-[var(--color-navy-800)] h-11 rounded-xl font-semibold flex items-center justify-center gap-2"
+            className="kp-toque kp-foco flex-1 bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white dark:bg-white dark:hover:bg-white dark:text-[var(--color-navy-800)] h-11 rounded-xl font-semibold flex items-center justify-center gap-2"
           >
             <Icons.Send size={18} />
             {t('send')}
           </button>
           <button
             onClick={() => setShowReceiveSheet(true)}
-            className="kp-toque kp-foco flex-1 bg-white/[0.08] hover:bg-white/[0.13] text-white h-11 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_0_0_1px_rgba(255,255,255,0.08)]"
+            className="kp-toque kp-foco kp-encabezado-accion flex-1 text-[var(--color-text-primary)] dark:text-white h-11 rounded-xl font-semibold flex items-center justify-center gap-2"
           >
             <Icons.Receive size={18} />
             {t('request')}
