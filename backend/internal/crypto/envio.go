@@ -101,6 +101,10 @@ type Opciones struct {
 	UIF           UIFReporter
 	Avisos        Avisos
 	Logger        Logger
+
+	// ComprasEnPausa rechaza comprar, convertir y apartar para staking (ver
+	// pausa.go). Lo enciende cmd/api en produccion.
+	ComprasEnPausa bool
 }
 
 // comisionDe calcula lo que cobra KiramoPay por enviar `cantidad`.

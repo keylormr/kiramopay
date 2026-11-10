@@ -187,6 +187,10 @@ export const CryptoView: React.FC = () => {
     ponerHoja(hoja);
   };
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset | null>(null);
+  // Si esta cuenta puede comprar, convertir y hacer staking. null mientras se
+  // pregunta: lo que abre una posicion no se ofrece hasta saberlo, para que no
+  // aparezca y desaparezca al abrir la pantalla.
+  const [comprasAbiertas, setComprasAbiertas] = useState<boolean | null>(null);
   const [selectedTx, setSelectedTx] = useState<CryptoTransaction | null>(null);
   const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking'>('portfolio');
 
@@ -300,6 +304,26 @@ export const CryptoView: React.FC = () => {
   // tienen precio, y ese subtotal se presenta como el total de la cartera. Con
   // una cartera mixta el numero que se mostraba era falso por lo bajo.
   const sinPrecios = assetsWithBalance.some(a => !(a.currentPrice > 0));
+
+  useEffect(() => {
+    let vigente = true;
+    void (async () => {
+      // Sin respuesta se ofrece igual: quien decide es el servidor, y si esta
+      // en pausa lo rechaza con su mensaje.
+      let abiertas = true;
+      try {
+        const res = await getApiLayer().crypto.getAvailability();
+        if (res.success && res.data) abiertas = res.data.purchasesActive;
+      } catch {
+        // Se queda en abiertas: ver arriba.
+      }
+      if (vigente) setComprasAbiertas(abiertas);
+    })();
+    return () => { vigente = false; };
+  }, []);
+
+  // Vender no se pausa, pero sin nada que vender tampoco se ofrece.
+  const puedeVender = comprasAbiertas !== false || assetsWithBalance.length > 0;
 
   // Abrir la hoja de conversion elige un destino valido de entrada. Sin esto la
   // hoja arrancaba con un destino que no existia entre sus opciones.
@@ -551,6 +575,7 @@ export const CryptoView: React.FC = () => {
   // Lo mismo cuando el apartado de esa llave ya se hizo y despues se retiro: el
   // siguiente toque es un apartado nuevo.
   const trasRechazoDeOperacion = (code: string | undefined) => {
+    if (code === 'CRYPTO_PAUSED') setComprasAbiertas(false);
     if (llaveYaGastada(code)) {
       intentoRef.current = null;
       refreshCrypto().catch(() => {});
@@ -1086,30 +1111,43 @@ export const CryptoView: React.FC = () => {
         )}
 
         {/* Quick Actions */}
+        {puedeVender && (
         <div className="relative flex gap-2 mt-4">
+          {comprasAbiertas === true && (
           <button
             onClick={() => { setSelectedAsset(state.crypto.assets.find(a => a.symbol === 'BTC') || null); setActiveSheet('buy'); }}
             className="kp-toque kp-foco flex-1 min-w-0 kp-encabezado-accion py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.Plus size={16} /> {t('buy')}
           </button>
+          )}
           <button
             onClick={() => { setSelectedAsset(assetsWithBalance[0] || null); setActiveSheet('sell'); }}
             className="kp-toque kp-foco flex-1 min-w-0 kp-encabezado-accion py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.Minus size={16} /> {t('sell')}
           </button>
+          {comprasAbiertas === true && (
           <button
             onClick={openConvertSheet}
             className="kp-toque kp-foco flex-1 min-w-0 kp-encabezado-accion py-2.5 px-1 rounded-xl text-sm font-semibold flex flex-col min-[420px]:flex-row items-center justify-center gap-1 min-[420px]:gap-2"
           >
             <Icons.RefreshCw size={16} /> {t('convert')}
           </button>
+          )}
         </div>
+        )}
       </section>
       </div>
 
       <div className="flex min-w-0 flex-col gap-6">
+      {comprasAbiertas === false && (
+        <div role="status" className="uv-surface-2 rounded-2xl p-4 space-y-1">
+          <p className="font-bold uv-text-primary text-sm">{t('crypto_pausa_titulo')}</p>
+          <p className="text-sm uv-text-secondary">{t('crypto_pausa_cuerpo')}</p>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-1">
         {(['portfolio', 'market', 'staking'] as const).map(tab => (
@@ -1131,12 +1169,14 @@ export const CryptoView: React.FC = () => {
           {assetsWithBalance.length === 0 ? (
             <div className="uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)]">
               <EstadoVacio ilustracion="sinCripto" titulo={t('no_crypto_yet')}>
+                {comprasAbiertas === true && (
                 <button
                   onClick={() => { setSelectedAsset(state.crypto.assets[0]); setActiveSheet('buy'); }}
                   className="kp-toque kp-foco h-12 rounded-[16px] bg-[var(--color-primary-fill)] px-6 font-semibold text-white hover:bg-[var(--color-primary-hover)]"
                 >
                   {t('buy_crypto')}
                 </button>
+                )}
               </EstadoVacio>
             </div>
           ) : (
@@ -1338,8 +1378,12 @@ export const CryptoView: React.FC = () => {
               <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Icons.Percent size={28} className="text-purple-500" />
               </div>
+              {comprasAbiertas === false ? (
+                <p className="text-gray-500">{t('crypto_staking_vacio')}</p>
+              ) : (
+              <>
               <p className="text-gray-500 mb-2">{t('earn_passive')}</p>
-              <p className="text-sm text-gray-400 mb-2">{t('crypto_up_to_apy')}</p>
+              <p className="text-sm text-gray-400 mb-2">{t('crypto_staking_sin_rendimiento')}</p>
               {/* Que se puede stakear, dicho antes de tocar el boton: con
                   saldo solo en BTC el boton no tiene a donde llevar. */}
               <p className="text-sm text-gray-500 mb-4">
@@ -1352,6 +1396,8 @@ export const CryptoView: React.FC = () => {
               >
                 {t('start_staking')}
               </button>
+              </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1429,12 +1475,6 @@ export const CryptoView: React.FC = () => {
               })}
             </div>
           )}
-
-          {/* Rewards program notice: no rates are shown until accrual is live */}
-          <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-2xl p-4">
-            <h4 className="font-bold uv-text-primary mb-1">{t('yield_rates')}</h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300">{t('crypto_up_to_apy')}</p>
-          </div>
         </div>
       )}
 
@@ -1540,16 +1580,18 @@ export const CryptoView: React.FC = () => {
             )}
 
             <div className="grid grid-cols-2 gap-3">
+              {comprasAbiertas === true && (
               <button
                 onClick={() => setActiveSheet('buy')}
                 className="bg-green-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
               >
                 <Icons.Plus size={18} /> {t('buy')}
               </button>
+              )}
               <button
                 onClick={() => setActiveSheet('sell')}
                 disabled={selectedAsset.balance === 0}
-                className="bg-red-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                className={`${comprasAbiertas === true ? '' : 'col-span-2 '}bg-red-500 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50`}
               >
                 <Icons.Minus size={18} /> {t('sell')}
               </button>
@@ -1588,7 +1630,7 @@ export const CryptoView: React.FC = () => {
 
             {/* Solo los activos del programa de staking del servidor. USDT y
                 USDC salieron del programa; SOL estaba y no tenia el boton. */}
-            {selectedAsset.balance > 0 && tieneStaking(selectedAsset.symbol) && (
+            {comprasAbiertas === true && selectedAsset.balance > 0 && tieneStaking(selectedAsset.symbol) && (
               <button
                 onClick={() => { setTradeError(''); setActiveSheet('stake'); }}
                 className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
@@ -2008,7 +2050,7 @@ export const CryptoView: React.FC = () => {
       <BottomSheet isOpen={activeSheet === 'stake'} onClose={() => { setActiveSheet('none'); setAmount(''); setTradeError(''); }} title={`${t('staking')} ${selectedAsset?.symbol || ''}`}>
         <div className="space-y-6">
           <div className="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-4">
-            <p className="text-sm text-gray-600 dark:text-gray-300">{t('crypto_up_to_apy')}</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">{t('crypto_staking_sin_rendimiento')}</p>
           </div>
 
           <div className="text-center">

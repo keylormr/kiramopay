@@ -358,7 +358,7 @@ describe('n=46 — USDT y USDC fuera del staking', () => {
     montar();
     await user.click(screen.getByRole('button', { name: 'Staking' }));
 
-    expect(await screen.findByText('Sin rendimiento aún')).toBeInTheDocument();
+    expect(await screen.findByText('Sin rendimiento')).toBeInTheDocument();
     expect(screen.queryByText(/APY/)).not.toBeInTheDocument();
     expect(screen.queryByText(/2026-09-13T15/)).not.toBeInTheDocument();
   });

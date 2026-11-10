@@ -143,6 +143,18 @@ func (h *Handler) Convert(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, tx)
 }
 
+// GetAvailability le dice a la pantalla si esta cuenta puede comprar, convertir
+// y apartar (ver pausa.go).
+func (h *Handler) GetAvailability(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	abiertas, err := h.service.ComprasAbiertas(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, Disponibilidad{PurchasesActive: abiertas})
+}
+
 func (h *Handler) GetStakingPositions(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	positions, err := h.service.GetStakingPositions(r.Context(), userID)

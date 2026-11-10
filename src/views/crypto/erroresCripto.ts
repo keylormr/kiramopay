@@ -11,6 +11,9 @@ export function mensajeDeErrorCripto(
   t: (clave: string) => string,
 ): string {
   switch (err?.code) {
+    // Comprar, convertir y hacer staking estan en pausa para esta cuenta.
+    case 'CRYPTO_PAUSED':
+      return t('crypto_pausa_cuerpo');
     // Precio: el servidor no cobra contra un numero que ya no vale.
     case 'PRICE_STALE':
       return t('crypto_price_stale');
