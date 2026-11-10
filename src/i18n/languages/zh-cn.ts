@@ -966,6 +966,7 @@ const zhCn: TranslationKeys = {
   update_title: '请更新 KiramoPay',
   update_body: '要继续使用 KiramoPay，请安装 {version} 版本。下载后Android会覆盖安装：数据和登录状态都会保留。',
   update_body_ios: '要继续使用 KiramoPay，请安装 {version} 版本。继续将前往安装新版本的位置；数据和登录状态都会保留。',
+  update_body_play: '要继续使用 KiramoPay，请安装 {version} 版本。继续将前往 Google Play；数据和登录状态都会保留。',
   update_download: '下载',
   update_open: '更新',
   update_whats_new: '{version} 版本新功能',

@@ -36,7 +36,17 @@ export interface PaqueteWeb {
 // OTA). Por eso la consulta lleva plataforma.
 export type PlataformaApp = 'android' | 'ios';
 
+// Android tiene dos canales de distribucion. Sin canal el backend asume el APK
+// de GitHub, que es lo que hacen todos los binarios ya instalados. La app que
+// vino de Google Play pide 'play': su `url` es la ficha en Play (o vacia si Play
+// todavia no tiene la version) y nunca el .apk.
+export type CanalApp = 'apk' | 'play';
+
 export interface IAppVersionRepository {
-  /** Sin plataforma el backend asume android, por los APK ya instalados. */
-  getLatest(plataforma?: PlataformaApp): Promise<ApiResponse<VersionApp>>;
+  /**
+   * Sin plataforma el backend asume android, por los APK ya instalados. El canal
+   * 'play' solo existe en Android; para el APK no se manda (la consulta queda
+   * igual que siempre).
+   */
+  getLatest(plataforma?: PlataformaApp, canal?: CanalApp): Promise<ApiResponse<VersionApp>>;
 }

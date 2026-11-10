@@ -6,6 +6,12 @@ import { getApiLayer } from '@/api';
 import type { PaqueteWeb, PlataformaApp } from '@/api/repositories/appversion.repository';
 import { BUILD_VERSION } from '@/config/version';
 import { verificarManifiesto, type ManifiestoPaquete } from '@/utils/paqueteFirmado';
+import {
+  ACTUALIZACION_WEB_EN_PLAY,
+  canalDeDistribucion,
+  fichaDePlayValida,
+  type CanalDeDistribucion,
+} from '@/utils/canalDeDistribucion';
 
 // Deteccion de actualizaciones: la app instalada compara la version que corre
 // contra la ultima publicada (el backend la sirve desde el release de GitHub) y
@@ -31,6 +37,16 @@ import { verificarManifiesto, type ManifiestoPaquete } from '@/utils/paqueteFirm
 //     encima; en iOS se abre el canal (TestFlight, App Store o un manifiesto
 //     OTA). Tambien es la salida si la via interna fallo dos veces con la misma
 //     version, para que nadie quede atrapado.
+//
+// Un tercer caso es la app que vino de Google Play (utils/canalDeDistribucion):
+// su binario no se actualiza por otro medio que el de Play, asi que la via
+// externa nunca es el .apk sino la ficha de la app en Play, y solo cuando el
+// servidor dice que Play ya la tiene (con `url` vacia no hay barrera: no hay
+// nada que instalar). Si el servidor responde con otra cosa, por ejemplo la URL
+// del .apk de un backend que no conoce el canal, se descarta. La app de Play
+// tampoco usa la via interna mientras ACTUALIZACION_WEB_EN_PLAY siga apagada
+// (ver el porque en utils/canalDeDistribucion): ignora el paquete web y se
+// actualiza solo por Play.
 //
 // La version que corre es la de la capa web (BUILD_VERSION), no la del binario:
 // despues de una actualizacion interna el APK sigue diciendo la vieja.
@@ -256,11 +272,14 @@ type Destino = {
 export function useActualizacion(): {
   actualizacion: ActualizacionDisponible | null;
   plataforma: PlataformaApp | null;
+  /** De donde vino esta app; solo 'play' cambia lo que se muestra y se abre. */
+  canal: CanalDeDistribucion;
   actualizar: () => void;
   reintentar: () => void;
 } {
   const [actualizacion, setActualizacion] = useState<ActualizacionDisponible | null>(null);
   const [plataforma] = useState<PlataformaApp | null>(() => plataformaNativa());
+  const [canal] = useState<CanalDeDistribucion>(() => canalDeDistribucion());
   const destino = useRef<Destino | null>(null);
   // Una descarga a la vez: volver a la app o recuperar la red mientras baja no
   // arranca otra.
@@ -340,10 +359,12 @@ export function useActualizacion(): {
     if (!plataforma) return;
     try {
       await asegurarArranque();
+      // El APK pregunta exactamente lo de siempre; solo Play manda su canal.
+      const repo = getApiLayer().appVersion;
+      const consulta = canal === 'play' ? repo?.getLatest(plataforma, 'play') : repo?.getLatest(plataforma);
       const [info, res] = await Promise.all([
         CapApp.getInfo(),
-        getApiLayer().appVersion?.getLatest(plataforma) ??
-          Promise.resolve({ success: false as const, data: undefined }),
+        consulta ?? Promise.resolve({ success: false as const, data: undefined }),
       ]);
       if (!viva.current || !res.success || !res.data) return;
       const { version, url, notes, notes_i18n: notasTraducidas, web } = res.data;
@@ -354,9 +375,10 @@ export function useActualizacion(): {
         notas: notasLimpias(notes),
         notasTraducidas: traduccionesLimpias(notasTraducidas),
       };
-      const externa = typeof url === 'string' && url !== '' ? url : null;
+      // En Play solo vale la ficha de esta app; en el resto, lo que mande el release.
+      const externa = canal === 'play' ? fichaDePlayValida(url) : typeof url === 'string' && url !== '' ? url : null;
 
-      if (esPaqueteWeb(web)) {
+      if (esPaqueteWeb(web) && (canal !== 'play' || ACTUALIZACION_WEB_EN_PLAY)) {
         const manifiesto = await verificarManifiesto({ manifest: web.manifest, signature: web.signature });
         if (!viva.current) return;
         // El build nativo: versionCode en Android, CFBundleVersion en iOS. Sin
@@ -396,7 +418,7 @@ export function useActualizacion(): {
     } catch {
       // Sin red o backend caido: la proxima revision reintenta.
     }
-  }, [plataforma, descargar]);
+  }, [plataforma, canal, descargar]);
 
   useEffect(() => {
     if (!plataforma) return;
@@ -442,5 +464,5 @@ export function useActualizacion(): {
     void descargar(0);
   };
 
-  return { actualizacion, plataforma, actualizar, reintentar };
+  return { actualizacion, plataforma, canal, actualizar, reintentar };
 }

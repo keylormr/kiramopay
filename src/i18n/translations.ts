@@ -1107,6 +1107,8 @@ export type TranslationKeys = {
   // iOS no instala un binario bajado de un link: se abre el canal (TestFlight,
   // App Store o instalador OTA), asi que el cuerpo y la accion son otros.
   update_body_ios: string;
+  // La app que vino de Google Play se actualiza en su ficha de Play, nunca con un .apk.
+  update_body_play: string;
   update_download: string;
   update_open: string;
   // Encabezado de la lista de novedades del aviso obligatorio. La lista viene

@@ -965,6 +965,7 @@ const ja: TranslationKeys = {
   update_title: 'KiramoPay をアップデートしてください',
   update_body: 'KiramoPay を引き続き使うには、バージョン {version} をインストールしてください。ダウンロードすると上書きインストールされ、データとセッションはそのまま残ります。',
   update_body_ios: 'KiramoPay を引き続き使うには、バージョン {version} をインストールしてください。続けると新しいビルドの入手先が開きます。データとセッションはそのまま残ります。',
+  update_body_play: 'KiramoPay を引き続き使うには、バージョン {version} をインストールしてください。続けると Google Play が開きます。データとセッションはそのまま残ります。',
   update_download: 'ダウンロード',
   update_open: 'アップデート',
   update_whats_new: 'バージョン {version} の新機能',

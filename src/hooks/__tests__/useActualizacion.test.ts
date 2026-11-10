@@ -10,6 +10,18 @@ const mockCapacitor = vi.hoisted(() => ({
 vi.mock('@capacitor/core', () => ({ Capacitor: mockCapacitor }));
 const capApp = vi.hoisted(() => ({ getInfo: vi.fn(), addListener: vi.fn() }));
 vi.mock('@capacitor/app', () => ({ App: capApp }));
+// ACTUALIZACION_WEB_EN_PLAY es una constante del binario: la prueba la mueve para
+// ver las dos ramas. Lo demas del modulo es el real.
+const ajustes = vi.hoisted(() => ({ webEnPlay: false }));
+vi.mock('@/utils/canalDeDistribucion', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/utils/canalDeDistribucion')>();
+  return {
+    ...real,
+    get ACTUALIZACION_WEB_EN_PLAY() {
+      return ajustes.webEnPlay;
+    },
+  };
+});
 const capa = vi.hoisted(() => ({
   appVersion: undefined as undefined | { getLatest: ReturnType<typeof vi.fn> },
 }));
@@ -678,6 +690,191 @@ describe('useActualizacion por dentro', () => {
     await waitFor(() => expect(firmado.verificarManifiesto).toHaveBeenCalled());
     expect(result.current.actualizacion).toBeNull();
     expect(live.downloadBundle).not.toHaveBeenCalled();
+  });
+});
+
+// ── Canal de Google Play ─────────────────────────────────────────────────────
+// La politica de Play no deja que una app publicada ahi se actualice por otro
+// medio que el de Play: la app que vino de Play nunca baja ni abre un .apk, y su
+// barrera lleva a la ficha. El APK de GitHub queda exactamente como estaba.
+
+const FICHA = 'https://play.google.com/store/apps/details?id=com.kiramopay.app';
+const APK = 'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk';
+const UA_ANDROID =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/126.0.0.0 Mobile Safari/537.36';
+
+describe('useActualizacion segun el canal de distribucion', () => {
+  const getLatest = vi.fn();
+  let abrir: ReturnType<typeof vi.spyOn>;
+
+  const comoPlay = () =>
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(`${UA_ANDROID} KiramoPayCanal/play`);
+  const comoAPK = () => vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(UA_ANDROID);
+  const publicada = (url: string, extra: Record<string, unknown> = {}) => ({
+    success: true,
+    data: { version: '2.8.0', url, notes: ['Uno'], ...extra },
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    mockCapacitor.isNativePlatform.mockReturnValue(true);
+    mockCapacitor.getPlatform.mockReturnValue('android');
+    capApp.getInfo.mockReset().mockResolvedValue({ version: '2.7.0', build: '17' });
+    capApp.addListener.mockReset().mockImplementation(() => Promise.resolve({ remove: vi.fn() }));
+    live.ready.mockReset().mockResolvedValue({ previousBundleId: null, currentBundleId: null, rollback: false });
+    live.addListener.mockReset().mockResolvedValue({ remove: vi.fn() });
+    live.getBundles.mockReset().mockResolvedValue({ bundleIds: [] });
+    live.downloadBundle.mockReset().mockResolvedValue(undefined);
+    live.setNextBundle.mockReset().mockResolvedValue(undefined);
+    live.reload.mockReset().mockReturnValue(new Promise(() => undefined));
+    firmado.verificarManifiesto.mockReset().mockResolvedValue({ ...MANIFIESTO });
+    getLatest.mockReset();
+    capa.appVersion = { getLatest };
+    abrir = vi.spyOn(window, 'open').mockReturnValue(null);
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    ajustes.webEnPlay = false;
+  });
+
+  // El APK no manda nada nuevo: ni el canal ni un segundo argumento. Es lo que
+  // hacen los binarios ya instalados y no puede cambiar.
+  it('el APK pregunta exactamente lo de siempre, sin canal', async () => {
+    comoAPK();
+    getLatest.mockResolvedValue(publicada(APK));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion).not.toBeNull());
+    expect(getLatest).toHaveBeenCalledWith('android');
+    expect(getLatest.mock.calls[0]).toHaveLength(1);
+    expect(result.current.canal).toBe('apk');
+  });
+
+  it('el APK sigue abriendo el .apk, tal cual', async () => {
+    comoAPK();
+    getLatest.mockResolvedValue(publicada(APK));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    act(() => result.current.actualizar());
+    expect(abrir).toHaveBeenCalledWith(APK, '_system');
+  });
+
+  it('la app de Play pide el canal de Play', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue(publicada(FICHA));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(getLatest).toHaveBeenCalledWith('android', 'play');
+    expect(result.current.canal).toBe('play');
+  });
+
+  it('la barrera de Play abre la ficha de la app, nunca el .apk', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue(publicada(FICHA));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    act(() => result.current.actualizar());
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(abrir).toHaveBeenCalledWith(FICHA, '_system');
+  });
+
+  // Un backend que todavia no conoce el canal responde con el .apk. Una app de
+  // Play no puede abrirlo, ni bajarlo, ni siquiera mostrar la barrera para eso.
+  it('si el servidor responde con el .apk, la app de Play no ofrece nada', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue(publicada(APK));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+    act(() => result.current.actualizar());
+    expect(abrir).not.toHaveBeenCalled();
+  });
+
+  it('si Play todavia no tiene la version (url vacia), no hay barrera: no habria nada que instalar', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue(publicada(''));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+  });
+
+  it('una ficha de otra app, o de otro sitio, tampoco se abre', async () => {
+    comoPlay();
+    for (const url of [
+      'https://play.google.com/store/apps/details?id=com.otra.app',
+      'https://play.google.com.evil.example/store/apps/details?id=com.kiramopay.app',
+      'market://details?id=com.kiramopay.app',
+    ]) {
+      getLatest.mockReset().mockResolvedValue(publicada(url));
+      const { result, unmount } = renderHook(() => useActualizacion());
+      await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+      expect(result.current.actualizacion).toBeNull();
+      unmount();
+    }
+  });
+
+  it('con la misma version, la app de Play no exige nada aunque Play tenga la ficha', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue({ success: true, data: { version: '2.7.0', url: FICHA, notes: [] } });
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+  });
+
+  // La politica de Play no resuelve si el paquete web puede reemplazarse por
+  // dentro: mientras el titular no lo habilite, la app de Play solo se actualiza
+  // por Play, aunque el release traiga paquete y el telefono lo pueda correr.
+  it('la app de Play no baja el paquete web: se actualiza por Play', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue(publicada(FICHA, { web: WEB }));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    expect(result.current.actualizacion).toMatchObject({ url: FICHA });
+    expect(firmado.verificarManifiesto).not.toHaveBeenCalled();
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+    expect(live.setNextBundle).not.toHaveBeenCalled();
+    expect(live.reload).not.toHaveBeenCalled();
+  });
+
+  it('la app de Play con paquete web pero sin ficha de Play todavia no hace nada', async () => {
+    comoPlay();
+    getLatest.mockResolvedValue(publicada('', { web: WEB }));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(getLatest).toHaveBeenCalledTimes(1));
+    expect(result.current.actualizacion).toBeNull();
+    expect(live.downloadBundle).not.toHaveBeenCalled();
+  });
+
+  it('el APK con el mismo release sigue bajando el paquete por dentro', async () => {
+    comoAPK();
+    getLatest.mockResolvedValue(publicada(APK, { web: WEB }));
+    renderHook(() => useActualizacion());
+    await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(1));
+    expect(live.downloadBundle).toHaveBeenCalledTimes(1);
+    expect(abrir).not.toHaveBeenCalled();
+  });
+
+  // El interruptor: encenderlo es una decision del titular. La barrera de Play
+  // pasa a ser la interna, sin tocar nada mas.
+  it('con la actualizacion interna habilitada en Play, la app de Play baja el paquete', async () => {
+    ajustes.webEnPlay = true;
+    comoPlay();
+    getLatest.mockResolvedValue(publicada(FICHA, { web: WEB }));
+    renderHook(() => useActualizacion());
+    await waitFor(() => expect(live.reload).toHaveBeenCalledTimes(1));
+    expect(live.downloadBundle).toHaveBeenCalledTimes(1);
+    expect(abrir).not.toHaveBeenCalled();
+  });
+
+  it('en iOS el canal es el de siempre aunque el user agent traiga la marca', async () => {
+    mockCapacitor.getPlatform.mockReturnValue('ios');
+    comoPlay();
+    getLatest.mockResolvedValue(publicada('https://apps.apple.com/app/kiramopay'));
+    const { result } = renderHook(() => useActualizacion());
+    await waitFor(() => expect(result.current.actualizacion?.via).toBe('externa'));
+    expect(getLatest).toHaveBeenCalledWith('ios');
+    expect(result.current.canal).toBe('apk');
   });
 });
 
