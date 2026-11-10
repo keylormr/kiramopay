@@ -47,11 +47,14 @@ textos.
    ([ayuda](https://support.google.com/googleplay/android-developer/answer/11926878));
    la prórroga que la página ofrecía llegaba al 1 de noviembre de 2026 y ya venció.
    **Resuelto:** `android/variables.gradle` tiene `targetSdkVersion = 36` desde
-   Capacitor 8. Falta, aparte, el requisito de páginas de memoria de 16 KB para las
-   bibliotecas nativas (`.so`) de los plugins, que Google hace obligatorio para
-   publicar actualizaciones desde el 1 de febrero de 2027
-   ([guía](https://developer.android.com/guide/practices/page-sizes)): no se
-   comprobó contra el AAB. [Repo]
+   Capacitor 8. Aparte está el requisito de páginas de memoria de 16 KB para las
+   bibliotecas nativas (`.so`), que Google hace obligatorio para publicar
+   actualizaciones desde el 1 de febrero de 2027
+   ([guía](https://developer.android.com/guide/practices/page-sizes)). El AAB de la
+   corrida del 2026-11-10 trae una sola (`libdatastore_shared_counter.so`, de
+   AndroidX DataStore) y su alineación de segmentos ELF en las ABI de 64 bits es de
+   16 KB (`p_align` 0x4000); no se corrió la herramienta de Google sobre el AAB.
+   Hay que repetir la comprobación si se suma un plugin con código nativo. [Repo]
 2. **Actualización por fuera de Play.** La política de Play dice que una app
    distribuida en Play "may not modify, replace, or update itself using any method
    other than Google Play's update mechanism"
