@@ -70,6 +70,6 @@ describe('HelpButton', () => {
 
     await user.click(screen.getByLabelText('¿Qué es esto?'));
 
-    expect(await screen.findByText(/el rendimiento todavía NO se acredita/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No genera rendimiento/i)).toBeInTheDocument();
   });
 });
