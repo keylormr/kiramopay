@@ -2287,6 +2287,12 @@ const hi: TranslationKeys = {
   contador_csv_total: 'कुल बिक्री',
   contador_csv_cantidad: 'बिक्री की संख्या',
   contador_archivo: 'अकाउंटेंट-सारांश',
+  contador_pdf_titulo: 'SINPE भुगतान सारांश',
+  contador_pdf_aviso: 'यह दस्तावेज़ बैंक स्टेटमेंट से पढ़े गए भुगतानों को व्यवस्थित करने में मदद करता है। यह कर रसीद, चालान या कर रिटर्न नहीं है।',
+  contador_pdf_sin_signo: 'बैंक की फ़ाइल आने वाली और जाने वाली राशि को अलग नहीं दिखाती: इस सूची की कुछ प्रविष्टियाँ प्राप्त भुगतान नहीं हो सकतीं।',
+  contador_pdf_pie: '{fecha} को KiramoPay से तैयार किया गया',
+  contador_pdf_pagina: 'पृष्ठ {n} / {total}',
+  contador_formatos_ayuda: 'CSV Excel में खुलता है। PDF पढ़ने या प्रिंट करने के लिए है।',
 };
 
 export default hi;

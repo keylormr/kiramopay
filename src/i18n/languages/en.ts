@@ -2295,6 +2295,12 @@ const en: TranslationKeys = {
   contador_csv_total: 'Total sales',
   contador_csv_cantidad: 'Number of sales',
   contador_archivo: 'accountant-summary',
+  contador_pdf_titulo: 'SINPE payments summary',
+  contador_pdf_aviso: 'This document helps organize the payments read from the bank statement. It is not a tax receipt, an invoice or a tax return.',
+  contador_pdf_sin_signo: 'The bank file does not separate money in from money out: some items in this list may not be payments received.',
+  contador_pdf_pie: 'Prepared with KiramoPay on {fecha}',
+  contador_pdf_pagina: 'Page {n} of {total}',
+  contador_formatos_ayuda: 'CSV opens in Excel. PDF is for reading or printing.',
 };
 
 export default en;

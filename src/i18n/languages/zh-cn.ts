@@ -2287,6 +2287,12 @@ const zhCn: TranslationKeys = {
   contador_csv_total: '销售总额',
   contador_csv_cantidad: '销售笔数',
   contador_archivo: '会计汇总',
+  contador_pdf_titulo: 'SINPE 收款汇总',
+  contador_pdf_aviso: '本文件用于帮助整理从银行对账单中读取的收款，不是税务凭证、发票或纳税申报表。',
+  contador_pdf_sin_signo: '银行文件未区分收入和支出：此列表中的部分项目可能不是收款。',
+  contador_pdf_pie: '由 KiramoPay 于 {fecha} 生成',
+  contador_pdf_pagina: '第 {n} 页，共 {total} 页',
+  contador_formatos_ayuda: 'CSV 可用 Excel 打开，PDF 用于阅读或打印。',
 };
 
 export default zhCn;

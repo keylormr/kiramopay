@@ -2287,6 +2287,12 @@ const ja: TranslationKeys = {
   contador_csv_total: '売上合計',
   contador_csv_cantidad: '売上件数',
   contador_archivo: '会計士向け集計',
+  contador_pdf_titulo: 'SINPE入金の集計',
+  contador_pdf_aviso: 'この書類は、取引明細から読み取った入金の整理を助けるものです。税務上の証憑でも、請求書でも、納税申告書でもありません。',
+  contador_pdf_sin_signo: '銀行のファイルでは入金と出金が区別されていません。この一覧には入金でないものが含まれている可能性があります。',
+  contador_pdf_pie: '{fecha} にKiramoPayで作成',
+  contador_pdf_pagina: '{n} / {total} ページ',
+  contador_formatos_ayuda: 'CSVはExcelで開けます。PDFは閲覧や印刷向けです。',
 };
 
 export default ja;

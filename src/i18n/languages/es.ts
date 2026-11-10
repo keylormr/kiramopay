@@ -2299,6 +2299,12 @@ const es: TranslationKeys = {
   contador_csv_total: 'Total de ventas',
   contador_csv_cantidad: 'Cantidad de ventas',
   contador_archivo: 'resumen-para-contador',
+  contador_pdf_titulo: 'Resumen de cobros por SINPE',
+  contador_pdf_aviso: 'Este documento es una ayuda para ordenar los cobros leídos del estado de cuenta. No es un comprobante fiscal, una factura ni una declaración de impuestos.',
+  contador_pdf_sin_signo: 'El archivo del banco no distingue entradas de salidas: algunos movimientos de esta lista pueden no ser cobros.',
+  contador_pdf_pie: 'Elaborado con KiramoPay el {fecha}',
+  contador_pdf_pagina: 'Página {n} de {total}',
+  contador_formatos_ayuda: 'CSV para abrir en Excel. PDF para leer o imprimir.',
 };
 
 export default es;
