@@ -98,7 +98,7 @@ describe('changelog del rediseno', () => {
   const nuevas = ['2.9.0', '2.10.0', '2.11.0', '2.12.0', '2.13.0', '2.14.0', '2.15.0'];
   const fases = nuevas.slice(1);
   // Lo que salio despues de la fase 6: sigue la numeracion, pero no es una fase.
-  const todas = [...nuevas, '2.15.1'];
+  const todas = [...nuevas, '2.15.1', '2.15.2'];
   const por = (v: string) => getAllVersions().find((x) => x.version === v)!;
 
   it('una version por fase, con buildNumber consecutivo y la ultima vigente', () => {

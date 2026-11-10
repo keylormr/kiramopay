@@ -42,18 +42,27 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.15.1',
-    buildNumber: 26,
-    releaseDate: '2026-11-08',
+    version: '2.15.2',
+    buildNumber: 27,
+    releaseDate: '2026-11-09',
     changes: [
-      'Las pantallas completas ya no quedan debajo de la barra del teléfono ni de la cámara, y el botón de volver se puede tocar',
-      'El asistente sigue tu última conversación cuando vuelves a abrirlo; para empezar otra, usa el botón de más',
-      'Si ya tienes todas las conversaciones de tu plan, el aviso te lleva a ellas para borrar una y no pierdes lo que escribiste',
-      'Al registrarte y al actualizar la aplicación, la barra del teléfono combina con el fondo oscuro',
-      'En modo claro, los encabezados de SINPE, Cripto y Dispositivos ahora son claros; solo las tarjetas siguen oscuras',
+      'Por ahora no se puede comprar cripto, convertirla ni hacer staking; puedes vender lo que ya tienes y retirar lo que está en staking',
+      'El staking ya no promete rendimiento: la pantalla y la ayuda dicen que solo aparta tu cripto',
     ],
   },
   history: [
+    {
+      version: '2.15.1',
+      buildNumber: 26,
+      releaseDate: '2026-11-08',
+      changes: [
+        'Las pantallas completas ya no quedan debajo de la barra del teléfono ni de la cámara, y el botón de volver se puede tocar',
+        'El asistente sigue tu última conversación cuando vuelves a abrirlo; para empezar otra, usa el botón de más',
+        'Si ya tienes todas las conversaciones de tu plan, el aviso te lleva a ellas para borrar una y no pierdes lo que escribiste',
+        'Al registrarte y al actualizar la aplicación, la barra del teléfono combina con el fondo oscuro',
+        'En modo claro, los encabezados de SINPE, Cripto y Dispositivos ahora son claros; solo las tarjetas siguen oscuras',
+      ],
+    },
     {
       version: '2.15.0',
       buildNumber: 25,
