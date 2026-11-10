@@ -30,7 +30,8 @@ la ficha), [ANDROID_APK.md](ANDROID_APK.md) (cómo se compila y firma),
 | Textos de la ficha en `es-419` | `android/fastlane/metadata/android/es-419/` | Dentro de los límites; pendiente de revisión legal ([FICHA_PLAY.md](FICHA_PLAY.md)). |
 | Icono de 512 x 512 | `.../es-419/images/icon.png` | Listo. |
 | Plantilla de `assetlinks.json` | `android/assetlinks.template.json` | Plantilla sin huella; se completa después de crear la app. |
-| Identificador de la app | `com.kiramopay.app`; `versionCode` 16, `versionName` 2.6.0 | Definido. |
+| Identificador de la app | `com.kiramopay.app`; `versionCode` y `versionName` en `android/app/build.gradle` | Definido. |
+| Variante de Play | El AAB lleva una marca de canal y la app que vino de Play se actualiza en su ficha, no con un `.apk` ([ANDROID_APK.md](ANDROID_APK.md#google-play-variant)) | Hecha en el repositorio; sin probar en un teléfono con una instalación de Play. |
 
 ### Lo que falta fuera del código
 
@@ -44,20 +45,27 @@ textos.
 1. **Nivel de API objetivo.** Play exige que las apps nuevas y las actualizaciones
    apunten a Android 16 (API 36) desde el 31 de agosto de 2026
    ([ayuda](https://support.google.com/googleplay/android-developer/answer/11926878));
-   la página menciona una prórroga hasta el 1 de noviembre de 2026 cuyo formulario
-   aún no estaba disponible. `android/variables.gradle` tiene `targetSdkVersion = 34`.
-   La actualización a Capacitor 8 y API 36 va en otra tarea; este checklist no se
-   puede completar hasta que se integre. [Repo]
-2. **Actualización por fuera de Play.** `src/hooks/useActualizacion.ts` consulta la
-   última versión en GitHub y, en Android, ofrece bajar el `.apk` de los releases
-   de GitHub (`backend/internal/appversion/appversion.go`). La política de Play dice
-   que una app distribuida en Play "may not modify, replace, or update itself using
-   any method other than Google Play's update mechanism"
-   ([política](https://support.google.com/googleplay/android-developer/answer/9888379)).
-   Además, el APK de GitHub va firmado con la clave de subida y la app instalada
-   desde Play con la clave de firma de Google: Android no instala uno encima del
-   otro. La versión que se suba a Play no debe ofrecer esa actualización. Es un
-   cambio de código que no está hecho. [Repo]
+   la prórroga que la página ofrecía llegaba al 1 de noviembre de 2026 y ya venció.
+   **Resuelto:** `android/variables.gradle` tiene `targetSdkVersion = 36` desde
+   Capacitor 8. Falta, aparte, el requisito de páginas de memoria de 16 KB para las
+   bibliotecas nativas (`.so`) de los plugins, que Google hace obligatorio para
+   publicar actualizaciones desde el 1 de febrero de 2027
+   ([guía](https://developer.android.com/guide/practices/page-sizes)): no se
+   comprobó contra el AAB. [Repo]
+2. **Actualización por fuera de Play.** La política de Play dice que una app
+   distribuida en Play "may not modify, replace, or update itself using any method
+   other than Google Play's update mechanism"
+   ([política](https://support.google.com/googleplay/android-developer/answer/9888379)),
+   y que `REQUEST_INSTALL_PACKAGES` no puede usarse para autoactualizarse
+   ([permisos](https://support.google.com/googleplay/android-developer/answer/9888170)).
+   **Resuelto en el repositorio:** el AAB que sale del workflow lleva una marca de
+   canal y la app que la lee manda a la ficha de Play, nunca al `.apk`; el manifiesto
+   no declara `REQUEST_INSTALL_PACKAGES`. El APK de GitHub sigue igual. La
+   actualización interna de la capa web queda apagada en la app de Play hasta que el
+   titular lo decida (ver abajo). Detalle en [ANDROID_APK.md](ANDROID_APK.md#google-play-variant).
+   Quedan dos cosas del titular: la variable `PLAY_STORE_VERSION` del backend (se
+   fija cuando una versión ya llegó a todos en Play) y la firma compartida (bloqueo 6).
+   [Repo + Usuario]
 3. **Eliminación de cuenta y política de privacidad.** Play exige una ruta dentro de
    la app para eliminar la cuenta y los datos, y un enlace web para pedirlo
    ([ayuda](https://support.google.com/googleplay/android-developer/answer/13327111)).
@@ -71,6 +79,39 @@ textos.
    producción, y definir cómo se salta el OTP. Decisión técnica pendiente. [Repo]
 5. **Afirmaciones regulatorias de la ficha y declaración financiera.** Ver
    [FICHA_PLAY.md, sección 3](FICHA_PLAY.md#3-afirmaciones-regulatorias-para-revisión-del-usuario-y-su-abogado). [Legal]
+6. **Firma compartida entre el APK y Play.** Android trata como incompatibles dos
+   instalaciones del mismo identificador con firmas distintas
+   ([guía](https://developer.android.com/google/play/app-updates)): quien cambie del
+   APK a Play, o al revés, tendría que desinstalar y perder los datos locales. Una app
+   nueva entra con la llave de firma que genera Google, y esa se fija al publicar en
+   pruebas abiertas o producción
+   ([Play App Signing](https://support.google.com/googleplay/android-developer/answer/9842756),
+   [lanzamientos](https://support.google.com/googleplay/android-developer/answer/9859348)).
+   Si se quiere que los dos canales se actualicen entre sí, hay que entregar a Google
+   una copia de la llave actual (herramienta PEPK) antes de ese momento; si no, quedan
+   como dos instalaciones separadas. Decisión del titular. [Usuario]
+7. **Cobro de los planes Plus y Pro.** Hoy la app no cobra: registrar interés no crea
+   una suscripción ni mueve dinero (`src/api/repositories/plans.repository.ts`), así
+   que no hay conflicto. Cuando se cobre dentro de la app, la política de Pagos exige
+   Google Play Billing para suscripciones y funciones digitales, y no encontré
+   excepción para apps financieras; los pagos entre personas sí están exceptuados
+   ([política](https://support.google.com/googleplay/android-developer/answer/9858738),
+   [preguntas frecuentes](https://support.google.com/googleplay/android-developer/answer/10281818)).
+   Costa Rica no figura en ningún programa de facturación alternativa. Revisar con el
+   abogado antes de activar el cobro. [Legal + Repo]
+8. **Cripto.** Google espera que la compra, tenencia o cambio de criptomonedas se haga
+   "through certified services in regulated jurisdictions" y que el desarrollador tenga
+   la licencia que exija la ley local; Costa Rica no está en la lista de países con
+   requisito propio, y la política no define esos términos
+   ([política](https://support.google.com/googleplay/android-developer/answer/16329703)).
+   Se declara en el formulario de funciones financieras. [Legal]
+9. **Actualización interna de la capa web en la app de Play.** La política exime de la
+   regla de código descargado al "JavaScript en un webview", pero la regla de
+   autoactualización no distingue entre binario y capa web, y Google no publica una
+   guía sobre actualizaciones en vivo de apps híbridas. Por eso la app de Play la trae
+   apagada (`ACTUALIZACION_WEB_EN_PLAY` en `src/utils/canalDeDistribucion.ts`). Para
+   encenderla, el titular le pregunta a Google por el soporte de políticas de Play
+   Console y, con la respuesta por escrito, se cambia ese valor y se publica. [Usuario + Repo]
 
 ## 2. Pasos en orden
 
@@ -100,8 +141,8 @@ Fuentes: [información requerida](https://support.google.com/googleplay/android-
       repositorio (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
       `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`), según [ANDROID_APK.md](ANDROID_APK.md).
       Guardar el keystore en un respaldo seguro fuera del repositorio.
-- [ ] [Repo] Con la API 36 integrada (bloqueo 1) y la actualización por fuera de Play
-      desactivada (bloqueo 2), subir `versionCode`, etiquetar `vX.Y.Z` y empujar la
+- [ ] [Repo] Con la API 36 integrada (bloqueo 1) y la actualización de la app de Play
+      resuelta (bloqueo 2), subir `versionCode`, etiquetar `vX.Y.Z` y empujar la
       etiqueta, o correr el workflow a mano desde Actions.
 - [ ] [Usuario] Bajar el artefacto `kiramopay-aab` de esa corrida:
 
@@ -303,6 +344,12 @@ Antes de enviar:
 - [Política de servicios financieros](https://support.google.com/googleplay/android-developer/answer/9876821)
 - [Nivel de API objetivo](https://support.google.com/googleplay/android-developer/answer/11926878)
 - [Abuso de dispositivo y red (actualización fuera de Play)](https://support.google.com/googleplay/android-developer/answer/9888379)
+- [Permisos y APIs sensibles (`REQUEST_INSTALL_PACKAGES`)](https://support.google.com/googleplay/android-developer/answer/9888170)
+- [Política de Pagos](https://support.google.com/googleplay/android-developer/answer/9858738) y [sus preguntas frecuentes](https://support.google.com/googleplay/android-developer/answer/10281818)
+- [Enlazar a Google Play desde una app](https://developer.android.com/distribute/marketing-tools/linking-to-google-play)
+- [Actualizaciones dentro de la app de Play](https://developer.android.com/guide/playcore/in-app-updates) y [cómo actualiza Play](https://developer.android.com/google/play/app-updates)
+- [Páginas de memoria de 16 KB](https://developer.android.com/guide/practices/page-sizes)
+- [Verificación de desarrolladores de Android](https://developer.android.com/developer-verification)
 - [Crear y lanzar una versión](https://support.google.com/googleplay/android-developer/answer/9859348)
 - [Pruebas internas](https://support.google.com/googleplay/android-developer/answer/9845334)
 - [Requisitos de prueba para cuentas personales nuevas](https://support.google.com/googleplay/android-developer/answer/14151465)

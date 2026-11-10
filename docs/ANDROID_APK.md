@@ -174,6 +174,68 @@ up to 2.8.0 do not have it.
 - **The private key is a repository secret**, like the keystore. A GitHub
   environment limited to `v*` tags, with approval, would narrow who can use it.
 
+## Google Play variant
+
+The `.aab` that goes to Google Play is the same app with one difference: it knows
+it came from Play. Google's Device and Network Abuse policy says an app
+distributed through Play "may not modify, replace, or update itself using any
+method other than Google Play's update mechanism", and `REQUEST_INSTALL_PACKAGES`
+may not be used to self-update. The APK barrier that sends people to download a
+newer `.apk` from GitHub therefore cannot exist in the Play build (this repo's
+manifest does not declare that permission, and it must stay that way).
+
+**How the app knows.** The workflow builds the APK first, exactly as before, then
+runs `node scripts/marcar-canal.mjs play` and builds the AAB. The script adds
+`KiramoPayCanal/play` to `android.appendUserAgent` in the generated
+`android/app/src/main/assets/capacitor.config.json`; Capacitor appends it to the
+WebView user agent and `src/utils/canalDeDistribucion.ts` reads it. No marker
+means APK, which is what every installed binary and every local build is. A
+workflow step checks both outputs: the AAB must carry the marker and the APK must
+not.
+
+The marker is written to the generated file on purpose, not to
+`capacitor.config.ts`: that file and everything tracked under `android/` feed the
+native fingerprint (see In-app updates above), and changing it would send every
+phone with the APK to install another APK instead of updating in place. The
+generated `capacitor.config.json` is not tracked (`android/.gitignore`), so the
+fingerprint and the APK are untouched.
+
+**What the Play app does.**
+
+- It asks `GET /api/v1/app/version?platform=android&channel=play`. The APK still
+  asks exactly what it always did.
+- `url` in that answer is never the `.apk`: it is the Play listing
+  (`https://play.google.com/store/apps/details?id=com.kiramopay.app`), and only
+  when Play already serves the version. The backend compares the release against
+  `PLAY_STORE_VERSION`; with it empty, or lower than the release, `url` is empty
+  and the app shows no barrier, because a mandatory barrier with nothing to
+  install would lock people out while the new version is in review.
+- The app opens only a listing URL for its own id. Anything else the server sends
+  (for example the `.apk` URL from a backend that does not know the channel) is
+  discarded.
+- The in-app web update is off in the Play build (`ACTUALIZACION_WEB_EN_PLAY`).
+  The policy exempts "JavaScript in a webview" from the downloaded-code rule, but
+  the self-update rule is not limited to native code and Google has no guidance on
+  live updates for hybrid apps, so the Play app updates only through Play until
+  the owner asks Google and decides.
+
+**Releasing to Play.**
+
+1. Tag as usual. The run produces `kiramopay.aab` (artifact `kiramopay-aab`).
+2. Upload it to Play Console (next section) and let the rollout reach everyone.
+3. Then set `PLAY_STORE_VERSION` on the backend (Render) to that version, for
+   example `2.16.0`. Not a secret. From then on the Play app treats that version
+   as mandatory, like the APK does.
+
+To try the marker locally: `npx cap sync android`, then
+`node scripts/marcar-canal.mjs play`, and look at `appendUserAgent` in the
+generated file. Remove the generated files afterwards.
+
+Not covered here and open to the owner: a shared signing key between the APK and
+Play (Android treats different signatures as incompatible apps), Google Play
+Billing if plans are ever charged inside the app, and the crypto rules. See
+`docs/PUBLICAR_PLAY_CHECKLIST.md`.
+
 ## Uploading to Google Play
 
 Play only accepts the **`.aab`**, and it comes from the artifacts of the run for
