@@ -316,6 +316,205 @@ func TestGetLatest_ConCacheViejaAndroidSiRecibeElAPK(t *testing.T) {
 	}
 }
 
+// ── Canal de Google Play ─────────────────────────────────────────────────────
+// La app que viene de Play no puede actualizarse por otro medio que el de Play:
+// nunca recibe el .apk, y la ficha solo se ofrece cuando Play ya sirve la version.
+
+func conCacheYPlay(playVersion string) *Handler {
+	h := conCacheYCanal("")
+	h.playVersion = playVersion
+	return h
+}
+
+func TestCanalPlay_ConPlayAlDiaRecibeLaFichaYNuncaElAPK(t *testing.T) {
+	code, info := pedirPlataforma(t, conCacheYPlay("2.3.6"), "?platform=android&channel=play")
+	if code != http.StatusOK {
+		t.Fatalf("code=%d, esperaba 200", code)
+	}
+	if info.URL != fichaPlay {
+		t.Fatalf("url=%q, esperaba la ficha de Play", info.URL)
+	}
+	if strings.HasSuffix(info.URL, ".apk") {
+		t.Fatalf("una app de Play recibio el .apk: %q", info.URL)
+	}
+	if info.Version != "2.3.6" {
+		t.Errorf("version=%q, esperaba la del release (2.3.6)", info.Version)
+	}
+}
+
+func TestCanalPlay_LaFichaEsLaDeLaAppDelAPK(t *testing.T) {
+	if fichaPlay != "https://play.google.com/store/apps/details?id=com.kiramopay.app" {
+		t.Fatalf("fichaPlay=%q, tiene que ser la del applicationId com.kiramopay.app", fichaPlay)
+	}
+}
+
+// Mientras el release esta en GitHub y todavia no en Play, ofrecer la ficha
+// dejaria a la gente frente a una barrera obligatoria sin nada que instalar.
+func TestCanalPlay_ConPlayAtrasadoNoOfreceNada(t *testing.T) {
+	code, info := pedirPlataforma(t, conCacheYPlay("2.3.5"), "?platform=android&channel=play")
+	if code != http.StatusOK {
+		t.Fatalf("code=%d, esperaba 200 (la respuesta sigue siendo valida, sin URL)", code)
+	}
+	if info.URL != "" {
+		t.Fatalf("url=%q, esperaba vacia: Play todavia no tiene la 2.3.6", info.URL)
+	}
+}
+
+func TestCanalPlay_SinVersionConfiguradaNoOfreceNada(t *testing.T) {
+	_, info := pedirPlataforma(t, conCacheYPlay(""), "?platform=android&channel=play")
+	if info.URL != "" {
+		t.Fatalf("url=%q, esperaba vacia: nadie confirmo que Play tenga una version", info.URL)
+	}
+}
+
+func TestCanalPlay_ConPlayMasNuevoQueElReleaseOfreceLaFicha(t *testing.T) {
+	_, info := pedirPlataforma(t, conCacheYPlay("2.4.0"), "?platform=android&channel=play")
+	if info.URL != fichaPlay {
+		t.Fatalf("url=%q, esperaba la ficha", info.URL)
+	}
+}
+
+// La cache guarda la variante de Android con el .apk: pedir el canal de Play no
+// puede cambiarla, o el siguiente telefono con el APK recibiria la ficha.
+func TestCanalPlay_NoContaminaLaRespuestaDelAPK(t *testing.T) {
+	h := conCacheYPlay("2.3.6")
+	if _, info := pedirPlataforma(t, h, "?platform=android&channel=play"); info.URL != fichaPlay {
+		t.Fatalf("play: url=%q", info.URL)
+	}
+	if _, info := pedirPlataforma(t, h, "?platform=android"); info.URL != "https://ejemplo/kiramopay.apk" {
+		t.Fatalf("sin canal: url=%q, esperaba el .apk", info.URL)
+	}
+	if _, info := pedirPlataforma(t, h, "?platform=android&channel=apk"); info.URL != "https://ejemplo/kiramopay.apk" {
+		t.Fatalf("canal apk: url=%q, esperaba el .apk", info.URL)
+	}
+}
+
+func TestCanalPlay_ToleraMayusculasYEspacios(t *testing.T) {
+	_, info := pedirPlataforma(t, conCacheYPlay("2.3.6"), "?platform=android&channel=%20Play%20")
+	if info.URL != fichaPlay {
+		t.Fatalf("url=%q, esperaba la ficha", info.URL)
+	}
+}
+
+func TestCanal_InvalidoEs400(t *testing.T) {
+	for _, query := range []string{
+		"?platform=android&channel=huawei",
+		"?platform=android&channel=play,apk",
+		"?channel=%2e%2e",
+	} {
+		if code, _ := pedirPlataforma(t, conCacheYPlay("2.3.6"), query); code != http.StatusBadRequest {
+			t.Errorf("%s: code=%d, esperaba 400", query, code)
+		}
+	}
+}
+
+// Google Play es solo de Android: en iOS el canal no existe.
+func TestCanalPlay_EnIOSEs400(t *testing.T) {
+	h := conCacheYPlay("2.3.6")
+	h.iosUpdateURL = "https://testflight.apple.com/join/abc"
+	if code, _ := pedirPlataforma(t, h, "?platform=ios&channel=play"); code != http.StatusBadRequest {
+		t.Fatalf("code=%d, esperaba 400", code)
+	}
+}
+
+// Sin ?platform= se asume android, y con channel=play tambien.
+func TestCanalPlay_SinPlataformaEsAndroid(t *testing.T) {
+	_, info := pedirPlataforma(t, conCacheYPlay("2.3.6"), "?channel=play")
+	if info.URL != fichaPlay {
+		t.Fatalf("url=%q, esperaba la ficha", info.URL)
+	}
+}
+
+// Con GitHub caido la respuesta sale de la cache vieja, que trae el .apk: la
+// app de Play tampoco ahi puede recibirlo.
+func TestCanalPlay_ConCacheViejaNoRecibeElAPK(t *testing.T) {
+	api := servidorAPI(t, http.StatusForbidden, true)
+	defer api.Close()
+	web := servidorWeb(t, false)
+	defer web.Close()
+
+	h := handlerDePrueba(api.URL, web.URL)
+	h.playVersion = "2.3.5"
+	h.cache = &infoVersion{Version: "2.3.5", URL: "https://ejemplo/viejo.apk"}
+	h.cachedAt = time.Now().Add(-time.Hour)
+
+	code, info := pedirPlataforma(t, h, "?platform=android&channel=play")
+	if code != http.StatusOK {
+		t.Fatalf("code=%d, esperaba 200 desde la cache vieja", code)
+	}
+	if strings.HasSuffix(info.URL, ".apk") {
+		t.Fatalf("una app de Play recibio el .apk desde la cache vieja: %q", info.URL)
+	}
+	if info.URL != fichaPlay {
+		t.Fatalf("url=%q, esperaba la ficha", info.URL)
+	}
+}
+
+// Y sin cache y con los dos caminos caidos sigue siendo 503, como para el APK.
+func TestCanalPlay_LosDosCaminosCaidosSinCacheDa503(t *testing.T) {
+	api := servidorAPI(t, http.StatusInternalServerError, false)
+	defer api.Close()
+	web := servidorWeb(t, false)
+	defer web.Close()
+	h := handlerDePrueba(api.URL, web.URL)
+	h.playVersion = "2.3.6"
+	if code, _ := pedirPlataforma(t, h, "?platform=android&channel=play"); code != http.StatusServiceUnavailable {
+		t.Fatalf("code=%d, esperaba 503", code)
+	}
+}
+
+func TestVersionDePlayConfigurada(t *testing.T) {
+	casos := map[string]string{
+		"":         "",
+		"   ":      "",
+		"2.16.0":   "2.16.0",
+		" 2.16.0 ": "2.16.0",
+		"2.16":     "",
+		"v2.16.0":  "",
+		"2.16.0.1": "",
+		"abc":      "",
+		"2.x.0":    "",
+	}
+	for entrada, esperada := range casos {
+		if got := versionDePlayConfigurada(entrada); got != esperada {
+			t.Errorf("versionDePlayConfigurada(%q) = %q, esperaba %q", entrada, got, esperada)
+		}
+	}
+}
+
+func TestVersionAlcanza(t *testing.T) {
+	casos := []struct {
+		tiene, necesita string
+		quiere          bool
+	}{
+		{"2.16.0", "2.16.0", true},
+		{"2.16.1", "2.16.0", true},
+		{"2.17.0", "2.16.9", true},
+		{"3.0.0", "2.99.99", true},
+		{"2.15.9", "2.16.0", false},
+		{"2.9.0", "2.10.0", false}, // numerico, no alfabetico
+		{"", "2.16.0", false},
+		{"2.16.0", "", false},
+		{"abc", "2.16.0", false},
+	}
+	for _, c := range casos {
+		if got := versionAlcanza(c.tiene, c.necesita); got != c.quiere {
+			t.Errorf("versionAlcanza(%q, %q) = %v, esperaba %v", c.tiene, c.necesita, got, c.quiere)
+		}
+	}
+}
+
+func TestNewHandler_LeeLaVersionDePlayDelEntorno(t *testing.T) {
+	t.Setenv("PLAY_STORE_VERSION", " 2.16.0 ")
+	if got := NewHandler().playVersion; got != "2.16.0" {
+		t.Fatalf("playVersion=%q, esperaba 2.16.0", got)
+	}
+	t.Setenv("PLAY_STORE_VERSION", "no-es-version")
+	if got := NewHandler().playVersion; got != "" {
+		t.Fatalf("playVersion=%q, esperaba vacia con un valor invalido", got)
+	}
+}
+
 // ── Novedades ────────────────────────────────────────────────────────────────
 // La actualizacion es obligatoria y el aviso dice que trae. La app instalada no
 // conoce el changelog de la version nueva: se lo da el servidor, que lo lee del
