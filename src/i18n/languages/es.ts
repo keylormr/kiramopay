@@ -1804,7 +1804,7 @@ const es: TranslationKeys = {
   help_assistant_title: 'Asistente',
   help_assistant_body: 'Responde preguntas sobre tus movimientos y sobre cómo funciona la app, en tu idioma. Lee tus datos para contestar, pero no mueve plata por su cuenta: puede dejar preparado un envío, un pago o una recarga, y confirmarlo lo haces tú con un botón.\n\nEn el plan gratuito son 2 preguntas por día.',
   faq_q1: '¿Qué es KiramoPay?',
-  faq_a1: 'Una billetera digital: guardas plata, la envías y la recibes por SINPE Móvil entre usuarios de la app, cobras y pagas con QR, compras cripto y ves en qué se te va el mes.\n\nCada movimiento queda anotado en un libro contable de doble entrada, así que todo colón tiene origen y destino.',
+  faq_a1: 'Una billetera digital: guardas plata, la envías y la recibes por SINPE Móvil entre usuarios de la app, cobras y pagas con QR y ves en qué se te va el mes.\n\nCada movimiento queda anotado en un libro contable de doble entrada, así que todo colón tiene origen y destino.',
   faq_q2: '¿Cómo entra dinero a mi billetera?',
   faq_a2: 'Hoy, recibiendo de alguien que ya usa KiramoPay: por SINPE dentro de la app, por un cobro con QR o por un pago dividido.\n\nTodavía no se puede cargar saldo desde un banco, un cajero ni un punto físico, y los depósitos de cripto están apagados hasta que la custodia esté activa.',
   faq_q3: '¿Cuánto cuesta enviar por SINPE Móvil?',

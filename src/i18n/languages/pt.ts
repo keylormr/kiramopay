@@ -1801,7 +1801,7 @@ const pt: TranslationKeys = {
   help_assistant_title: 'Assistente',
   help_assistant_body: 'Responde perguntas sobre suas movimentações e sobre como o app funciona, no seu idioma. Lê seus dados para responder, mas nunca move dinheiro sozinho: pode deixar preparado um envio, um pagamento ou uma recarga, e quem confirma é você, com um botão.\n\nNo plano gratuito são 2 perguntas por dia.',
   faq_q1: 'O que é o KiramoPay?',
-  faq_a1: 'Uma carteira digital: você guarda dinheiro, envia e recebe por SINPE Móvel entre usuários do app, cobra e paga com QR, compra cripto e vê para onde foi o seu mês.\n\nCada movimento fica registrado em um livro contábil de partidas dobradas, então todo colón tem origem e destino.',
+  faq_a1: 'Uma carteira digital: você guarda dinheiro, envia e recebe por SINPE Móvel entre usuários do app, cobra e paga com QR e vê para onde foi o seu mês.\n\nCada movimento fica registrado em um livro contábil de partidas dobradas, então todo colón tem origem e destino.',
   faq_q2: 'Como o dinheiro entra na minha carteira?',
   faq_a2: 'Hoje, recebendo de alguém que já usa o KiramoPay: por SINPE dentro do app, por uma cobrança com QR ou por um pagamento dividido.\n\nAinda não dá para carregar saldo a partir de um banco, de um caixa eletrônico ou de um ponto físico, e os depósitos de cripto estão desligados até a custódia entrar no ar.',
   faq_q3: 'Quanto custa enviar por SINPE Móvel?',

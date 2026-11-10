@@ -120,6 +120,18 @@ describe('la pausa de compras', () => {
     expect(boton(es.start_staking)).toBeNull();
   });
 
+  it('mientras pregunta no ofrece nada que abra una posicion', async () => {
+    mocks.api.crypto.getAvailability.mockReturnValue(new Promise(() => {}));
+    montar();
+
+    await userEvent.click(screen.getByRole('button', { name: es.staking }));
+
+    expect(boton(es.buy)).toBeNull();
+    expect(boton(es.convert)).toBeNull();
+    expect(boton(es.start_staking)).toBeNull();
+    expect(screen.queryByText(es.crypto_pausa_titulo)).toBeNull();
+  });
+
   it('abierta ofrece todo y no avisa nada', async () => {
     mocks.api.crypto.getAvailability.mockResolvedValue(respuesta(true));
     montar();

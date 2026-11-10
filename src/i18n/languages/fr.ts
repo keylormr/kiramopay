@@ -1801,7 +1801,7 @@ const fr: TranslationKeys = {
   help_assistant_title: 'Assistant',
   help_assistant_body: "Il répond aux questions sur vos mouvements et sur le fonctionnement de l'app, dans votre langue. Il lit vos données pour répondre, mais il ne déplace jamais d'argent seul : il peut préparer un envoi, un paiement ou une recharge, et c'est vous qui confirmez avec un bouton.\n\nDans l'offre gratuite, vous avez 2 questions par jour.",
   faq_q1: "Qu'est-ce que KiramoPay ?",
-  faq_a1: "Un portefeuille numérique : vous gardez de l'argent, vous l'envoyez et le recevez par SINPE Movil entre utilisateurs de l'app, vous encaissez et payez par QR, vous achetez des cryptos et vous voyez où est passé votre mois.\n\nChaque mouvement est inscrit dans un livre comptable en partie double, donc chaque colón a une origine et une destination.",
+  faq_a1: "Un portefeuille numérique : vous gardez de l'argent, vous l'envoyez et le recevez par SINPE Movil entre utilisateurs de l'app, vous encaissez et payez par QR et vous voyez où est passé votre mois.\n\nChaque mouvement est inscrit dans un livre comptable en partie double, donc chaque colón a une origine et une destination.",
   faq_q2: "Comment l'argent arrive-t-il dans mon portefeuille ?",
   faq_a2: "Aujourd'hui, en le recevant de quelqu'un qui utilise déjà KiramoPay : par SINPE dans l'app, par un encaissement QR ou par un paiement partagé.\n\nIl n'est pas encore possible de recharger depuis une banque, un distributeur ou un point physique, et les dépôts de cryptos sont désactivés tant que la conservation n'est pas active.",
   faq_q3: 'Combien coûte un envoi par SINPE Movil ?',

@@ -1800,7 +1800,7 @@ const en: TranslationKeys = {
   help_assistant_title: 'Assistant',
   help_assistant_body: 'It answers questions about your activity and about how the app works, in your language. It reads your data to answer, but it never moves money on its own: it can prepare a transfer, a bill payment or a top-up, and you confirm it with a button.\n\nOn the free plan you get 2 questions per day.',
   faq_q1: 'What is KiramoPay?',
-  faq_a1: 'A digital wallet: you hold money, send and receive it over SINPE Movil between app users, charge and pay by QR, buy crypto, and see where your month went.\n\nEvery movement is recorded in a double-entry ledger, so every colon has a source and a destination.',
+  faq_a1: 'A digital wallet: you hold money, send and receive it over SINPE Movil between app users, charge and pay by QR, and see where your month went.\n\nEvery movement is recorded in a double-entry ledger, so every colon has a source and a destination.',
   faq_q2: 'How does money get into my wallet?',
   faq_a2: 'Today, by receiving it from someone who already uses KiramoPay: over SINPE inside the app, through a QR charge, or through a split payment.\n\nYou cannot yet top up from a bank, an ATM or a physical point, and crypto deposits are off until custody is live.',
   faq_q3: 'How much does a SINPE Movil transfer cost?',
