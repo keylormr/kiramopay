@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { Icons } from '../../components/Icons';
 import { MarcaKiramo } from '../../components/MarcaKiramo';
 import { Button, Card } from '../../components/ui';
@@ -23,6 +23,7 @@ import { abrirPublico, RUTA_PRIVACIDAD } from '@/utils/enlacesLegales';
 import { fechaLarga } from '@/utils/planes';
 import { TextoConCorreo } from '@/components/TextoConCorreo';
 import { useSuperficieOscura } from '@/hooks/useBarrasDelSistema';
+import { introEnCurso, useEnfocarAlTerminarLaIntro } from '@/components/intro/arranqueDeLaIntro';
 
 // Where the signed Android APK lives. Overridable via env; defaults to the
 // GitHub Releases "latest" asset published by the android-apk CI workflow.
@@ -147,6 +148,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
   // El rotulo visible del campo queda asociado al input: sin esto un lector de
   // pantalla anunciaba un campo sin nombre.
   const idCampoIdentificador = useId();
+  // En la app instalada el login arranca debajo de la intro de la K: el teclado
+  // sube cuando la intro termina, no encima de la animacion.
+  const campoIdentificador = useRef<HTMLInputElement>(null);
+  useEnfocarAlTerminarLaIntro(campoIdentificador);
 
   const rotuloDelTipo = (tipo: TipoIdentificador): string => {
     switch (tipo) {
@@ -551,13 +556,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLogin, onRegister }) => 
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--color-text-muted-dark)] pointer-events-none z-10"
                 />
                 <input
+                  ref={campoIdentificador}
                   id={idCampoIdentificador}
                   type="text"
                   autoComplete="username"
                   autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
-                  autoFocus
+                  autoFocus={!introEnCurso()}
                   value={identificador}
                   onChange={(e) => {
                     setIdentificador(e.target.value);
