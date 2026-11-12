@@ -5,6 +5,7 @@ import { useActualizacion, type FaseInterna } from '../hooks/useActualizacion';
 import type { PlataformaApp } from '../api/repositories/appversion.repository';
 import { localeDe } from '../utils/periodos';
 import { useSuperficieOscura } from '../hooks/useBarrasDelSistema';
+import type { CanalDeDistribucion } from '../utils/canalDeDistribucion';
 
 // Toda version nueva de la app instalada es obligatoria.
 //
@@ -22,6 +23,8 @@ import { useSuperficieOscura } from '../hooks/useBarrasDelSistema';
 //     lo instala encima (misma firma), sin perder datos ni sesion. En iOS no se
 //     puede instalar un binario bajado de un link: lleva al canal (TestFlight,
 //     App Store o instalador OTA), y por eso cambian el texto y la accion.
+//     Lo mismo en la app que vino de Google Play: no se actualiza por otro medio
+//     que el de Play, asi que el boton lleva a su ficha y el texto lo dice.
 
 export interface EstadoInterno {
   fase: FaseInterna;
@@ -38,6 +41,8 @@ interface Props {
   /** Las mismas novedades en los demas idiomas, por codigo. */
   notasTraducidas?: Record<string, string[]>;
   plataforma: PlataformaApp | null;
+  /** De donde vino la app. Solo 'play' cambia el texto; sin valor es el APK, como siempre. */
+  canal?: CanalDeDistribucion;
   onActualizar: () => void;
   /** Presente cuando la version se baja por dentro. */
   interna?: EstadoInterno;
@@ -137,6 +142,7 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
   notas: notasEnEspanol,
   notasTraducidas,
   plataforma,
+  canal,
   onActualizar,
   interna,
   onReintentar,
@@ -145,12 +151,15 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
   useSuperficieOscura();
   const { t, language } = useLanguage();
   const ios = plataforma === 'ios';
+  const play = canal === 'play';
   // El idioma de la persona si el release lo trae; si no, el espanol de siempre.
   const traducidas = notasTraducidas?.[language];
   const notas = traducidas && traducidas.length > 0 ? traducidas : notasEnEspanol;
 
   const titulo = interna ? t('update_internal_title') : t('update_title');
-  const cuerpo = interna ? t('update_internal_body') : t(ios ? 'update_body_ios' : 'update_body');
+  const cuerpo = interna
+    ? t('update_internal_body')
+    : t(play ? 'update_body_play' : ios ? 'update_body_ios' : 'update_body');
 
   return (
     <div
@@ -206,7 +215,7 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
             onClick={onActualizar}
             className="mx-auto block w-full max-w-sm bg-[var(--color-primary-fill)] hover:bg-[var(--color-primary-hover)] text-white py-3.5 rounded-xl font-bold active:scale-[0.98] transition-all"
           >
-            {t(ios ? 'update_open' : 'update_download')}
+            {t(ios || play ? 'update_open' : 'update_download')}
           </button>
         )}
       </div>
@@ -220,7 +229,7 @@ export const ActualizacionObligatoria: React.FC<Props> = ({
  * version vieja.
  */
 export const BarreraDeActualizacion: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { actualizacion, plataforma, actualizar, reintentar } = useActualizacion();
+  const { actualizacion, plataforma, canal, actualizar, reintentar } = useActualizacion();
   if (!actualizacion) return <>{children}</>;
   return (
     <ActualizacionObligatoria
@@ -229,6 +238,7 @@ export const BarreraDeActualizacion: React.FC<{ children: React.ReactNode }> = (
       notas={actualizacion.notas}
       notasTraducidas={actualizacion.notasTraducidas}
       plataforma={plataforma}
+      canal={canal}
       onActualizar={actualizar}
       interna={
         actualizacion.via === 'interna'

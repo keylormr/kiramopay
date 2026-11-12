@@ -969,6 +969,7 @@ const en: TranslationKeys = {
   update_title: 'Update KiramoPay',
   update_body: 'To keep using KiramoPay, install version {version}. Download it and Android installs it in place: you keep your data and session.',
   update_body_ios: 'To keep using KiramoPay, install version {version}. Continuing takes you to where it is installed from; your data and session stay put.',
+  update_body_play: 'To keep using KiramoPay, install version {version}. Continuing takes you to Google Play; your data and session stay put.',
   update_download: 'Download',
   update_open: 'Update',
   update_whats_new: "What's new in version {version}",

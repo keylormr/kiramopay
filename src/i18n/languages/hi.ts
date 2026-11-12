@@ -967,6 +967,7 @@ const hi: TranslationKeys = {
   update_title: 'KiramoPay अपडेट करें',
   update_body: 'KiramoPay का उपयोग जारी रखने के लिए संस्करण {version} इंस्टॉल करें। डाउनलोड करें और Android इसे ऊपर इंस्टॉल कर देगा: आपका डेटा और सत्र सुरक्षित रहेंगे।',
   update_body_ios: 'KiramoPay का उपयोग जारी रखने के लिए संस्करण {version} इंस्टॉल करें। आगे बढ़ने पर आपको वहाँ ले जाया जाएगा जहाँ से नया संस्करण इंस्टॉल होता है; आपका डेटा और सत्र सुरक्षित रहेंगे।',
+  update_body_play: 'KiramoPay का उपयोग जारी रखने के लिए संस्करण {version} इंस्टॉल करें। आगे बढ़ने पर आपको Google Play पर ले जाया जाएगा; आपका डेटा और सत्र सुरक्षित रहेंगे।',
   update_download: 'डाउनलोड करें',
   update_open: 'अपडेट करें',
   update_whats_new: 'संस्करण {version} में नया क्या है',

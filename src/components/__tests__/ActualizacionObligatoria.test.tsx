@@ -14,6 +14,7 @@ import type { ActualizacionDisponible } from '../../hooks/useActualizacion';
 const hook = vi.hoisted(() => ({
   actualizacion: null as ActualizacionDisponible | null,
   plataforma: 'android' as 'android' | 'ios' | null,
+  canal: 'apk' as 'apk' | 'play',
   actualizar: vi.fn(),
   reintentar: vi.fn(),
 }));
@@ -43,6 +44,7 @@ beforeEach(() => {
   localStorage.setItem('kiramopay_language', 'es');
   hook.actualizacion = null;
   hook.plataforma = 'android';
+  hook.canal = 'apk';
   hook.actualizar.mockReset();
   hook.reintentar.mockReset();
 });
@@ -133,6 +135,40 @@ describe('ActualizacionObligatoria', () => {
     expect(onActualizar).toHaveBeenCalledOnce();
   });
 
+  // La app que vino de Google Play no se actualiza por otro medio que el de
+  // Play: no habla de descargar nada, lleva a la ficha.
+  describe('la app que vino de Google Play', () => {
+    it('el boton lleva a Play y el texto lo dice, sin hablar de descargar', async () => {
+      const onActualizar = montar({ canal: 'play' });
+      expect(screen.getByText(/Google Play/)).toBeInTheDocument();
+      expect(screen.getByText(/Para seguir usando KiramoPay instala la versión 2\.8\.0/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Descargar' })).toBeNull();
+      expect(screen.getAllByRole('button')).toHaveLength(1);
+      await userEvent.click(screen.getByRole('button', { name: 'Actualizar' }));
+      expect(onActualizar).toHaveBeenCalledOnce();
+    });
+
+    it('sigue siendo una barrera con las novedades y la version instalada', () => {
+      montar({ canal: 'play' });
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual(NOTAS);
+      expect(screen.getByText(/2\.7\.0/)).toBeInTheDocument();
+    });
+
+    it('el APK, sin canal o con canal apk, sigue diciendo Descargar', () => {
+      montar();
+      expect(screen.getByRole('button', { name: 'Descargar' })).toBeInTheDocument();
+      expect(screen.queryByText(/Google Play/)).toBeNull();
+    });
+
+    it('lo dice en el idioma de la persona', async () => {
+      localStorage.setItem('kiramopay_language', 'en');
+      montar({ canal: 'play' });
+      expect(await screen.findByText(/Continuing takes you to Google Play/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Update' })).toBeInTheDocument();
+    });
+  });
+
   // Los idiomas distintos del espanol se cargan aparte: hay que esperarlos.
   it('habla el idioma de la persona', async () => {
     localStorage.setItem('kiramopay_language', 'en');
@@ -170,6 +206,20 @@ describe('BarreraDeActualizacion', () => {
     app();
     expect(screen.getByText('pantalla de ingreso')).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('pasa el canal del hook: la app de Play muestra su texto', () => {
+    hook.canal = 'play';
+    hook.actualizacion = {
+      via: 'externa',
+      version: '2.8.0',
+      instalada: '2.7.0',
+      url: 'https://play.google.com/store/apps/details?id=com.kiramopay.app',
+      notas: [],
+    };
+    app();
+    expect(screen.getByText(/Google Play/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Actualizar' })).toBeInTheDocument();
   });
 
   it('el boton actualiza con la plataforma que corresponde', async () => {

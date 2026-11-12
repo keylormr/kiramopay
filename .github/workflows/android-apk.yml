@@ -105,10 +105,16 @@ jobs:
           fi
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/kiramopay-release.jks"
 
-      # Dos salidas de la misma compilacion y la misma firma: el APK, que es lo
-      # que la gente instala de lado desde la pagina de releases, y el AAB, que
-      # es el unico formato que Google Play acepta para publicar.
-      - name: Build signed release APK and AAB
+      # Dos salidas con la misma firma: el APK, que es lo que la gente instala de
+      # lado desde la pagina de releases, y el AAB, que es el unico formato que
+      # Google Play acepta para publicar.
+      #
+      # Salen de dos compilaciones seguidas porque el AAB lleva una marca que el
+      # APK no lleva: la app de Play tiene que saber que vino de Play, para
+      # mandar a su ficha en vez de bajar un .apk (src/utils/canalDeDistribucion.ts;
+      # la politica de Play no deja que se actualice por otro medio). Primero el
+      # APK, tal cual sale del sync; despues la marca; despues el AAB.
+      - name: Build signed release APK
         working-directory: android
         env:
           KIRAMOPAY_KEYSTORE_FILE: ${{ runner.temp }}/kiramopay-release.jks
@@ -117,13 +123,47 @@ jobs:
           KIRAMOPAY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Stage APK
         run: cp android/app/build/outputs/apk/release/app-release.apk kiramopay.apk
 
+      # Escribe la marca en el capacitor.config.json que genero el sync (no
+      # versionado), no en capacitor.config.ts: lo versionado entra en la huella
+      # de lo nativo y un cambio ahi mandaria a todos los telefonos con el APK a
+      # instalar otro APK en vez de actualizarse por dentro.
+      - name: Marcar el canal de Google Play
+        run: node scripts/marcar-canal.mjs play
+
+      - name: Build signed release AAB
+        working-directory: android
+        env:
+          KIRAMOPAY_KEYSTORE_FILE: ${{ runner.temp }}/kiramopay-release.jks
+          KIRAMOPAY_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KIRAMOPAY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KIRAMOPAY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
+
       - name: Stage AAB
         run: cp android/app/build/outputs/bundle/release/app-release.aab kiramopay.aab
+
+      # Cada binario lleva el canal que le toca: el AAB la marca de Play y el APK
+      # ninguna. Si se cruzaran, la app de Play ofreceria un .apk, o el APK
+      # mandaria a la ficha de una app que no es la que tiene instalada.
+      - name: Verificar el canal de cada binario
+        run: |
+          marca='KiramoPayCanal/play'
+          unzip -p kiramopay.aab base/assets/capacitor.config.json > "$RUNNER_TEMP/config-aab.json"
+          unzip -p kiramopay.apk assets/capacitor.config.json > "$RUNNER_TEMP/config-apk.json"
+          if ! grep -q "$marca" "$RUNNER_TEMP/config-aab.json"; then
+            echo "::error::El AAB no lleva la marca del canal de Google Play."
+            exit 1
+          fi
+          if grep -q "$marca" "$RUNNER_TEMP/config-apk.json"; then
+            echo "::error::El APK lleva la marca del canal de Google Play: no debe."
+            exit 1
+          fi
+          echo "AAB con la marca de Play; APK sin marca."
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

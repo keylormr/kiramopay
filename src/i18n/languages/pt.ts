@@ -970,6 +970,7 @@ const pt: TranslationKeys = {
   update_title: 'Atualize o KiramoPay',
   update_body: 'Para continuar usando o KiramoPay, instale a versão {version}. Baixe e o Android instala por cima: você mantém seus dados e sua sessão.',
   update_body_ios: 'Para continuar usando o KiramoPay, instale a versão {version}. Ao continuar levamos você até onde ela é instalada; você mantém seus dados e sua sessão.',
+  update_body_play: 'Para continuar usando o KiramoPay, instale a versão {version}. Ao continuar levamos você ao Google Play; você mantém seus dados e sua sessão.',
   update_download: 'Baixar',
   update_open: 'Atualizar',
   update_whats_new: 'Novidades da versão {version}',

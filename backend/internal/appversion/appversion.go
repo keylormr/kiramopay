@@ -59,6 +59,20 @@
 //     configura con IOS_UPDATE_URL. Sin esa variable no hay canal: la app iOS
 //     solo se actualiza por dentro, y si tampoco hay paquete no se ofrece nada,
 //     que es preferible a un boton que no lleva a ningun lado.
+//
+// Android tiene dos canales (?channel=): el APK de GitHub, que es el de siempre
+// y el que se asume sin parametro, y Google Play ("play"). La app de Play no
+// puede actualizarse por otro medio que el de Play (politica Device and Network
+// Abuse), asi que para ella la URL nunca es el .apk: es la ficha de la app en
+// Play, y solo cuando Play ya la tiene. Mientras esa version se sube y se revisa
+// en Play, el release de GitHub ya existe; ofrecer la ficha en ese lapso dejaria
+// a la gente frente a una barrera obligatoria que no tiene nada que instalar.
+// Por eso la ficha se ofrece solo si PLAY_STORE_VERSION (la version que Play ya
+// sirve a todos, que se fija despues del despliegue completo) es igual o mayor
+// que la del release; sin esa variable la app de Play no ve ninguna barrera de
+// binario. El paquete web (arriba) se responde igual que para el APK: es la app
+// de Play la que lo ignora mientras no se habilite la actualizacion interna en
+// Play (ACTUALIZACION_WEB_EN_PLAY en src/utils/canalDeDistribucion.ts).
 package appversion
 
 import (
@@ -71,6 +85,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -86,7 +101,9 @@ const (
 	// Por tag y plataforma; los nombres los fija scripts/paquete-web.mjs.
 	manifiestoFmt = "https://github.com/keylormr/kiramopay/releases/download/%s/actualizacion-%s.json"
 	paqueteFmt    = "https://github.com/keylormr/kiramopay/releases/download/%s/kiramopay-web-%s.zip"
-	cacheTTL      = 10 * time.Minute
+	// La ficha de la app en Google Play: el applicationId es el mismo del APK.
+	fichaPlay = "https://play.google.com/store/apps/details?id=com.kiramopay.app"
+	cacheTTL  = 10 * time.Minute
 	// Cuando las novedades fallaron por algo pasajero (un 5xx, un corte):
 	// se vuelven a buscar pronto.
 	cacheTTLProvisional = time.Minute
@@ -101,6 +118,49 @@ const (
 )
 
 var plataformas = []string{"android", "ios"}
+
+// Canales de distribucion de Android. Sin parametro es el APK: los binarios ya
+// instalados no conocen ?channel= y tienen que seguir recibiendo lo de siempre.
+const (
+	canalAPK  = "apk"
+	canalPlay = "play"
+)
+
+// versionSemver es la forma de una version publicada (mayor.menor.parche).
+var versionSemver = regexp.MustCompile(`^(\d{1,4})\.(\d{1,4})\.(\d{1,4})$`)
+
+// partesDeVersion devuelve los tres numeros, o ok=false si no es una version.
+func partesDeVersion(v string) (partes [3]int, ok bool) {
+	m := versionSemver.FindStringSubmatch(strings.TrimSpace(v))
+	if m == nil {
+		return partes, false
+	}
+	for i := range partes {
+		n, err := strconv.Atoi(m[i+1])
+		if err != nil {
+			return partes, false
+		}
+		partes[i] = n
+	}
+	return partes, true
+}
+
+// versionAlcanza dice si la version "tiene" es igual o mayor que la "necesita".
+// Si cualquiera de las dos no es una version da false: ante la duda no se
+// ofrece nada.
+func versionAlcanza(tiene, necesita string) bool {
+	a, okA := partesDeVersion(tiene)
+	b, okB := partesDeVersion(necesita)
+	if !okA || !okB {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] > b[i]
+		}
+	}
+	return true
+}
 
 // codigoDeIdioma es la forma de los codigos de idioma de la app (es, en, zh-cn):
 // una clave de "traducciones" que no la cumple no es un idioma y se descarta.
@@ -147,6 +207,9 @@ type Handler struct {
 	// Canal de actualizacion de iOS (IOS_UPDATE_URL). Vacio mientras no exista
 	// distribucion iOS; ver el comentario del paquete.
 	iosUpdateURL string
+	// La version que Google Play ya sirve a todos (PLAY_STORE_VERSION); vacia
+	// mientras no se haya confirmado ninguna. Ver el comentario del paquete.
+	playVersion string
 	// Inyectables para las pruebas; en produccion son las constantes de arriba.
 	apiURL        string
 	webURL        string
@@ -177,7 +240,23 @@ func NewHandler() *Handler {
 		// camino web hace el trabajo igual.
 		token:        os.Getenv("GITHUB_TOKEN"),
 		iosUpdateURL: strings.TrimSpace(os.Getenv("IOS_UPDATE_URL")),
+		playVersion:  versionDePlayConfigurada(os.Getenv("PLAY_STORE_VERSION")),
 	}
+}
+
+// versionDePlayConfigurada valida PLAY_STORE_VERSION. Un valor que no es una
+// version (un error de tipeo) se ignora y se anota: la app de Play queda sin
+// barrera de binario, que es lo seguro, en vez de apuntar a algo que no existe.
+func versionDePlayConfigurada(valor string) string {
+	v := strings.TrimSpace(valor)
+	if v == "" {
+		return ""
+	}
+	if _, ok := partesDeVersion(v); !ok {
+		slog.Warn("app version: PLAY_STORE_VERSION no es una version (mayor.menor.parche), se ignora", "valor", v)
+		return ""
+	}
+	return v
 }
 
 // GetLatest responde {version, url, notes, web} de la ultima version publicada:
@@ -196,16 +275,29 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "platform must be android or ios")
 		return
 	}
+	// Sin canal es el APK. Google Play solo existe en Android.
+	canal := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("channel")))
+	if canal == "" {
+		canal = canalAPK
+	}
+	if canal != canalAPK && canal != canalPlay {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "channel must be apk or play")
+		return
+	}
+	if canal == canalPlay && plataforma != "android" {
+		response.Error(w, http.StatusBadRequest, "VALIDATION_ERROR", "channel play is only for android")
+		return
+	}
 
 	if info, ok := h.cacheVigente(); ok {
-		h.responder(w, info, plataforma)
+		h.responder(w, info, plataforma, canal)
 		return
 	}
 	h.refresco.Lock()
 	defer h.refresco.Unlock()
 	// Mientras se esperaba, otra peticion pudo haberla llenado.
 	if info, ok := h.cacheVigente(); ok {
-		h.responder(w, info, plataforma)
+		h.responder(w, info, plataforma, canal)
 		return
 	}
 
@@ -222,7 +314,7 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Warn("app version: ningun camino a GitHub funciono", "err", err)
-		h.responderCacheViejaOFallo(w, plataforma)
+		h.responderCacheViejaOFallo(w, plataforma, canal)
 		return
 	}
 
@@ -268,14 +360,14 @@ func (h *Handler) GetLatest(w http.ResponseWriter, r *http.Request) {
 		h.cacheVigencia = cacheTTLProvisional
 	}
 	h.mu.Unlock()
-	h.responder(w, *info, plataforma)
+	h.responder(w, *info, plataforma, canal)
 }
 
 // responder arma la respuesta de la plataforma. iOS sin canal y sin paquete no
 // tiene por donde actualizar: no es un fallo del servicio, y se responde 503,
 // que es lo que la app ya sabe tolerar en silencio.
-func (h *Handler) responder(w http.ResponseWriter, info infoVersion, plataforma string) {
-	resp := h.paraPlataforma(info, plataforma)
+func (h *Handler) responder(w http.ResponseWriter, info infoVersion, plataforma, canal string) {
+	resp := h.paraPlataforma(info, plataforma, canal)
 	if plataforma == "ios" && resp.URL == "" && resp.Web == nil {
 		response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "no ios update channel configured")
 		return
@@ -300,9 +392,12 @@ func (h *Handler) cacheVigente() (infoVersion, bool) {
 // paraPlataforma adapta la respuesta cacheada (que es la de Android, con la URL
 // del .apk) a la plataforma que pregunta. La version es la misma en las dos:
 // sale del tag del release.
-func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersion {
+func (h *Handler) paraPlataforma(info infoVersion, plataforma, canal string) infoVersion {
 	if plataforma == "ios" {
 		info.URL = h.iosUpdateURL
+	}
+	if canal == canalPlay {
+		info.URL = h.urlDePlay(info.Version)
 	}
 	// Nunca null: la pantalla recorre la lista. Una cache de antes de las
 	// novedades no las trae.
@@ -314,6 +409,16 @@ func (h *Handler) paraPlataforma(info infoVersion, plataforma string) infoVersio
 	}
 	info.Web = info.paquetes[plataforma]
 	return info
+}
+
+// urlDePlay es la ficha de la app en Google Play si Play ya sirve esta version
+// (o una mas nueva), y "" si no. Con "" la app de Play no abre nada y no deja a
+// nadie frente a una barrera sin nada que instalar. Nunca devuelve el .apk.
+func (h *Handler) urlDePlay(version string) string {
+	if versionAlcanza(h.playVersion, version) {
+		return fichaPlay
+	}
+	return ""
 }
 
 // paqueteDe lee el manifiesto firmado de la plataforma en el release y confirma
@@ -575,12 +680,12 @@ func (h *Handler) desdeRedireccion(ctx context.Context) (*infoVersion, error) {
 // un cliente iOS con la cache vencida y GitHub caido recibia la URL del .apk,
 // un archivo que en iOS no se puede instalar. Es justo la confusion que la
 // respuesta por plataforma vino a evitar.
-func (h *Handler) responderCacheViejaOFallo(w http.ResponseWriter, plataforma string) {
+func (h *Handler) responderCacheViejaOFallo(w http.ResponseWriter, plataforma, canal string) {
 	h.mu.Lock()
 	cache := h.cache
 	h.mu.Unlock()
 	if cache != nil {
-		h.responder(w, *cache, plataforma)
+		h.responder(w, *cache, plataforma, canal)
 		return
 	}
 	response.Error(w, http.StatusServiceUnavailable, "VERSION_UNAVAILABLE", "version check failed")
