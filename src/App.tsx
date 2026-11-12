@@ -41,6 +41,10 @@ import { ProfileSwitcherSheet } from './views/business/ProfileSwitcherSheet';
 import { BusinessOnboardingSheet } from './views/business/BusinessOnboardingSheet';
 import { NegocioSinCargar } from './views/business/NegocioSinCargar';
 import { OfflineBanner } from './components/OfflineBanner';
+import { alTerminarLaIntro, decidirIntro, introEnCurso } from './components/intro/arranqueDeLaIntro';
+// Sin carga diferida a proposito: la capa tiene que salir en el mismo primer
+// cuadro que la app para tapar el relevo del splash. En la web no se monta.
+import IntroDeLaK from './components/intro/IntroDeLaK';
 import { instalarNavegacionPorCapas, retroceder, useCapa } from './navegacion/pilaDeCapas';
 import {
   BarraInferior,
@@ -1077,9 +1081,15 @@ const AppInit = () => {
 
   useEffect(() => {
     // Hide native splash screen after app is ready
-    SplashScreen.hide().catch(() => {
-      // Not running in Capacitor native context — ignore
-    });
+    const soltarSplash = () =>
+      SplashScreen.hide().catch(() => {
+        // Not running in Capacitor native context — ignore
+      });
+    // Con la intro de la K el splash lo quita la intro, cuando ya tiene su
+    // primer cuadro (la misma K) listo para tomar el relevo. Si la intro se va
+    // sin haberlo quitado (fallo al armarse), se quita aca.
+    if (introEnCurso()) return alTerminarLaIntro(soltarSplash);
+    soltarSplash();
   }, []);
 
   useEffect(() => {
@@ -1175,6 +1185,8 @@ const App: React.FC = () => {
   useEffect(() => {
     instalarNavegacionPorCapas();
   }, []);
+  // Solo en la app instalada y una vez por arranque.
+  const [intro] = useState(decidirIntro);
 
   return (
     <ErrorBoundary>
@@ -1183,6 +1195,7 @@ const App: React.FC = () => {
         {/* Sin conexion: visible sobre el login, la app y cualquier hoja. */}
         <OfflineBanner />
       </LanguageProvider>
+      {intro && <IntroDeLaK concepto={intro.concepto} />}
     </ErrorBoundary>
   );
 };
