@@ -527,6 +527,11 @@ func main() {
 			UIF:           uifService,
 			Avisos:        notifService,
 			Logger:        logger,
+			// Comprar, convertir y apartar anotan cripto que no tiene nada detras
+			// (ver crypto/pausa.go). Misma politica que los convenios de recibos y
+			// los cobros del marketplace: fuera de produccion se permite para las
+			// demos.
+			ComprasEnPausa: cfg.Server.Environment == "production",
 		})
 
 	// El tipo de cambio oficial, traido cada hora. Sin esto la tasa de arriba
@@ -1155,6 +1160,7 @@ func main() {
 			r.Get("/services/history", paymentHandler.GetPaymentHistory)
 
 			// Crypto
+			r.Get("/crypto/availability", cryptoHandler.GetAvailability)
 			r.Get("/crypto/assets", cryptoHandler.GetAssets)
 			r.Get("/crypto/transactions", cryptoHandler.GetTransactions)
 			r.Post("/crypto/buy", cryptoHandler.Buy)

@@ -1,4 +1,30 @@
 {
+  "2.15.2": {
+    "en": [
+      "For now you can't buy or convert crypto or stake it; you can sell what you already hold and withdraw what you have staked",
+      "Staking no longer promises a yield: the screen and the help say it only sets your crypto aside"
+    ],
+    "fr": [
+      "Pour le moment, vous ne pouvez ni acheter ni convertir de crypto, ni faire du staking ; vous pouvez vendre ce que vous détenez déjà et retirer ce qui est en staking",
+      "Le staking ne promet plus de rendement : l'écran et l'aide indiquent qu'il met seulement vos cryptos de côté"
+    ],
+    "hi": [
+      "अभी आप क्रिप्टो खरीद, कन्वर्ट या स्टेक नहीं कर सकते; आपके पास जो है उसे बेच सकते हैं और स्टेकिंग में रखी क्रिप्टो निकाल सकते हैं",
+      "स्टेकिंग अब रिटर्न का वादा नहीं करती: स्क्रीन और सहायता में लिखा है कि यह केवल आपकी क्रिप्टो को अलग रखती है"
+    ],
+    "ja": [
+      "現在、暗号資産の購入、交換、ステーキングはできません。保有分の売却とステーキング中の暗号資産の引き出しはできます",
+      "ステーキングで利回りを約束しなくなりました。画面とヘルプに、暗号資産を確保するだけであると記載しています"
+    ],
+    "pt": [
+      "Por enquanto não é possível comprar cripto, convertê-la nem fazer staking; você pode vender o que já tem e retirar o que está em staking",
+      "O staking não promete mais rendimento: a tela e a ajuda dizem que ele apenas reserva sua cripto"
+    ],
+    "zh-cn": [
+      "目前无法购买、转换或质押加密货币；您可以卖出已持有的资产，并取出质押中的资产",
+      "质押不再承诺收益：页面和帮助中已说明它只是锁定您的加密货币"
+    ]
+  },
   "2.15.1": {
     "en": [
       "Full-screen pages no longer sit under the phone's status bar or camera, and the back button can be tapped",

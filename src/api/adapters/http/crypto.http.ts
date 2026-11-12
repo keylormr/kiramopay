@@ -155,6 +155,14 @@ export function posicionDesdeServidor(p: PosicionDelServidor): StakingPosition {
 export class HttpCryptoRepository implements ICryptoRepository {
   constructor(private client: HttpClient) {}
 
+  async getAvailability(): Promise<ApiResponse<{ purchasesActive: boolean }>> {
+    const res = await this.client.get<{ purchases_active?: boolean }>('/api/v1/crypto/availability');
+    if (!res.success) {
+      return falla(res, 'FETCH_FAILED');
+    }
+    return apiSuccess({ purchasesActive: res.data?.purchases_active !== false });
+  }
+
   async getAssets(): Promise<ApiResponse<CryptoAsset[]>> {
     const res = await this.client.get<
       Array<{

@@ -27,6 +27,9 @@ type Service struct {
 	uif           UIFReporter
 	avisos        Avisos
 	logger        Logger
+
+	// comprasEnPausa: ver pausa.go.
+	comprasEnPausa bool
 }
 
 func NewService(repo *Repository, prices *PriceService, tx *transaction.Service, rates RateLookup, opts *Opciones) *Service {
@@ -43,6 +46,8 @@ func NewService(repo *Repository, prices *PriceService, tx *transaction.Service,
 		uif:           opts.UIF,
 		avisos:        opts.Avisos,
 		logger:        opts.Logger,
+
+		comprasEnPausa: opts.ComprasEnPausa,
 	}
 }
 
@@ -139,6 +144,9 @@ func (s *Service) Buy(ctx context.Context, userID string, req *BuyRequest) (*Tra
 	}
 	if hecha != nil {
 		return hecha, nil
+	}
+	if err := s.exigirComprasAbiertas(ctx, userID); err != nil {
+		return nil, err
 	}
 
 	// El precio y la cantidad de cripto los pone el servidor. Lo que decide el
@@ -440,6 +448,9 @@ func (s *Service) Convert(ctx context.Context, userID string, req *ConvertReques
 		previo.Replayed = true
 		return previo, nil
 	}
+	if err := s.exigirComprasAbiertas(ctx, userID); err != nil {
+		return nil, err
+	}
 	if errSaldo != nil {
 		return nil, errSaldo
 	}
@@ -543,6 +554,20 @@ func (s *Service) Stake(ctx context.Context, userID string, req *StakeRequest) (
 	llave := req.IdempotencyKey
 	if llave == "" {
 		llave = "crypto:stake:" + uuid.New().String()
+	}
+
+	// El reintento de lo que ya se aparto no abre nada nuevo: lo contesta la
+	// relectura de ApartarParaStakingEnUnaTx. Solo se frena la posicion nueva.
+	if err := s.exigirComprasAbiertas(ctx, userID); errors.Is(err, ErrComprasEnPausa) {
+		previo, errLlave := s.repo.MovimientoPorLlave(ctx, userID, req.IdempotencyKey)
+		if errLlave != nil {
+			return nil, errLlave
+		}
+		if previo == nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
 	}
 
 	// Cortesia del saldo, en el mismo orden que en Convert y en Send. Aqui la

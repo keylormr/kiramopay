@@ -43,6 +43,9 @@ var (
 	// se retiro. El reintento no aparta otra vez ni contesta "listo" por algo
 	// que ya no esta apartado.
 	ErrApartadoYaRetirado = errors.New("staking with this idempotency key was already withdrawn")
+	// ErrComprasEnPausa: comprar, convertir y apartar estan en pausa para esta
+	// cuenta (ver pausa.go).
+	ErrComprasEnPausa = errors.New("buying, converting and staking are paused")
 )
 
 // rechazo es la respuesta a un error que se reconoce.
@@ -71,6 +74,9 @@ func rechazoConocido(err error) (rechazo, bool) {
 	case errors.Is(err, ErrSaldoDeActivoInsuficiente):
 		return rechazo{http.StatusUnprocessableEntity, "CRYPTO_INSUFFICIENT_BALANCE",
 			ErrSaldoDeActivoInsuficiente.Error()}, true
+	// 503 como SIN_CONVENIO y SIN_INTEGRACION: la misma politica, el mismo estado.
+	case errors.Is(err, ErrComprasEnPausa):
+		return rechazo{http.StatusServiceUnavailable, "CRYPTO_PAUSED", ErrComprasEnPausa.Error()}, true
 	case errors.Is(err, ErrMontoInvalido):
 		return rechazo{http.StatusBadRequest, "CRYPTO_INVALID_AMOUNT", err.Error()}, true
 	case errors.Is(err, ErrParInvalido):

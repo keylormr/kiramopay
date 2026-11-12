@@ -122,6 +122,8 @@ export const ACTIVOS_CON_STAKING: Readonly<Record<string, number>> = {
 export type ConMarcaDeRepeticion<T> = T & { repetida?: true };
 
 export interface ICryptoRepository {
+  /** Si esta cuenta puede comprar, convertir y hacer staking. */
+  getAvailability(): Promise<ApiResponse<{ purchasesActive: boolean }>>;
   getAssets(): Promise<ApiResponse<CryptoAsset[]>>;
   getTransactions(): Promise<ApiResponse<CryptoTransaction[]>>;
   buy(request: BuyCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>>;

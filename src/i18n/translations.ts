@@ -639,7 +639,6 @@ export type TranslationKeys = {
   staked_amount: string;
   earned: string;
   locked: string;
-  yield_rates: string;
   estimated_earnings: string;
   conversion_rate: string;
   scan_qr_receive: string;
@@ -698,7 +697,7 @@ export type TranslationKeys = {
   crypto_market_cap_short: string;
   crypto_volume_short: string;
   crypto_staking_positions: string;
-  crypto_up_to_apy: string;
+  crypto_staking_sin_rendimiento: string;
   crypto_since: string;
   crypto_staked: string;
   crypto_withdraw: string;
@@ -709,6 +708,9 @@ export type TranslationKeys = {
   crypto_err_stake_already_withdrawn: string;
   crypto_staking_program_assets: string;
   crypto_staking_no_yield: string;
+  crypto_pausa_titulo: string;
+  crypto_pausa_cuerpo: string;
+  crypto_staking_vacio: string;
   crypto_days: string;
   crypto_market_cap: string;
   crypto_volume_24h: string;

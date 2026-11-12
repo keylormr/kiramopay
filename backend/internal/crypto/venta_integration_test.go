@@ -54,6 +54,11 @@ type montajeVenta struct {
 // igual en todo menos en el pool, para mirar por dentro sus consultas.
 func servicioDeVenta(t *testing.T, pool *pgxpool.Pool, urlPrecios string) *crypto.Service {
 	t.Helper()
+	return servicioDeVentaCon(t, pool, urlPrecios, nil)
+}
+
+func servicioDeVentaCon(t *testing.T, pool *pgxpool.Pool, urlPrecios string, opts *crypto.Opciones) *crypto.Service {
+	t.Helper()
 	precios := crypto.NewPriceService()
 	precios.SetBaseURL(urlPrecios)
 	txService := transaction.NewService(
@@ -63,7 +68,7 @@ func servicioDeVenta(t *testing.T, pool *pgxpool.Pool, urlPrecios string) *crypt
 		nil,
 	)
 	return crypto.NewService(crypto.NewRepository(pool), precios, txService,
-		func(context.Context, string, string) (float64, error) { return 500, nil }, nil)
+		func(context.Context, string, string) (float64, error) { return 500, nil }, opts)
 }
 
 // montarVenta arma el servicio real con acceso al pool. No reusa
