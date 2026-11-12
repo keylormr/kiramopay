@@ -5,8 +5,11 @@ import { ResumenParaContador } from '../ResumenParaContador';
 import { leerEstadoDeCuenta } from '../lector';
 import { extraerIngresos } from '../ingresos';
 
-const mocks = vi.hoisted(() => ({ entregar: vi.fn() }));
+const mocks = vi.hoisted(() => ({ entregar: vi.fn(), pdf: vi.fn() }));
 vi.mock('@/utils/entregarArchivo', () => ({ entregarArchivo: mocks.entregar }));
+// jsdom no dibuja canvas: el PDF real se prueba por partes (pdfContenido, pdfDiseno,
+// pdfArchivo) y de punta a punta en un navegador. Aqui se mira lo que la pantalla le entrega.
+vi.mock('../pdfSalida', () => ({ construirPdf: mocks.pdf }));
 
 const archivo = (contenido: string | Uint8Array) => {
   const b = typeof contenido === 'string' ? new TextEncoder().encode(contenido) : contenido;
@@ -33,6 +36,8 @@ beforeEach(() => {
   localStorage.setItem('kiramopay_language', 'es');
   mocks.entregar.mockReset();
   mocks.entregar.mockResolvedValue('listo');
+  mocks.pdf.mockReset();
+  mocks.pdf.mockResolvedValue(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
   fetchEspia = vi.fn();
   vi.stubGlobal('fetch', fetchEspia);
   setItem = vi.spyOn(Storage.prototype, 'setItem');
@@ -107,7 +112,7 @@ describe('Resumen para el contador: flujo completo', () => {
 
     // Compartir: el CSV del mes elegido.
     await u.selectOptions(screen.getByLabelText('Mes'), '2026-11');
-    await u.click(screen.getByRole('button', { name: 'Compartir con mi contador' }));
+    await u.click(screen.getByRole('button', { name: 'Compartir con mi contador: CSV' }));
     await waitFor(() => expect(mocks.entregar).toHaveBeenCalledTimes(1));
     const [blob, nombre] = mocks.entregar.mock.calls[0] as [Blob, string];
     expect(nombre).toBe('KiramoPay-resumen-para-contador-2026-11.csv');
@@ -128,8 +133,10 @@ describe('Resumen para el contador: flujo completo', () => {
     subir(CSV);
     await screen.findByText('Cobros marcados como venta');
     await userEvent.setup().click(screen.getByRole('switch', { name: /SINPE Movil Ana/ }));
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Compartir con mi contador' }));
-    await waitFor(() => expect(mocks.entregar).toHaveBeenCalled());
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Compartir con mi contador: CSV' }));
+    await waitFor(() => expect(mocks.entregar).toHaveBeenCalledTimes(1));
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Compartir con mi contador: PDF' }));
+    await waitFor(() => expect(mocks.entregar).toHaveBeenCalledTimes(2));
 
     expect(fetchEspia).not.toHaveBeenCalled();
     const escrituras = JSON.stringify(setItem.mock.calls) + JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage });
@@ -155,6 +162,113 @@ describe('Resumen para el contador: flujo completo', () => {
     pintar();
     subir('Fecha,Detalle,Credito\n03/11/2026,Deposito,1000\n');
     expect(await screen.findByText('No hay cobros por SINPE en este mes.')).toBeInTheDocument();
+  });
+});
+
+describe('Resumen para el contador: PDF', () => {
+  const botonPdf = () => screen.getByRole('button', { name: 'Compartir con mi contador: PDF' });
+  const botonCsv = () => screen.getByRole('button', { name: 'Compartir con mi contador: CSV' });
+
+  it('el boton de PDF esta junto al de CSV, en la misma fila', async () => {
+    pintar();
+    subir(CSV);
+    await screen.findByText('Cobros marcados como venta');
+    expect(botonPdf().parentElement).toBe(botonCsv().parentElement);
+    expect(botonPdf()).toHaveTextContent('PDF');
+    expect(botonCsv()).toHaveTextContent('CSV');
+    expect(screen.getByText('CSV para abrir en Excel. PDF para leer o imprimir.')).toBeInTheDocument();
+  });
+
+  it('entrega un PDF del mes con lo mismo que la pantalla: total, cobros y marcas', async () => {
+    const u = userEvent.setup();
+    pintar();
+    subir(CSV);
+    await screen.findByText('Cobros marcados como venta');
+    await u.click(screen.getByRole('switch', { name: /SINPE Movil Ana/ }));
+    await u.click(botonPdf());
+
+    await waitFor(() => expect(mocks.entregar).toHaveBeenCalledTimes(1));
+    const [blob, nombre] = mocks.entregar.mock.calls[0] as [Blob, string];
+    expect(nombre).toBe('KiramoPay-resumen-para-contador-2026-11.pdf');
+    expect(blob.type).toBe('application/pdf');
+
+    const [contenido, idioma] = mocks.pdf.mock.calls[0];
+    expect(idioma).toBe('es');
+    expect(contenido).toMatchObject({
+      titulo: 'Resumen de cobros por SINPE',
+      subtitulo: 'Noviembre de 2026 · Moneda: CRC',
+      total: '₡2,500.50',
+      cantidad: '1 cobro',
+    });
+    expect(contenido.total).toBe(total().querySelector('p')!.textContent);
+    expect(contenido.aviso).toMatch(/ayuda.*no es un comprobante fiscal/i);
+    expect(contenido.secciones[0].filas).toEqual([
+      { fecha: '03/11/2026', descripcion: 'SINPE Movil Ana', monto: '₡10,000.00', venta: 'No' },
+      { fecha: '05/11/2026', descripcion: 'SINPE Movil Luis', monto: '₡2,500.50', venta: 'Sí' },
+    ]);
+    expect(contenido.secciones[1]).toMatchObject({
+      titulo: 'Otros ingresos (1)',
+      filas: [{ descripcion: 'Deposito en ventanilla', venta: 'No' }],
+    });
+    // Nada de octubre ni la salida de luz.
+    expect(JSON.stringify(contenido)).not.toContain('Octubre');
+    expect(JSON.stringify(contenido)).not.toContain('Pago de luz');
+    expect(await screen.findByText('Resumen guardado en tu dispositivo.')).toBeInTheDocument();
+  });
+
+  it('con dos monedas el archivo lleva la moneda en el nombre, como el CSV', async () => {
+    const u = userEvent.setup();
+    pintar();
+    subir('Fecha,Detalle,Credito,Moneda\n03/11/2026,SINPE A,1000,CRC\n04/11/2026,SINPE B,5,USD\n');
+    await screen.findByText('Cobros marcados como venta');
+    await u.selectOptions(screen.getByLabelText('Moneda'), 'USD');
+    await u.click(botonPdf());
+    await waitFor(() => expect(mocks.entregar).toHaveBeenCalledTimes(1));
+    expect(mocks.entregar.mock.calls[0][1]).toBe('KiramoPay-resumen-para-contador-2026-11-USD.pdf');
+    expect(mocks.pdf.mock.calls[0][0]).toMatchObject({ total: '$5.00', subtitulo: 'Noviembre de 2026 · Moneda: USD' });
+  });
+
+  it('mientras se arma uno, ninguno de los dos botones deja pedir otro', async () => {
+    let terminar: (b: Blob) => void = () => {};
+    mocks.pdf.mockReturnValue(new Promise<Blob>((r) => { terminar = r; }));
+    const u = userEvent.setup();
+    pintar();
+    subir(CSV);
+    await screen.findByText('Cobros marcados como venta');
+    await u.click(botonPdf());
+    expect(botonPdf()).toBeDisabled();
+    expect(botonCsv()).toBeDisabled();
+    expect(mocks.pdf).toHaveBeenCalledTimes(1);
+    terminar(new Blob(['x']));
+    await waitFor(() => expect(botonPdf()).toBeEnabled());
+    expect(mocks.entregar).toHaveBeenCalledTimes(1);
+  });
+
+  it('si no se puede armar el PDF lo dice y no entrega nada', async () => {
+    mocks.pdf.mockRejectedValue(new Error('SIN_CANVAS'));
+    const u = userEvent.setup();
+    pintar();
+    subir(CSV);
+    await screen.findByText('Cobros marcados como venta');
+    await u.click(botonPdf());
+    expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos preparar el resumen. Inténtalo de nuevo.');
+    expect(mocks.entregar).not.toHaveBeenCalled();
+    expect(botonPdf()).toBeEnabled();
+  });
+
+  it('el PDF sale en el idioma de la persona', async () => {
+    localStorage.setItem('kiramopay_language', 'ja');
+    const u = userEvent.setup();
+    pintar();
+    subir(CSV);
+    await screen.findByText('売上として選んだ入金');
+    await u.click(screen.getByRole('button', { name: '会計士に共有する: PDF' }));
+    await waitFor(() => expect(mocks.pdf).toHaveBeenCalledTimes(1));
+    const [contenido, idioma] = mocks.pdf.mock.calls[0];
+    expect(idioma).toBe('ja');
+    expect(contenido.titulo).toBe('SINPE入金の集計');
+    expect(contenido.aviso).toContain('請求書でも');
+    expect(contenido.cantidad).toBe('2件');
   });
 });
 

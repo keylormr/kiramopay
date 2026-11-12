@@ -10,12 +10,15 @@ import { leerEstadoDeCuenta, leerIngresos, type Lectura } from './lector';
 import { mesesDe, monedasDe, sumar } from './ingresos';
 import type { ResultadoDeIngresos } from './tipos';
 import { construirCsv } from './csvSalida';
+import { construirContenidoPdf } from './pdfContenido';
+import { construirPdf } from './pdfSalida';
 import { ErrorDeLectura, type CodigoError, type Ingreso } from './tipos';
 
 interface Props {
   onClose: () => void;
 }
 
+type Formato = 'csv' | 'pdf';
 type Fase = 'inicio' | 'leyendo' | 'columnas' | 'resumen' | 'error';
 
 interface Seleccion {
@@ -63,6 +66,7 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
   const [marcas, setMarcas] = useState<Record<string, boolean>>({});
   const [otrosAbiertos, setOtrosAbiertos] = useState(false);
   const [entrega, setEntrega] = useState<EstadoExport>('quieto');
+  const [formato, setFormato] = useState<Formato>('csv');
   const entregando = useRef(false);
   const lecturaVigente = useRef(0);
   const entrada = useRef<HTMLInputElement>(null);
@@ -94,6 +98,12 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
   };
 
   const fechaCorta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+  // El dia de hoy en la zona de la persona: toISOString daria el de UTC, y de
+  // noche en Costa Rica el archivo saldria con la fecha de manana.
+  const hoyLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
 
   const aResumen = ({ ingresos: lista, omitidas: perdidas, monedaDeclarada: declarada, sinSigno: salidas }: ResultadoDeIngresos) => {
     const ms = mesesDe(lista);
@@ -175,26 +185,61 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
     setEntrega('quieto');
   };
 
-  const compartir = async () => {
+  const textosCsv = () => ({
+    fecha: t('contador_csv_fecha'),
+    descripcion: t('contador_csv_descripcion'),
+    monto: t('contador_csv_monto'),
+    moneda: t('contador_csv_moneda'),
+    esSinpe: t('contador_csv_sinpe'),
+    esVenta: t('contador_csv_venta'),
+    si: t('contador_csv_si'),
+    no: t('contador_csv_no'),
+    totalVentas: t('contador_csv_total'),
+    cantidadVentas: t('contador_csv_cantidad'),
+  });
+
+  const pdfDelMes = () =>
+    construirPdf(
+      construirContenidoPdf(
+        { delMes, esVenta, mes, moneda, sinSigno, omitidas, hoy: hoyLocal() },
+        {
+          titulo: t('contador_pdf_titulo'),
+          moneda: t('contador_csv_moneda'),
+          totalVentas: t('contador_total_ventas'),
+          cantidadUna: t('contador_cantidad_una'),
+          cantidadOtras: t('contador_cantidad_otras'),
+          aviso: t('contador_pdf_aviso'),
+          sinSigno: t('contador_pdf_sin_signo'),
+          omitidas: t('contador_omitidas'),
+          listaSinpe: t('contador_lista_sinpe'),
+          sinSinpe: t('contador_sin_sinpe'),
+          otros: t('contador_otros'),
+          fecha: t('contador_csv_fecha'),
+          descripcion: t('contador_csv_descripcion'),
+          monto: t('contador_csv_monto'),
+          esVenta: t('contador_es_venta'),
+          si: t('contador_csv_si'),
+          no: t('contador_csv_no'),
+          pie: t('contador_pdf_pie'),
+          pagina: t('contador_pdf_pagina'),
+        },
+        { dinero, mes: etiquetaDeMes, fecha: fechaCorta },
+      ),
+      language,
+    );
+
+  const compartir = async (como: Formato) => {
     if (entregando.current || delMes.length === 0) return;
     entregando.current = true;
+    setFormato(como);
     setEntrega('exportando');
     try {
-      const csv = construirCsv(delMes, esVenta, {
-        fecha: t('contador_csv_fecha'),
-        descripcion: t('contador_csv_descripcion'),
-        monto: t('contador_csv_monto'),
-        moneda: t('contador_csv_moneda'),
-        esSinpe: t('contador_csv_sinpe'),
-        esVenta: t('contador_csv_venta'),
-        si: t('contador_csv_si'),
-        no: t('contador_csv_no'),
-        totalVentas: t('contador_csv_total'),
-        cantidadVentas: t('contador_csv_cantidad'),
-      });
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob =
+        como === 'pdf'
+          ? await pdfDelMes()
+          : new Blob([construirCsv(delMes, esVenta, textosCsv())], { type: 'text/csv;charset=utf-8;' });
       const sufijo = monedas.length > 1 ? `-${moneda}` : '';
-      setEntrega(await entregarArchivo(blob, `KiramoPay-${t('contador_archivo')}-${mes}${sufijo}.csv`));
+      setEntrega(await entregarArchivo(blob, `KiramoPay-${t('contador_archivo')}-${mes}${sufijo}.${como}`));
     } catch {
       setEntrega('error');
     } finally {
@@ -467,16 +512,26 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
             )}
 
             <div className="space-y-3">
-              <Button
-                size="lg"
-                fullWidth
-                onClick={() => void compartir()}
-                loading={entrega === 'exportando'}
-                disabled={delMes.length === 0}
-                leftIcon={<Icons.Share size={18} aria-hidden="true" />}
-              >
-                {t('contador_compartir')}
-              </Button>
+              <div role="group" aria-labelledby="contador-compartir">
+                <p id="contador-compartir" className="mb-2 text-sm font-semibold uv-text-primary">{t('contador_compartir')}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['csv', 'pdf'] as const).map((como) => (
+                    <Button
+                      key={como}
+                      size="lg"
+                      fullWidth
+                      onClick={() => void compartir(como)}
+                      loading={entrega === 'exportando' && formato === como}
+                      disabled={delMes.length === 0 || entrega === 'exportando'}
+                      aria-label={`${t('contador_compartir')}: ${como.toUpperCase()}`}
+                      leftIcon={<Icons.Share size={18} aria-hidden="true" />}
+                    >
+                      {como.toUpperCase()}
+                    </Button>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs leading-relaxed uv-text-muted">{t('contador_formatos_ayuda')}</p>
+              </div>
               <div aria-live="polite">
                 {aviso && (
                   <p

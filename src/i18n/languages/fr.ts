@@ -2299,6 +2299,12 @@ const fr: TranslationKeys = {
   contador_csv_total: 'Total des ventes',
   contador_csv_cantidad: 'Nombre de ventes',
   contador_archivo: 'resume-pour-comptable',
+  contador_pdf_titulo: 'Résumé des paiements SINPE',
+  contador_pdf_aviso: 'Ce document aide à organiser les encaissements lus dans le relevé de compte. Ce n’est ni un justificatif fiscal, ni une facture, ni une déclaration d’impôts.',
+  contador_pdf_sin_signo: 'Le fichier de la banque ne sépare pas les entrées des sorties : certains éléments de cette liste peuvent ne pas être des encaissements.',
+  contador_pdf_pie: 'Préparé avec KiramoPay le {fecha}',
+  contador_pdf_pagina: 'Page {n} sur {total}',
+  contador_formatos_ayuda: 'Le CSV s’ouvre dans Excel. Le PDF sert à lire ou à imprimer.',
 };
 
 export default fr;

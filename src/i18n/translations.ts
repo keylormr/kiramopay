@@ -2382,6 +2382,12 @@ export type TranslationKeys = {
   contador_csv_total: string;
   contador_csv_cantidad: string;
   contador_archivo: string;
+  contador_pdf_titulo: string;
+  contador_pdf_aviso: string;
+  contador_pdf_sin_signo: string;
+  contador_pdf_pie: string;
+  contador_pdf_pagina: string;
+  contador_formatos_ayuda: string;
 };
 
 import es from './languages/es';
