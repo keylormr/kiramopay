@@ -29,3 +29,16 @@ export function reDolares(dolares) {
 export function escapar(texto) {
   return texto.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * Expresion para un texto de la app con huecos, como "Enviar {monto}": lo fijo
+ * tiene que coincidir tal cual y cada hueco con su valor (texto o expresion).
+ * La plantilla se marca con txt() para que se compruebe contra es.ts.
+ */
+export function rePlantilla(plantilla, huecos) {
+  let fuente = escapar(plantilla);
+  for (const [nombre, valor] of Object.entries(huecos)) {
+    fuente = fuente.replace(`\\{${nombre}\\}`, typeof valor === 'string' ? escapar(valor) : valor.source);
+  }
+  return new RegExp(`^${fuente}$`);
+}

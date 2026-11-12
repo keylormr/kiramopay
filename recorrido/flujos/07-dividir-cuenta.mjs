@@ -11,7 +11,8 @@ import * as bd from '../lib/bd.mjs';
 async function abrirDividirCuenta(sesion) {
   const p = sesion.page;
   await boton(p, /Dividir cuenta/).first().click();
-  await p.getByText(txt('Dividir cuenta'), { exact: true }).first().waitFor({ state: 'visible' });
+  // Como encabezado: el mismo texto esta en el acceso de Inicio, que sigue en el DOM debajo de la pantalla.
+  await p.getByRole('heading', { name: txt('Dividir cuenta'), exact: true }).first().waitFor({ state: 'visible' });
   await reposar(p);
 }
 
