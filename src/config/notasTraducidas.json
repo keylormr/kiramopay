@@ -2,27 +2,39 @@
   "2.15.2": {
     "en": [
       "For now you can't buy or convert crypto or stake it; you can sell what you already hold and withdraw what you have staked",
-      "Staking no longer promises a yield: the screen and the help say it only sets your crypto aside"
+      "Staking no longer promises a yield: the screen and the help say it only sets your crypto aside",
+      "The summary for your accountant can also be downloaded as a PDF to read or print; the CSV is still available to open in Excel",
+      "When you open the app on Android or iPhone, the KiramoPay K appears with an animation; three of them take turns, and a tap skips it"
     ],
     "fr": [
       "Pour le moment, vous ne pouvez ni acheter ni convertir de crypto, ni faire du staking ; vous pouvez vendre ce que vous détenez déjà et retirer ce qui est en staking",
-      "Le staking ne promet plus de rendement : l'écran et l'aide indiquent qu'il met seulement vos cryptos de côté"
+      "Le staking ne promet plus de rendement : l'écran et l'aide indiquent qu'il met seulement vos cryptos de côté",
+      "Le résumé pour votre comptable se télécharge aussi en PDF, pour le lire ou l'imprimer ; le CSV reste disponible pour l'ouvrir dans Excel",
+      "À l'ouverture de l'application sur Android ou iPhone, le K de KiramoPay apparaît avec une animation ; trois se relaient, et un toucher la passe"
     ],
     "hi": [
       "अभी आप क्रिप्टो खरीद, कन्वर्ट या स्टेक नहीं कर सकते; आपके पास जो है उसे बेच सकते हैं और स्टेकिंग में रखी क्रिप्टो निकाल सकते हैं",
-      "स्टेकिंग अब रिटर्न का वादा नहीं करती: स्क्रीन और सहायता में लिखा है कि यह केवल आपकी क्रिप्टो को अलग रखती है"
+      "स्टेकिंग अब रिटर्न का वादा नहीं करती: स्क्रीन और सहायता में लिखा है कि यह केवल आपकी क्रिप्टो को अलग रखती है",
+      "आपके अकाउंटेंट के लिए सारांश PDF में भी डाउनलोड होता है, पढ़ने या प्रिंट करने के लिए; Excel में खोलने के लिए CSV भी उपलब्ध है",
+      "Android या iPhone पर ऐप खोलने पर KiramoPay का K एनिमेशन के साथ दिखता है; तीन एनिमेशन बारी-बारी से आते हैं, और एक टैप से इसे छोड़ा जा सकता है"
     ],
     "ja": [
       "現在、暗号資産の購入、交換、ステーキングはできません。保有分の売却とステーキング中の暗号資産の引き出しはできます",
-      "ステーキングで利回りを約束しなくなりました。画面とヘルプに、暗号資産を確保するだけであると記載しています"
+      "ステーキングで利回りを約束しなくなりました。画面とヘルプに、暗号資産を確保するだけであると記載しています",
+      "会計士向けの集計をPDFでもダウンロードでき、読んだり印刷したりできます。Excelで開くためのCSVも引き続き使えます",
+      "AndroidまたはiPhoneでアプリを開くと、KiramoPayのKがアニメーションで表示されます。3種類が順番に切り替わり、タップでスキップできます"
     ],
     "pt": [
       "Por enquanto não é possível comprar cripto, convertê-la nem fazer staking; você pode vender o que já tem e retirar o que está em staking",
-      "O staking não promete mais rendimento: a tela e a ajuda dizem que ele apenas reserva sua cripto"
+      "O staking não promete mais rendimento: a tela e a ajuda dizem que ele apenas reserva sua cripto",
+      "O resumo para o seu contador também pode ser baixado em PDF, para ler ou imprimir; o CSV continua disponível para abrir no Excel",
+      "Ao abrir o aplicativo no Android ou no iPhone, o K da KiramoPay aparece com uma animação; são três que se alternam, e um toque a pula"
     ],
     "zh-cn": [
       "目前无法购买、转换或质押加密货币；您可以卖出已持有的资产，并取出质押中的资产",
-      "质押不再承诺收益：页面和帮助中已说明它只是锁定您的加密货币"
+      "质押不再承诺收益：页面和帮助中已说明它只是锁定您的加密货币",
+      "给会计的汇总也可以下载为 PDF，方便阅读或打印；仍可下载 CSV 在 Excel 中打开",
+      "在 Android 或 iPhone 上打开应用时，KiramoPay 的 K 会以动画呈现；三种动画轮流出现，轻点一下即可跳过"
     ]
   },
   "2.15.1": {
