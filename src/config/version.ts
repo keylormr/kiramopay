@@ -48,6 +48,8 @@ export const APP_VERSION: AppVersion = {
     changes: [
       'Por ahora no se puede comprar cripto, convertirla ni hacer staking; puedes vender lo que ya tienes y retirar lo que está en staking',
       'El staking ya no promete rendimiento: la pantalla y la ayuda dicen que solo aparta tu cripto',
+      'El resumen para tu contador también se descarga en PDF, para leer o imprimir; el CSV sigue disponible para abrirlo en Excel',
+      'Al abrir la aplicación en Android o iPhone, la K de KiramoPay aparece con una animación; hay tres que se turnan y un toque la salta',
     ],
   },
   history: [
