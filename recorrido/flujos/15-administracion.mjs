@@ -19,6 +19,9 @@ async function abrirPanel(sesion, fila) {
   await reposar(p);
 }
 
+// Ficha de una cuenta en el panel de usuarios: el <article> con su nombre de usuario.
+const fichaDe = (p, ficha) => p.locator('article').filter({ hasText: `@${ficha.username}` }).first();
+
 const tarjetaDe = (p, nombre, accion) =>
   p.getByText(nombre).first().locator(`xpath=ancestor::*[.//button[normalize-space()="${accion}"]][1]`);
 
@@ -171,18 +174,27 @@ export default {
         await abrirPanel(keilor, txt('Usuarios'));
         await keilor.page.getByPlaceholder(txt('Cédula, correo, teléfono o nombre')).fill(`${fichaDemo.first_name} ${fichaDemo.last_name}`);
         await keilor.page.getByRole('button', { name: txt('Buscar'), exact: true }).click();
-        await keilor.page.locator('article').filter({ hasText: fichaDemo.username }).first().waitFor({ state: 'visible', timeout: 15000 });
-        const texto = await keilor.page.locator('article').first().innerText();
-        c.ok(!texto.includes(demo.telefono), 'la tarjeta muestra el teléfono completo');
+        // La busqueda deja la lista de coincidencias; la ficha (sesiones, historial y acciones) se abre al
+        // elegir la cuenta, y en escritorio queda al lado de la lista.
+        const fila = keilor.page.locator(`[data-cuenta="${demo.id}"]`).first();
+        await fila.waitFor({ state: 'visible', timeout: 15000 });
+        const enLaLista = await fila.innerText();
+        c.ok(!enLaLista.includes(demo.telefono), 'la lista muestra el teléfono completo');
+        await fila.click();
+        const ficha = fichaDe(keilor.page, fichaDemo);
+        await ficha.waitFor({ state: 'visible', timeout: 15000 });
+        const texto = await ficha.innerText();
+        c.ok(!texto.includes(demo.telefono), 'la ficha muestra el teléfono completo');
       });
 
       await f.paso('Keilor bloquea la cuenta con un motivo: queda bloqueada y no puede entrar', async (c) => {
-        const tarjeta = keilor.page.locator('article').filter({ hasText: fichaDemo.username }).first();
-        await boton(tarjeta, txt('Bloquear'), { exacto: true }).click();
+        const tarjeta = fichaDe(keilor.page, fichaDemo);
+        await boton(tarjeta, txt('Bloquear cuenta'), { exacto: true }).click();
         await keilor.page.locator('#admin-users-block-reason').fill('Prueba del recorrido: se desbloquea al terminar');
         await boton(ultimoDialogo(keilor.page), txt('Sí, bloquear'), { exacto: true }).click();
         await sinDialogos(keilor.page, 15000);
-        await boton(tarjeta, txt('Desbloquear'), { exacto: true }).waitFor({ state: 'visible', timeout: 15000 });
+        await boton(tarjeta, txt('Desbloquear cuenta'), { exacto: true }).waitFor({ state: 'visible', timeout: 15000 });
+        await tarjeta.getByText('Prueba del recorrido: se desbloquea al terminar').first().waitFor({ state: 'visible', timeout: 10000 });
         const ficha = (await api.keilor.exigir('GET', `/admin/users/${demo.id}`)).data;
         c.igual(ficha.status, 'blocked', 'estado tras bloquear');
         c.ok(String(ficha.blocked_reason).includes('Prueba del recorrido'), `motivo guardado: ${ficha.blocked_reason}`);
@@ -198,11 +210,11 @@ export default {
       });
 
       await f.paso('Keilor la desbloquea y la cuenta vuelve a entrar', async (c) => {
-        const tarjeta = keilor.page.locator('article').filter({ hasText: fichaDemo.username }).first();
-        await boton(tarjeta, txt('Desbloquear'), { exacto: true }).click();
+        const tarjeta = fichaDe(keilor.page, fichaDemo);
+        await boton(tarjeta, txt('Desbloquear cuenta'), { exacto: true }).click();
         await boton(ultimoDialogo(keilor.page), txt('Sí, desbloquear'), { exacto: true }).click();
         await sinDialogos(keilor.page, 15000);
-        await boton(tarjeta, txt('Bloquear'), { exacto: true }).waitFor({ state: 'visible', timeout: 15000 });
+        await boton(tarjeta, txt('Bloquear cuenta'), { exacto: true }).waitFor({ state: 'visible', timeout: 15000 });
         c.igual((await api.keilor.exigir('GET', `/admin/users/${demo.id}`)).data.status, 'active', 'estado tras desbloquear');
         const entrada = await peticion('POST', '/auth/login', { cuerpo: { identifier: 'demo', password: '' } });
         c.ok(entrada.ok, `la cuenta desbloqueada debería volver a entrar: ${entrada.resumen()}`);

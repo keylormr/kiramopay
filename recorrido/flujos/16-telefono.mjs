@@ -14,7 +14,11 @@ async function aInicio(p) {
       await p.waitForTimeout(450);
       continue;
     }
-    const atras = p.getByRole('button', { name: txt('Volver'), exact: true }).first();
+    // En el telefono la ficha de una cuenta del panel de usuarios es una pantalla propia, con "Volver a la
+    // lista" en lugar de "Volver".
+    const atras = p.getByRole('button', { name: txt('Volver'), exact: true })
+      .or(p.getByRole('button', { name: txt('Volver a la lista'), exact: true }))
+      .first();
     if (await atras.isVisible().catch(() => false)) {
       await atras.click();
       await p.waitForTimeout(500);
@@ -83,7 +87,8 @@ export default {
     await paso('La barra inferior tiene fondo propio y no deja ver lo que pasa por detrás', async () => {
       await aInicio(p);
       const fondo = await p.evaluate(() => {
-        const n = document.querySelector('nav[aria-label]');
+        // La barra de abajo; el Inicio tiene antes otro <nav> (las acciones rapidas de la tarjeta de saldo).
+        const n = document.querySelector('nav[data-navegacion="barra"]');
         return n ? getComputedStyle(n).backgroundColor : null;
       });
       if (fondo === null) throw new Error('no se encontró la barra inferior');
@@ -93,10 +98,11 @@ export default {
       }
     });
 
-    await paso('Hoja de Enviar (acción rápida del inicio)', async () => {
+    await paso('Enviar (acción rápida del inicio) lleva a SINPE', async () => {
+      // Desde el rediseno la accion rapida ya no abre una hoja: pasa a la pestana SINPE, lista para enviar.
       await aInicio(p);
       await boton(p, txt('Enviar'), { exacto: true }).first().click();
-      await reposar(p, 800);
+      await boton(p, txt('Enviar a nuevo número')).waitFor({ state: 'visible', timeout: 10000 });
       await sinDesborde(p);
     });
 
@@ -146,7 +152,7 @@ export default {
     await paso('Dividir cuenta', async () => {
       await aInicio(p);
       await boton(p, /Dividir cuenta/).first().click();
-      await p.getByText(txt('Dividir cuenta'), { exact: true }).first().waitFor({ state: 'visible' });
+      await p.getByRole('heading', { name: txt('Dividir cuenta'), exact: true }).first().waitFor({ state: 'visible' });
       await sinDesborde(p, 'lista');
       await boton(p, txt('Crear división'), { exacto: true }).first().click();
       await ultimoDialogo(p).waitFor({ state: 'visible' });
@@ -207,7 +213,16 @@ export default {
       await sinDesborde(p, 'buscar');
       await p.getByPlaceholder(txt('Cédula, correo, teléfono o nombre')).fill('Demo KiramoPay');
       await p.getByRole('button', { name: txt('Buscar'), exact: true }).click();
-      await p.locator('article').first().waitFor({ state: 'visible', timeout: 15000 });
+      // Con un solo resultado, en el telefono la ficha se abre sola como pantalla; con varios, se elige de
+      // la lista. Se miden las dos: la ficha y, con "Volver a la lista", la lista de resultados.
+      const ficha = p.locator('article').first();
+      const fila = p.locator('[data-cuenta]').first();
+      await ficha.or(fila).first().waitFor({ state: 'visible', timeout: 15000 });
+      if (!(await ficha.isVisible())) await fila.click();
+      await ficha.waitFor({ state: 'visible', timeout: 15000 });
+      await sinDesborde(p, 'ficha de la cuenta');
+      await boton(p, txt('Volver a la lista'), { exacto: true }).click();
+      await fila.waitFor({ state: 'visible', timeout: 15000 });
       await sinDesborde(p, 'resultado de la búsqueda');
     });
 

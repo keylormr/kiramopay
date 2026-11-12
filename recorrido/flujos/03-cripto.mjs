@@ -4,7 +4,7 @@
 import { CUENTAS, llave } from '../lib/entorno.mjs';
 import { abrirSesion, ir, boton, ultimoDialogo, dialogo, sinDialogos, verTexto } from '../lib/ui.mjs';
 import { clientes, centimos, qrPersonal, problemasDelLibro } from '../lib/comun.mjs';
-import { txt } from '../lib/textos.mjs';
+import { escapar, rePlantilla, txt } from '../lib/textos.mjs';
 import * as bd from '../lib/bd.mjs';
 import { peticion } from '../lib/api.mjs';
 
@@ -172,9 +172,10 @@ export default {
       // La vista previa llega ~400 ms despues de teclear: trae la comision.
       await verTexto(victor.page, txt('Comisión de KiramoPay'));
       await boton(hoja, 'Enviar ETH', { exacto: true }).click();
-      const confirmar = dialogo(victor.page, txt('Confirmar'));
+      // Revision antes de enviar: el boton lleva la cantidad ("Enviar 0.005 ETH").
+      const confirmar = dialogo(victor.page, txt('Revisa antes de enviar'));
       await confirmar.waitFor({ state: 'visible' });
-      await boton(confirmar, 'Enviar ETH', { exacto: true }).click();
+      await boton(confirmar, rePlantilla(txt('Enviar {monto}'), { monto: new RegExp(`${escapar(String(ENVIO_ETH))}0*\\s*ETH`) })).click();
       await sinDialogos(victor.page, 15000);
     });
 

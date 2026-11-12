@@ -2,9 +2,9 @@
 // interno de KiramoPay a KiramoPay) y keilor lo recibe.
 import { llave } from '../lib/entorno.mjs';
 import { CUENTAS } from '../lib/entorno.mjs';
-import { abrirSesion, ir, boton, ultimoDialogo, sinDialogos, verTexto, cerrarSesion } from '../lib/ui.mjs';
+import { abrirSesion, ir, boton, dialogo, ultimoDialogo, sinDialogos, verTexto, cerrarSesion } from '../lib/ui.mjs';
 import { clientes, centimos, saldos, ultimoMovimiento, problemasDelLibro } from '../lib/comun.mjs';
-import { reColones, txt } from '../lib/textos.mjs';
+import { reColones, rePlantilla, txt } from '../lib/textos.mjs';
 import * as bd from '../lib/bd.mjs';
 import { peticion } from '../lib/api.mjs';
 
@@ -39,19 +39,23 @@ export default {
       await hoja.getByPlaceholder('0', { exact: true }).fill(String(MONTO));
       await hoja.getByPlaceholder(txt('Ej: Almuerzo, pago deuda...')).fill('Recorrido');
       await boton(hoja, new RegExp(`^${txt('Enviar')}\\s*₡`)).click();
-      // Hoja "Confirmar": revisar a quien le llega antes de mover plata.
-      const confirmar = ultimoDialogo(victor.page);
+      // Hoja "Revisa antes de enviar": a quien le llega y cuanto, antes de mover plata. El boton lleva el
+      // monto ("Enviar ₡1,500.00").
+      const confirmar = dialogo(victor.page, txt('Revisa antes de enviar'));
       await confirmar.getByText(/\+506\s?8888-0001/).waitFor({ state: 'visible' });
-      await boton(confirmar, txt('Enviar'), { exacto: true }).click();
+      await boton(confirmar, rePlantilla(txt('Enviar {monto}'), { monto: reColones(MONTO) })).click();
     });
 
-    await f.paso('La pantalla dice "¡Enviado!" con el nombre de keilor', async () => {
-      await verTexto(victor.page, txt('¡Enviado!'));
-      await verTexto(victor.page, CUENTAS.keilor.nombre);
+    await f.paso('El comprobante dice "Le llegó a Keilor", con el monto y el nombre completo', async () => {
+      const primerNombre = CUENTAS.keilor.nombre.split(/\s+/)[0];
+      const comprobante = ultimoDialogo(victor.page);
+      await comprobante.getByRole('heading', { name: rePlantilla(txt('Le llegó a {nombre}'), { nombre: primerNombre }) }).waitFor({ state: 'visible', timeout: 15000 });
+      await comprobante.getByText(reColones(MONTO)).first().waitFor({ state: 'visible' });
+      await comprobante.getByText(CUENTAS.keilor.nombre, { exact: true }).first().waitFor({ state: 'visible' });
     });
 
-    await f.paso('Victor cierra la hoja de resultado', async () => {
-      await boton(ultimoDialogo(victor.page), txt('Cerrar')).first().click();
+    await f.paso('Victor cierra el comprobante con "Listo"', async () => {
+      await boton(ultimoDialogo(victor.page), txt('Listo'), { exacto: true }).click();
       await sinDialogos(victor.page);
     });
 

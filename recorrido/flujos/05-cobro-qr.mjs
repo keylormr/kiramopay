@@ -2,9 +2,9 @@
 // comercio absorbe la comision (0,25 % durante la promocion de entrada): el
 // pagador paga exactamente el monto del cobro.
 import { CUENTAS, llave } from '../lib/entorno.mjs';
-import { abrirSesion, boton, ultimoDialogo, sinDialogos, verTexto, cambiarAPerfil } from '../lib/ui.mjs';
+import { abrirSesion, boton, dialogo, ultimoDialogo, sinDialogos, verTexto, cambiarAPerfil } from '../lib/ui.mjs';
 import { clientes, centimos, asegurarComercio, problemasDelLibro } from '../lib/comun.mjs';
-import { reColones, txt } from '../lib/textos.mjs';
+import { reColones, rePlantilla, txt } from '../lib/textos.mjs';
 import * as bd from '../lib/bd.mjs';
 
 const MONTO = 1000; // colones
@@ -68,7 +68,8 @@ export default {
     });
 
     await f.paso('Victor paga y la pantalla confirma "Pago realizado"', async () => {
-      await boton(ultimoDialogo(victor.page), txt('Pagar'), { exacto: true }).click();
+      // Revision antes de pagar: el boton dice que hace y por cuanto ("Pagar ₡1,500.00").
+      await boton(dialogo(victor.page, txt('Revisa antes de pagar')), rePlantilla(txt('Pagar {monto}'), { monto: reColones(MONTO) })).click();
       await victor.page.getByRole('heading', { name: txt('Pago realizado') }).waitFor({ state: 'visible', timeout: 15000 });
       comprobante = await ultimoDialogo(victor.page).innerText();
     });
