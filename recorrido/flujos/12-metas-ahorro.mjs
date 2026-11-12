@@ -8,10 +8,15 @@ import * as bd from '../lib/bd.mjs';
 
 const AHORRO = 'SYSTEM:SAVINGS:CRC';
 
+// El titulo de la pantalla de metas ("Metas" desde la fase 5 del rediseno). Se
+// busca como encabezado: el texto suelto tambien esta en el acceso de Inicio y
+// en el menu lateral, que no prueban que la pantalla se haya abierto.
+const tituloDeMetas = (p) => p.getByRole('heading', { name: txt('Metas'), exact: true }).first();
+
 async function abrirMetas(sesion) {
   const p = sesion.page;
-  await boton(p, /Mis metas/).first().click();
-  await verTexto(p, txt('Metas de ahorro'));
+  await boton(p, new RegExp(txt('Mis metas'))).first().click();
+  await tituloDeMetas(p).waitFor({ state: 'visible', timeout: 15000 });
   await reposar(p);
 }
 
@@ -100,7 +105,7 @@ export default {
       const filas = victor.page.locator('[data-movimiento]');
       await filas.first().waitFor({ state: 'visible', timeout: 10000 });
       const textos = await filas.allInnerTexts();
-      c.ok(textos.some((t) => t.includes(txt('Retiro de ahorro'))), `el inicio no muestra el "Retiro de ahorro" entre sus movimientos: ${JSON.stringify(textos)}`);
+      c.ok(textos.some((t) => t.includes(txt('Retiro de meta'))), `el inicio no muestra el "Retiro de meta" entre sus movimientos: ${JSON.stringify(textos)}`);
     }, { seguir: true });
 
     await f.paso('Repetir un depósito con la misma llave no mueve plata; el servidor rechaza lo imposible', async (c) => {
@@ -127,7 +132,7 @@ export default {
     await f.paso('Victor elimina la meta y lo ahorrado vuelve a su billetera', async (c) => {
       const ahorrado = (await buscar(nombre)).saved_minor;
       const saldoAntes = (await api.victor.saldo()).crc;
-      const dentro = await victor.page.getByRole('heading', { name: txt('Metas de ahorro') }).first().isVisible().catch(() => false);
+      const dentro = await tituloDeMetas(victor.page).isVisible().catch(() => false);
       if (!dentro) await abrirMetas(victor);
       await boton(victor.page, txt('Eliminar'), { exacto: true }).first().click();
       await boton(ultimoDialogo(victor.page), txt('Eliminar'), { exacto: true }).last().click();
@@ -140,7 +145,7 @@ export default {
     });
 
     await f.paso('Victor crea tres metas y la cuarta se rechaza (plan gratuito)', async (c) => {
-      await verTexto(victor.page, txt('Metas de ahorro'));
+      await tituloDeMetas(victor.page).waitFor({ state: 'visible', timeout: 15000 });
       for (const letra of ['A', 'B', 'C']) await crearMeta(victor, `Meta ${letra} ${tag}`, 20000, { primera: letra === 'A' });
       c.igual((await metas()).length, 3, 'metas de victor');
       const cuarta = await api.victor.post('/savings/goals', { name: `Meta D ${tag}`, target_minor: 2000000, currency: 'CRC', icon: 'piggy-bank', color: '#3b82f6' });
