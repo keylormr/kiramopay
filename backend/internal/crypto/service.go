@@ -30,6 +30,9 @@ type Service struct {
 
 	// comprasEnPausa: ver pausa.go.
 	comprasEnPausa bool
+
+	// billeteraPropiaEnEspera: ver billetera_propia.go.
+	billeteraPropiaEnEspera bool
 }
 
 func NewService(repo *Repository, prices *PriceService, tx *transaction.Service, rates RateLookup, opts *Opciones) *Service {
@@ -47,7 +50,8 @@ func NewService(repo *Repository, prices *PriceService, tx *transaction.Service,
 		avisos:        opts.Avisos,
 		logger:        opts.Logger,
 
-		comprasEnPausa: opts.ComprasEnPausa,
+		comprasEnPausa:          opts.ComprasEnPausa,
+		billeteraPropiaEnEspera: opts.BilleteraPropiaEnEspera,
 	}
 }
 

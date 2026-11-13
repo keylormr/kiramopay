@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { Icons } from '../../components/Icons';
@@ -29,6 +29,10 @@ import { llaveYaGastada, mensajeDeErrorCripto, posicionYaNoEsta } from './errore
 import { leerMovimiento, fechaLegible, MONEDAS_FIAT } from './movimientoCripto';
 import { parsearQrKiramo } from '@/utils/qrKiramo';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
+
+// La billetera propia trae sus librerias de redes (viem, Breez): se carga solo
+// cuando la persona abre su pestana.
+const BilleteraPropia = lazy(() => import('./billetera/BilleteraPropia').then(m => ({ default: m.BilleteraPropia })));
 
 // Donde se apoya el aviso de la operacion repetida, medido desde abajo: la
 // barra de navegacion (h-16 en App.tsx), la zona segura del aparato y un
@@ -192,7 +196,8 @@ export const CryptoView: React.FC = () => {
   // aparezca y desaparezca al abrir la pantalla.
   const [comprasAbiertas, setComprasAbiertas] = useState<boolean | null>(null);
   const [selectedTx, setSelectedTx] = useState<CryptoTransaction | null>(null);
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking'>('portfolio');
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking' | 'propia'>('portfolio');
+  const [billeteraPropia, setBilleteraPropia] = useState(false);
 
   // Form states
   const [amount, setAmount] = useState('');
@@ -311,13 +316,21 @@ export const CryptoView: React.FC = () => {
       // Sin respuesta se ofrece igual: quien decide es el servidor, y si esta
       // en pausa lo rechaza con su mensaje.
       let abiertas = true;
+      // La billetera propia, al reves: sin respuesta no se ofrece.
+      let propia = false;
       try {
         const res = await getApiLayer().crypto.getAvailability();
-        if (res.success && res.data) abiertas = res.data.purchasesActive;
+        if (res.success && res.data) {
+          abiertas = res.data.purchasesActive;
+          propia = res.data.selfCustodyActive;
+        }
       } catch {
         // Se queda en abiertas: ver arriba.
       }
-      if (vigente) setComprasAbiertas(abiertas);
+      if (vigente) {
+        setComprasAbiertas(abiertas);
+        setBilleteraPropia(propia);
+      }
     })();
     return () => { vigente = false; };
   }, []);
@@ -1150,16 +1163,23 @@ export const CryptoView: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex bg-[var(--color-surface-muted)] dark:bg-[var(--color-surface-muted-dark)] rounded-xl p-1">
-        {(['portfolio', 'market', 'staking'] as const).map(tab => (
+        {(billeteraPropia ? (['portfolio', 'propia', 'market', 'staking'] as const) : (['portfolio', 'market', 'staking'] as const)).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'uv-surface-1 uv-shadow-soft uv-text-primary' : 'uv-text-muted hover:uv-text-secondary'}`}
           >
-            {tab === 'portfolio' ? t('crypto_my_portfolio') : tab === 'market' ? t('market') : t('staking')}
+            {tab === 'portfolio' ? t('crypto_my_portfolio') : tab === 'propia' ? t('bp_tab') : tab === 'market' ? t('market') : t('staking')}
           </button>
         ))}
       </div>
+
+      {activeTab === 'propia' && billeteraPropia && (
+        <Suspense fallback={<p className="p-4 text-sm uv-text-muted">{t('loading')}</p>}>
+          {/* Una cuenta distinta es otra billetera: nada de la anterior queda montado. */}
+          <BilleteraPropia key={state.user?.id ?? ''} />
+        </Suspense>
+      )}
 
       {/* Portfolio Tab */}
       {activeTab === 'portfolio' && (

@@ -532,6 +532,11 @@ func main() {
 			// los cobros del marketplace: fuera de produccion se permite para las
 			// demos.
 			ComprasEnPausa: cfg.Server.Environment == "production",
+			// La billetera propia (las llaves en el telefono) espera el criterio
+			// del abogado sobre la Ley 10961. Se abre con BILLETERA_PROPIA=abierta
+			// sin publicar otra version; las cuentas de demostracion la ven siempre.
+			BilleteraPropiaEnEspera: cfg.Server.Environment == "production" &&
+				os.Getenv("BILLETERA_PROPIA") != "abierta",
 		})
 
 	// El tipo de cambio oficial, traido cada hora. Sin esto la tasa de arriba

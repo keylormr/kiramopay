@@ -2077,11 +2077,14 @@ paths:
   /api/v1/crypto/availability:
     get:
       tags: [Crypto]
-      summary: Whether this account can buy, convert and stake
+      summary: Whether this account can buy, convert and stake, and sees the self-custody wallet
       description: >-
-        False while those three operations are paused for the caller: they
-        answer 503 `CRYPTO_PAUSED`. Selling and withdrawing from staking are
-        never paused. Demo accounts stay open.
+        `purchases_active` is false while buying, converting and staking are
+        paused for the caller: they answer 503 `CRYPTO_PAUSED`. Selling and
+        withdrawing from staking are never paused. `self_custody_active` says
+        whether the app offers the self-custody wallet, whose keys live only on
+        the phone and never reach the server; in production it waits for
+        BILLETERA_PROPIA=abierta. Demo accounts see both.
       security:
         - bearerAuth: []
       responses:
@@ -2097,9 +2100,11 @@ paths:
                     type: boolean
                   data:
                     type: object
-                    required: [purchases_active]
+                    required: [purchases_active, self_custody_active]
                     properties:
                       purchases_active:
+                        type: boolean
+                      self_custody_active:
                         type: boolean
         '401':
           description: Not authenticated

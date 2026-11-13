@@ -92,6 +92,13 @@ export default defineConfig(({ mode }) => {
               if (id.includes('/i18n/translations')) return 'i18n';
               if (id.includes('/adapters/mock/')) return 'mock-adapters';
               if (id.includes('/stores/') && !id.includes('__tests__')) return 'app-stores';
+              // La billetera propia firma en el telefono: viem y las curvas
+              // pesan. En bloques aparte (el tope por bloque es 200 KB) que solo
+              // se bajan al abrir Mi billetera; nada mas de la app los importa.
+              if (/node_modules\/(ox|abitype)\//.test(id)) return 'billetera-ox';
+              if (/node_modules\/viem\/_esm\/actions\//.test(id)) return 'billetera-evm-acciones';
+              if (/node_modules\/viem\//.test(id)) return 'billetera-evm';
+              if (/node_modules\/@(noble|scure)\//.test(id)) return 'billetera-llaves';
             },
           },
         },

@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.1",
+    "@breeztech/breez-sdk-spark": "0.28.4",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.3",
@@ -40,12 +41,14 @@
     "@capacitor/status-bar": "^8.0.4",
     "@capawesome/capacitor-live-update": "8.7.1",
     "@capgo/capacitor-native-biometric": "^8.9.1",
+    "@scure/bip39": "2.4.0",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.554.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.0",
+    "viem": "2.57.19",
     "zustand": "^5.0.11"
   },
   "devDependencies": {
