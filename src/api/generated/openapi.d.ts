@@ -2955,8 +2955,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether this account can buy, convert and stake
-         * @description False while those three operations are paused for the caller: they answer 503 `CRYPTO_PAUSED`. Selling and withdrawing from staking are never paused. Demo accounts stay open.
+         * Whether this account can buy, convert and stake, and sees the self-custody wallet
+         * @description `purchases_active` is false while buying, converting and staking are paused for the caller: they answer 503 `CRYPTO_PAUSED`. Selling and withdrawing from staking are never paused. `self_custody_active` says whether the app offers the self-custody wallet, whose keys live only on the phone and never reach the server; in production it waits for BILLETERA_PROPIA=abierta. Demo accounts see both.
          */
         get: {
             parameters: {
@@ -2977,6 +2977,7 @@ export interface paths {
                             success: boolean;
                             data: {
                                 purchases_active: boolean;
+                                self_custody_active: boolean;
                             };
                         };
                     };

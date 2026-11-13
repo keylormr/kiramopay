@@ -105,6 +105,11 @@ type Opciones struct {
 	// ComprasEnPausa rechaza comprar, convertir y apartar para staking (ver
 	// pausa.go). Lo enciende cmd/api en produccion.
 	ComprasEnPausa bool
+
+	// BilleteraPropiaEnEspera esconde la billetera propia a las cuentas que no
+	// son de demostracion (ver billetera_propia.go). Lo enciende cmd/api en
+	// produccion mientras BILLETERA_PROPIA no diga "abierta".
+	BilleteraPropiaEnEspera bool
 }
 
 // comisionDe calcula lo que cobra KiramoPay por enviar `cantidad`.

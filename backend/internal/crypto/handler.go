@@ -144,7 +144,7 @@ func (h *Handler) Convert(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetAvailability le dice a la pantalla si esta cuenta puede comprar, convertir
-// y apartar (ver pausa.go).
+// y apartar (ver pausa.go) y si ve la billetera propia (billetera_propia.go).
 func (h *Handler) GetAvailability(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	abiertas, err := h.service.ComprasAbiertas(r.Context(), userID)
@@ -152,7 +152,12 @@ func (h *Handler) GetAvailability(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
 		return
 	}
-	response.JSON(w, http.StatusOK, Disponibilidad{PurchasesActive: abiertas})
+	propia, err := h.service.BilleteraPropiaAbierta(r.Context(), userID)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "FETCH_FAILED", err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, Disponibilidad{PurchasesActive: abiertas, SelfCustodyActive: propia})
 }
 
 func (h *Handler) GetStakingPositions(w http.ResponseWriter, r *http.Request) {

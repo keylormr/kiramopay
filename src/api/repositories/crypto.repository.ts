@@ -7,6 +7,14 @@ import type {
   NuevaAlertaDePrecio,
 } from '@/types';
 
+/** Lo que el servidor deja ofrecer en cripto a esta cuenta. */
+export interface DisponibilidadCripto {
+  /** Comprar, convertir y apartar para staking (en produccion, en pausa). */
+  purchasesActive: boolean;
+  /** La billetera propia (en produccion, espera el criterio del abogado). */
+  selfCustodyActive: boolean;
+}
+
 export interface BuyCryptoRequest {
   asset: string;
   amount: number;
@@ -123,7 +131,11 @@ export type ConMarcaDeRepeticion<T> = T & { repetida?: true };
 
 export interface ICryptoRepository {
   /** Si esta cuenta puede comprar, convertir y hacer staking. */
-  getAvailability(): Promise<ApiResponse<{ purchasesActive: boolean }>>;
+  /**
+   * Si esta cuenta puede comprar, convertir y apartar, y si ve la billetera
+   * propia (las llaves en el telefono; el servidor nunca las recibe).
+   */
+  getAvailability(): Promise<ApiResponse<DisponibilidadCripto>>;
   getAssets(): Promise<ApiResponse<CryptoAsset[]>>;
   getTransactions(): Promise<ApiResponse<CryptoTransaction[]>>;
   buy(request: BuyCryptoRequest): Promise<ApiResponse<ConMarcaDeRepeticion<CryptoTransaction>>>;

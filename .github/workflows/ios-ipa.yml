@@ -107,6 +107,11 @@ jobs:
           # vercel.json no aplica dentro de la app).
           VITE_API_URL: ${{ vars.APK_API_URL || 'https://api.kiramopay.com' }}
           VITE_ANDROID_APK_URL: 'https://github.com/keylormr/kiramopay/releases/latest/download/kiramopay.apk'
+          # Billetera propia: la llave de Breez (gratis) prende bitcoin, y el
+          # dominio propio las direcciones de cobro. Sin el secreto la app sale
+          # igual y bitcoin dice que no esta activo en esta version.
+          VITE_BREEZ_API_KEY: ${{ secrets.BREEZ_API_KEY }}
+          VITE_BREEZ_LNURL_DOMAIN: ${{ vars.BREEZ_LNURL_DOMAIN }}
         run: npm run build
 
       # Actualizacion interna, igual que en android-apk.yml: esta capa web,

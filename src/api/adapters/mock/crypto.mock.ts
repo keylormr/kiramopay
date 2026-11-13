@@ -7,6 +7,7 @@ import type {
   SendCryptoRequest,
   SendCryptoPreviewRequest,
   CryptoSendPreview,
+  DisponibilidadCripto,
 } from '../../repositories/crypto.repository';
 import { ACTIVOS_CON_STAKING } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
@@ -80,8 +81,8 @@ function saveCryptoState(crypto: Record<string, unknown>) {
 }
 
 export class MockCryptoRepository implements ICryptoRepository {
-  async getAvailability(): Promise<ApiResponse<{ purchasesActive: boolean }>> {
-    return apiSuccess({ purchasesActive: true });
+  async getAvailability(): Promise<ApiResponse<DisponibilidadCripto>> {
+    return apiSuccess({ purchasesActive: true, selfCustodyActive: true });
   }
 
   async getAssets(): Promise<ApiResponse<CryptoAsset[]>> {

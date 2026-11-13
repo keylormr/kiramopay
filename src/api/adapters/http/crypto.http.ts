@@ -8,6 +8,7 @@ import type {
   SendCryptoPreviewRequest,
   CryptoSendPreview,
   ConMarcaDeRepeticion,
+  DisponibilidadCripto,
 } from '../../repositories/crypto.repository';
 import type { ApiResponse } from '../../types';
 import type {
@@ -155,12 +156,17 @@ export function posicionDesdeServidor(p: PosicionDelServidor): StakingPosition {
 export class HttpCryptoRepository implements ICryptoRepository {
   constructor(private client: HttpClient) {}
 
-  async getAvailability(): Promise<ApiResponse<{ purchasesActive: boolean }>> {
-    const res = await this.client.get<{ purchases_active?: boolean }>('/api/v1/crypto/availability');
+  async getAvailability(): Promise<ApiResponse<DisponibilidadCripto>> {
+    const res = await this.client.get<{ purchases_active?: boolean; self_custody_active?: boolean }>('/api/v1/crypto/availability');
     if (!res.success) {
       return falla(res, 'FETCH_FAILED');
     }
-    return apiSuccess({ purchasesActive: res.data?.purchases_active !== false });
+    return apiSuccess({
+      purchasesActive: res.data?.purchases_active !== false,
+      // Al reves que las compras: si el servidor no lo dice, no se ofrece. Un
+      // servidor viejo no conoce la bandera y tampoco tiene la espera resuelta.
+      selfCustodyActive: res.data?.self_custody_active === true,
+    });
   }
 
   async getAssets(): Promise<ApiResponse<CryptoAsset[]>> {
