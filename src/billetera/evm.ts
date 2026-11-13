@@ -53,6 +53,9 @@ const CADENAS: Record<RedEvm, Chain> = { ethereum: mainnet, polygon, avalanche }
 /** La moneda con que se paga la comision en cada red. */
 export const MONEDA_DE_LA_RED: Record<RedEvm, SimboloEvm> = { ethereum: 'ETH', polygon: 'POL', avalanche: 'AVAX' };
 
+/** El nombre de cada red tal como lo muestran las billeteras y los exchanges. */
+export const NOMBRE_DE_LA_RED: Record<RedEvm, string> = { ethereum: 'Ethereum', polygon: 'Polygon', avalanche: 'Avalanche C-Chain' };
+
 const NODO_CONFIGURADO: Record<RedEvm, string | undefined> = {
   ethereum: import.meta.env.VITE_RPC_ETHEREUM,
   polygon: import.meta.env.VITE_RPC_POLYGON,
@@ -128,21 +131,33 @@ export interface EnvioEvmPreparado {
   maxPriorityFeePerGas: bigint;
   /** Lo maximo que puede costar la comision, en la moneda de la red. */
   comisionMaxima: bigint;
+  /**
+   * El numero de la transaccion en la cuenta, fijado al preparar. Firmar dos
+   * veces el mismo envio da la misma transaccion: la red acepta una sola.
+   */
+  nonce: number;
 }
 
 /**
  * Valida y calcula el envio sin mover nada. La comision es la maxima que la
  * red puede cobrar (gas x precio maximo): lo que se muestra antes de confirmar
  * nunca es menos de lo que se paga.
+ *
+ * `nonce` se pasa cuando un intento anterior de este mismo envio pudo haber
+ * llegado a la red: con el mismo numero, la red no lo cobra dos veces.
  */
 export async function prepararEnvioEvm(
   semilla: string,
   activo: ActivoEvm,
   destinoTexto: string,
   montoTexto: string,
+  opciones: { nonce?: number } = {},
 ): Promise<EnvioEvmPreparado> {
   const destino = destinoTexto.trim();
-  if (!isAddress(destino, { strict: false })) throw new RechazoEvm('direccion-invalida');
+  // Estricto: una direccion con mayusculas y minusculas mezcladas tiene que
+  // cuadrar con su suma de verificacion (EIP-55). Asi un caracter mal copiado
+  // se rechaza en vez de mandar el dinero a una direccion que nadie controla.
+  if (!isAddress(destino)) throw new RechazoEvm('direccion-invalida');
   const hacia = getAddress(destino);
   const desde = direccionEvm(semilla);
   if (hacia === desde) throw new RechazoEvm('a-si-mismo');
@@ -156,16 +171,22 @@ export async function prepararEnvioEvm(
   if (monto <= 0n) throw new RechazoEvm('monto-invalido');
 
   const c = lector(activo.red);
-  const [saldo, saldoDeLaRed, tarifas] = await Promise.all([
+  const [saldo, saldoDeLaRed, tarifas, nonce] = await Promise.all([
     saldoEvm(activo, desde),
     activo.contrato ? c.getBalance({ address: desde }) : Promise.resolve(0n),
     c.estimateFeesPerGas(),
+    opciones.nonce ?? c.getTransactionCount({ address: desde, blockTag: 'pending' }),
   ]);
   if (saldo < monto) throw new RechazoEvm('saldo-insuficiente');
 
-  const gas = activo.contrato
+  const estimado = activo.contrato
     ? await c.estimateContractGas({ address: activo.contrato, abi: erc20Abi, functionName: 'transfer', args: [hacia, monto], account: desde })
     : await c.estimateGas({ account: desde, to: hacia, value: monto });
+  // Un envio simple entre cuentas gasta siempre 21.000. Lo demas (contratos de
+  // tokens, cuentas que son contratos) puede gastar algo mas al ejecutarse que
+  // al estimarse: un 20 % de margen evita que la transaccion falle y cobre la
+  // comision igual. El margen solo sube el maximo; la red cobra lo que se usa.
+  const gas = estimado === GAS_DE_UN_ENVIO_SIMPLE ? estimado : (estimado * 12n) / 10n;
   const comisionMaxima = gas * tarifas.maxFeePerGas;
 
   const disponibleParaComision = activo.contrato ? saldoDeLaRed : saldo - monto;
@@ -180,15 +201,18 @@ export async function prepararEnvioEvm(
     maxFeePerGas: tarifas.maxFeePerGas,
     maxPriorityFeePerGas: tarifas.maxPriorityFeePerGas,
     comisionMaxima,
+    nonce,
   };
 }
+
+const GAS_DE_UN_ENVIO_SIMPLE = 21_000n;
 
 /** Firma en el telefono y entrega la transaccion a la red. Devuelve su hash. */
 export async function enviarEvm(semilla: string, envio: EnvioEvmPreparado): Promise<Hash> {
   const account = mnemonicToAccount(semilla, { addressIndex: 0 });
   if (account.address !== envio.desde) throw new Error('la semilla no corresponde al envio preparado');
   const firmante = createWalletClient({ account, chain: CADENAS[envio.activo.red], transport: transporte(envio.activo.red) });
-  const tarifas = { gas: envio.gas, maxFeePerGas: envio.maxFeePerGas, maxPriorityFeePerGas: envio.maxPriorityFeePerGas };
+  const tarifas = { gas: envio.gas, maxFeePerGas: envio.maxFeePerGas, maxPriorityFeePerGas: envio.maxPriorityFeePerGas, nonce: envio.nonce };
   if (envio.activo.contrato) {
     return firmante.writeContract({
       address: envio.activo.contrato,
@@ -199,4 +223,33 @@ export async function enviarEvm(semilla: string, envio: EnvioEvmPreparado): Prom
     });
   }
   return firmante.sendTransaction({ to: envio.hacia, value: envio.monto, ...tarifas });
+}
+
+/**
+ * La direccion a la que pagar desde un codigo QR, o null si el codigo no sirve
+ * para esta moneda. Acepta la direccion sola y los enlaces de pago EIP-681:
+ * - `ethereum:0xDESTINO[@red]`: paga a esa direccion;
+ * - `ethereum:0xCONTRATO[@red]/transfer?address=0xDESTINO`: pide un token. El
+ *   0x del principio es el contrato, NO quien cobra: tomarlo mandaria el
+ *   dinero al contrato y se perderia.
+ * Se rechaza el codigo de otra red (`@137` es Polygon) y el que pide otro token.
+ */
+export function destinoDeUnQrEvm(crudo: string, activo: ActivoEvm): Address | null {
+  const texto = crudo.trim();
+  if (/^0x[0-9a-fA-F]{40}$/.test(texto)) return isAddress(texto) ? getAddress(texto) : null;
+
+  const m = texto.match(/^ethereum:(?:pay-)?(0x[0-9a-fA-F]{40})(?:@(\d+))?(?:\/([A-Za-z0-9_]+))?(?:\?(.*))?$/i);
+  if (!m) return null;
+  const [, objetivo, red, funcion, consulta] = m;
+  if (red !== undefined && Number(red) !== CADENAS[activo.red].id) return null;
+
+  let destino: string | null;
+  if (funcion === undefined) {
+    destino = objetivo;
+  } else if (funcion === 'transfer' && activo.contrato && objetivo.toLowerCase() === activo.contrato.toLowerCase()) {
+    destino = new URLSearchParams(consulta ?? '').get('address');
+  } else {
+    return null;
+  }
+  return destino && isAddress(destino) ? getAddress(destino) : null;
 }

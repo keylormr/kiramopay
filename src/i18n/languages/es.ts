@@ -2356,7 +2356,7 @@ const es: TranslationKeys = {
   bp_resumen_comision_max: 'Comisión de la red, como máximo',
   bp_confirmar: 'Confirmar y enviar',
   bp_confirmar_razon: 'Confirmar el envío',
-  bp_enviado: 'Envío hecho',
+  bp_enviado: 'Envío entregado a la red',
   bp_ver_explorador: 'Ver en el explorador',
   bp_err_direccion: 'Esa dirección no sirve para esta red.',
   bp_err_a_si_mismo: 'Esa es tu propia dirección.',
@@ -2386,6 +2386,17 @@ const es: TranslationKeys = {
   bp_direccion_lightning_ocupada: 'Ese nombre ya está tomado.',
   bp_explorador_cuenta: 'Movimientos en el explorador',
   bp_otras: 'Otras monedas',
+  bp_enviado_ayuda: 'La red puede tardar unos minutos en confirmarlo.',
+  bp_resumen_red: 'Red',
+  bp_cotizacion_vencida: 'La comisión de la red cambió mientras revisabas. Mira los datos nuevos y confirma otra vez.',
+  bp_err_qr: 'Ese código es de otra moneda o de otra red. Escribe la dirección o pide otro código.',
+  bp_err_lectura_titulo: 'No pudimos leer tu billetera',
+  bp_err_lectura_cuerpo: 'El almacén seguro del teléfono no respondió. Tu dinero sigue en la red. Inténtalo de nuevo en un momento.',
+  bp_err_ya_hay_billetera: 'Este teléfono ya tiene otra billetera guardada para tu cuenta. Ábrela, o quítala primero si quieres usar estas palabras.',
+  bp_deposito_pendiente: '{sats} sats llegaron por la red de bitcoin y todavía no están en tu saldo.',
+  bp_deposito_comision: 'Para sumarlos hay que pagar {comision} sats de comisión de la red, más de lo que la billetera paga sin preguntarte.',
+  bp_deposito_sumar: 'Sumarlos pagando {comision} sats',
+  bp_deposito_chico: 'Es tan poco que la comisión de la red se lo llevaría entero, así que no se puede sumar.',
 };
 
 export default es;

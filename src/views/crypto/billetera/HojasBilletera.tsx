@@ -1,6 +1,6 @@
 // Las hojas de la billetera propia: recibir, enviar, ver las 12 palabras y
 // quitarla del telefono.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
@@ -12,9 +12,12 @@ import { confirmarConHuella } from '@/billetera/boveda';
 import { RechazoBitcoin, type BilleteraBitcoin, type EnvioBitcoinPreparado } from '@/billetera/bitcoin';
 import {
   comisionLegible,
+  destinoDeUnQrEvm,
+  enlaceDeDireccion,
   enlaceDeTransaccion,
   enviarEvm,
   MONEDA_DE_LA_RED,
+  NOMBRE_DE_LA_RED,
   prepararEnvioEvm,
   RechazoEvm,
   saldoLegible,
@@ -194,15 +197,33 @@ interface HojaEnviarProps {
   onEnviado: () => void;
 }
 
-type Preparado =
+type Preparado = { en: number } & (
   | { tipo: 'evm'; envio: EnvioEvmPreparado }
-  | { tipo: 'btc'; envio: EnvioBitcoinPreparado; destino: string };
+  | { tipo: 'btc'; envio: EnvioBitcoinPreparado; destino: string }
+);
 
-/** De un QR de pago saca solo la direccion EVM (ethereum:0x...@1?value=...). */
-function direccionDelQrEvm(crudo: string): string {
-  const m = crudo.match(/0x[0-9a-fA-F]{40}/);
-  return m ? m[0] : crudo.trim();
+/**
+ * Cuanto vale lo revisado. Pasado ese tiempo la comision de la red pudo cambiar
+ * (y la cotizacion de bitcoin por la red vence): se vuelve a calcular y la
+ * persona confirma lo nuevo.
+ */
+const VIGENCIA_MS = 90_000;
+
+/**
+ * Un intento de pago: el mismo destino y el mismo monto. Si un intento falla
+ * a medias (la red recibio el envio pero la respuesta no llego), repetirlo no
+ * puede cobrar dos veces:
+ * - bitcoin: la llave de idempotencia es la misma, y el SDK devuelve el pago
+ *   que ya existe;
+ * - redes EVM: el nonce es el mismo, y la red acepta una sola transaccion con
+ *   ese numero.
+ * Cambiar el destino o el monto es otro pago y empieza otro intento.
+ */
+interface Intento {
+  llave: string;
+  nonceIntentado?: number;
 }
+const nuevoIntento = (): Intento => ({ llave: crypto.randomUUID() });
 
 export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnviarProps) {
   const { t, language } = useLanguage();
@@ -211,8 +232,13 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
   const [escaneando, setEscaneando] = useState(false);
   const [preparado, setPreparado] = useState<Preparado | null>(null);
   const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [hecho, setHecho] = useState<{ enlace?: string } | null>(null);
+  // Se marca en el mismo toque, antes de cualquier espera: dos toques seguidos
+  // en Confirmar no alcanzan a mandar dos veces.
+  const enviando = useRef(false);
+  const intento = useRef<Intento>(nuevoIntento());
 
   useEffect(() => {
     setDestino('');
@@ -220,9 +246,22 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
     setEscaneando(false);
     setPreparado(null);
     setError('');
+    setAviso('');
     setOcupado(false);
     setHecho(null);
+    intento.current = nuevoIntento();
   }, [activo]);
+
+  const cambiarDestino = (valor: string) => {
+    setError('');
+    setDestino(valor);
+    intento.current = nuevoIntento();
+  };
+  const cambiarMonto = (valor: string) => {
+    setError('');
+    setMonto(valor);
+    intento.current = nuevoIntento();
+  };
 
   const mensajeEvm = (e: RechazoEvm, a: ActivoEvm) => {
     switch (e.motivo) {
@@ -244,44 +283,77 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
     }
   };
 
-  const revisar = async () => {
-    if (!activo) return;
-    setOcupado(true);
-    setError('');
+  /** Calcula el envio. Devuelve null y deja el mensaje si no se puede. */
+  const preparar = async (): Promise<Preparado | null> => {
+    if (!activo) return null;
     try {
       if (activo.tipo === 'evm') {
-        setPreparado({ tipo: 'evm', envio: await prepararEnvioEvm(semilla, activo.evm, destino, monto) });
-      } else if (btc) {
-        const sats = monto.trim() ? Number(monto.trim()) : undefined;
-        setPreparado({ tipo: 'btc', envio: await btc.prepararEnvio(destino, sats), destino: destino.trim() });
+        const envio = await prepararEnvioEvm(semilla, activo.evm, destino, monto, { nonce: intento.current.nonceIntentado });
+        return { tipo: 'evm', envio, en: Date.now() };
       }
+      if (!btc) return null;
+      const sats = monto.trim() ? Number(monto.trim()) : undefined;
+      return { tipo: 'btc', envio: await btc.prepararEnvio(destino, sats), destino: destino.trim(), en: Date.now() };
     } catch (e) {
       if (e instanceof RechazoEvm && activo.tipo === 'evm') setError(mensajeEvm(e, activo.evm));
       else if (e instanceof RechazoBitcoin) setError(mensajeBtc(e));
       else setError(t('bp_err_red'));
+      return null;
+    }
+  };
+
+  const revisar = async () => {
+    setOcupado(true);
+    setError('');
+    setAviso('');
+    try {
+      const listo = await preparar();
+      if (listo) setPreparado(listo);
     } finally {
       setOcupado(false);
     }
   };
 
   const confirmar = async () => {
-    if (!preparado) return;
-    if (!(await confirmarConHuella(t('bp_confirmar_razon')))) return;
+    if (!preparado || enviando.current) return;
+    enviando.current = true;
     setOcupado(true);
     setError('');
+    setAviso('');
     try {
+      if (Date.now() - preparado.en > VIGENCIA_MS) {
+        // No se firma lo que ya no es lo que se mostro: se recalcula y la
+        // persona vuelve a confirmar.
+        const nuevo = await preparar();
+        setPreparado(nuevo);
+        if (nuevo) setAviso(t('bp_cotizacion_vencida'));
+        return;
+      }
+      if (!(await confirmarConHuella(t('bp_confirmar_razon')))) return;
       if (preparado.tipo === 'evm') {
+        intento.current.nonceIntentado = preparado.envio.nonce;
         const hash = await enviarEvm(semilla, preparado.envio);
         setHecho({ enlace: enlaceDeTransaccion(preparado.envio.activo.red, hash) });
       } else if (btc) {
-        await btc.enviar(preparado.envio, crypto.randomUUID());
+        await btc.enviar(preparado.envio, intento.current.llave);
         setHecho({});
       }
       onEnviado();
     } catch {
       setError(t('bp_err_envio'));
     } finally {
+      enviando.current = false;
       setOcupado(false);
+    }
+  };
+
+  /** La red por donde sale el envio, para que nadie mande por la red equivocada. */
+  const redDelEnvio = (p: Preparado): string => {
+    if (p.tipo === 'evm') return NOMBRE_DE_LA_RED[p.envio.activo.red];
+    switch (p.envio.destino.tipo) {
+      case 'direccion-bitcoin': return t('bp_btc_red');
+      case 'direccion-spark': return 'Spark';
+      default: return t('bp_btc_lightning');
     }
   };
 
@@ -298,6 +370,7 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
         <div className="space-y-4 text-center">
           <Icons.CheckCircle size={48} className="mx-auto text-[var(--color-success)]" aria-hidden />
           <p className="text-lg font-bold uv-text-primary">{t('bp_enviado')}</p>
+          <p className="text-sm uv-text-secondary">{t('bp_enviado_ayuda')}</p>
           {hecho.enlace && (
             <a className={`${BOTON_SECUNDARIO} inline-flex items-center justify-center`} href={hecho.enlace} target="_blank" rel="noopener noreferrer">
               {t('bp_ver_explorador')}
@@ -307,11 +380,19 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
         </div>
       ) : preparado ? (
         <div className="space-y-4">
+          {aviso && <p role="status" className="uv-chip-warning rounded-xl p-3 text-sm">{aviso}</p>}
           <dl className="space-y-3 rounded-2xl uv-surface-2 p-4 text-sm">
             <div className="flex justify-between gap-4">
+              <dt className="uv-text-secondary">{t('bp_resumen_red')}</dt>
+              <dd className="text-right font-semibold uv-text-primary">{redDelEnvio(preparado)}</dd>
+            </div>
+            {/* La direccion completa: es lo que la persona compara con la que le pasaron. */}
+            <div className="space-y-1">
               <dt className="uv-text-secondary">{t('bp_resumen_para')}</dt>
-              <dd className="break-all text-right font-mono uv-text-primary">
-                {preparado.tipo === 'evm' ? direccionCorta(preparado.envio.hacia) : direccionCorta(preparado.destino, 12)}
+              <dd className="break-all font-mono uv-text-primary">
+                {preparado.tipo === 'evm'
+                  ? preparado.envio.hacia
+                  : preparado.envio.destino.tipo === 'factura' ? direccionCorta(preparado.destino, 12) : preparado.destino}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -332,10 +413,20 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
             </div>
           </dl>
           {error && <p role="alert" className={ERROR}>{error}</p>}
+          {error && preparado.tipo === 'evm' && (
+            <a
+              className="block text-center text-sm font-semibold text-[var(--color-primary)] underline-offset-2 hover:underline"
+              href={enlaceDeDireccion(preparado.envio.activo.red, preparado.envio.desde)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('bp_explorador_cuenta')}
+            </a>
+          )}
           <button type="button" className={BOTON_PRINCIPAL} disabled={ocupado} onClick={confirmar}>
             <span className="inline-flex items-center gap-2"><Icons.Fingerprint size={18} aria-hidden /> {t('bp_confirmar')}</span>
           </button>
-          <button type="button" className={BOTON_SECUNDARIO} disabled={ocupado} onClick={() => { setPreparado(null); setError(''); }}>
+          <button type="button" className={BOTON_SECUNDARIO} disabled={ocupado} onClick={() => { setPreparado(null); setError(''); setAviso(''); }}>
             {t('back')}
           </button>
         </div>
@@ -349,7 +440,7 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
               autoCorrect="off"
               spellCheck={false}
               value={destino}
-              onChange={e => { setError(''); setDestino(e.target.value); }}
+              onChange={e => cambiarDestino(e.target.value)}
             />
             <span className="block text-xs uv-text-muted">{esBtc ? t('bp_destino_btc_ayuda') : t('bp_destino_evm_ayuda')}</span>
           </label>
@@ -357,8 +448,14 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
             <QrScannerPanel
               active={escaneando}
               onDecode={crudo => {
-                setDestino(esBtc ? crudo.trim() : direccionDelQrEvm(crudo));
                 setEscaneando(false);
+                if (activo?.tipo !== 'evm') {
+                  cambiarDestino(crudo.trim());
+                  return;
+                }
+                const direccion = destinoDeUnQrEvm(crudo, activo.evm);
+                if (direccion) cambiarDestino(direccion);
+                else setError(t('bp_err_qr'));
               }}
             />
           ) : (
@@ -372,7 +469,7 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
               className={`${CAMPO} tabular-nums`}
               inputMode={esBtc ? 'numeric' : 'decimal'}
               value={monto}
-              onChange={e => { setError(''); setMonto(esBtc ? e.target.value.replace(/[^0-9]/g, '') : e.target.value); }}
+              onChange={e => cambiarMonto(esBtc ? e.target.value.replace(/[^0-9]/g, '') : e.target.value)}
             />
           </label>
           {error && <p role="alert" className={ERROR}>{error}</p>}

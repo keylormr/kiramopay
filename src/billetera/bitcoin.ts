@@ -10,12 +10,14 @@
 // configurarlo.
 import type {
   BreezSdk,
+  DepositInfo,
   InputType,
   Payment,
   PrepareLnurlPayResponse,
   PrepareSendPaymentResponse,
   SendPaymentOptions,
 } from '@breeztech/breez-sdk-spark/web';
+import { direccionEvm } from './evm';
 
 const LLAVE_DE_BREEZ: string | undefined = import.meta.env.VITE_BREEZ_API_KEY;
 /** Dominio de las direcciones de cobro (nombre@dominio); sin el, el de Breez. */
@@ -78,8 +80,25 @@ export interface EnvioBitcoinPreparado {
     | { via: 'lnurl'; respuesta: PrepareLnurlPayResponse };
 }
 
+/**
+ * Bitcoin que llego por la red de bitcoin y todavia no esta en el saldo. El SDK
+ * los suma solo cuando la comision de la red cabe en su maximo; si no, quedan
+ * aqui hasta que la persona acepte pagarla.
+ */
+export interface DepositoSinSumar {
+  txid: string;
+  vout: number;
+  sats: number;
+  /** 'comision-alta': se suma pagando `comisionSats`. 'muy-chico': la comision se lo comeria. */
+  motivo: 'comision-alta' | 'muy-chico' | 'esperando';
+  comisionSats?: number;
+}
+
 export interface BilleteraBitcoin {
   saldoSats(): Promise<number>;
+  depositosSinSumar(): Promise<DepositoSinSumar[]>;
+  /** Suma un deposito pagando a lo sumo la comision que se le mostro a la persona. */
+  sumarDeposito(d: DepositoSinSumar): Promise<void>;
   /** Factura Lightning; sin monto la llena quien paga. */
   facturaLightning(descripcion: string, sats?: number): Promise<string>;
   /** Direccion de la red de bitcoin para recibir desde un exchange o billetera fria. */
@@ -97,9 +116,16 @@ export interface BilleteraBitcoin {
 }
 
 /**
- * Abre la billetera de bitcoin de esta cuenta. `userId` separa los datos
- * locales del SDK (IndexedDB) entre cuentas del mismo telefono.
+ * Donde guarda el SDK sus datos locales (IndexedDB): uno por cuenta y por
+ * semilla. Si la persona quita la billetera y restaura otras palabras, la
+ * nueva no hereda los movimientos de la anterior. La marca de la semilla es el
+ * comienzo de su direccion EVM, que ya es publica.
  */
+export function carpetaDeDatos(userId: string, semilla: string): string {
+  return `kiramopay-btc-${userId}-${direccionEvm(semilla).slice(2, 12).toLowerCase()}`;
+}
+
+/** Abre la billetera de bitcoin de esta cuenta. */
 export async function abrirBitcoin(semilla: string, userId: string): Promise<BilleteraBitcoin> {
   if (!bitcoinConfigurado()) throw new Error('falta VITE_BREEZ_API_KEY');
   const m = await modulo();
@@ -109,9 +135,24 @@ export async function abrirBitcoin(semilla: string, userId: string): Promise<Bil
   const sdk = await m.connect({
     config,
     seed: { type: 'mnemonic', mnemonic: semilla },
-    storageDir: `kiramopay-btc-${userId}`,
+    storageDir: carpetaDeDatos(userId, semilla),
   });
   return envolver(sdk);
+}
+
+export function depositoSinSumar(d: DepositInfo): DepositoSinSumar {
+  const base = { txid: d.txid, vout: d.vout, sats: d.amountSats };
+  if (d.claimError?.type === 'maxDepositClaimFeeExceeded') {
+    return { ...base, motivo: 'comision-alta', comisionSats: d.claimError.requiredFeeSats };
+  }
+  if (d.claimError?.type === 'depositTooSmall') return { ...base, motivo: 'muy-chico' };
+  return { ...base, motivo: 'esperando' };
+}
+
+function sinTipo<T extends { type: string }>(entrada: T): Omit<T, 'type'> {
+  const copia: Partial<T> = { ...entrada };
+  delete copia.type;
+  return copia as Omit<T, 'type'>;
 }
 
 function comoNumero(v: bigint | number | undefined): number {
@@ -157,9 +198,21 @@ function viaDe(p: Payment): MovimientoBitcoin['via'] {
 
 function envolver(sdk: BreezSdk): BilleteraBitcoin {
   return {
+    // ensureSynced: recien abierta, la billetera todavia no tiene el saldo de
+    // los operadores. Sin esperar, un saldo real se veria como cero.
     async saldoSats() {
-      const info = await sdk.getInfo({ ensureSynced: false });
+      const info = await sdk.getInfo({ ensureSynced: true });
       return info.balanceSats;
+    },
+
+    async depositosSinSumar() {
+      const r = await sdk.listUnclaimedDeposits({});
+      return r.deposits.filter(d => !d.refundTx).map(depositoSinSumar);
+    },
+
+    async sumarDeposito(d) {
+      if (d.motivo !== 'comision-alta' || d.comisionSats === undefined) throw new Error('este deposito no se puede sumar');
+      await sdk.claimDeposit({ txid: d.txid, vout: d.vout, maxFee: { onchain: { type: 'fixed', amount: d.comisionSats } } });
     },
 
     async facturaLightning(descripcion, sats) {
@@ -193,7 +246,7 @@ function envolver(sdk: BreezSdk): BilleteraBitcoin {
         throw new RechazoBitcoin('destino-desconocido');
       }
       const destino = destinoDe(entrada);
-      const saldo = (await sdk.getInfo({ ensureSynced: false })).balanceSats;
+      const saldo = (await sdk.getInfo({ ensureSynced: true })).balanceSats;
 
       if (destino.tipo === 'direccion-lightning') {
         if (!sats || !Number.isInteger(sats) || sats <= 0) throw new RechazoBitcoin('monto-invalido');
@@ -201,7 +254,8 @@ function envolver(sdk: BreezSdk): BilleteraBitcoin {
           throw new RechazoBitcoin('fuera-de-rango', { minimoSats: destino.minimoSats, maximoSats: destino.maximoSats });
         }
         if (entrada.type !== 'lightningAddress' && entrada.type !== 'lnurlPay') throw new RechazoBitcoin('destino-desconocido');
-        const payRequest = entrada.type === 'lightningAddress' ? entrada.payRequest : entrada;
+        // El SDK espera solo los datos del cobro, sin la marca `type` del parse.
+        const payRequest = entrada.type === 'lightningAddress' ? entrada.payRequest : sinTipo(entrada);
         const respuesta = await sdk.prepareLnurlPay({ amount: BigInt(sats), payRequest });
         if (respuesta.amountSats + respuesta.feeSats > saldo) throw new RechazoBitcoin('saldo-insuficiente');
         return { destino, montoSats: respuesta.amountSats, comisionSats: respuesta.feeSats, interno: { via: 'lnurl', respuesta } };
@@ -237,7 +291,8 @@ function envolver(sdk: BreezSdk): BilleteraBitcoin {
 
     async movimientos() {
       const r = await sdk.listPayments({ limit: 50, sortAscending: false });
-      return r.payments.map(p => ({
+      // Los tokens de Spark no son bitcoin: sus montos no son sats.
+      return r.payments.filter(p => p.method !== 'token').map(p => ({
         id: p.id,
         tipo: p.paymentType === 'receive' ? 'recibido' : 'enviado',
         estado: p.status === 'completed' ? 'completado' : p.status === 'pending' ? 'pendiente' : 'fallido',

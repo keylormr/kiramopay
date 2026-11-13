@@ -2353,7 +2353,7 @@ const pt: TranslationKeys = {
   bp_resumen_comision_max: 'Taxa da rede, no máximo',
   bp_confirmar: 'Confirmar e enviar',
   bp_confirmar_razon: 'Confirmar o envio',
-  bp_enviado: 'Envio feito',
+  bp_enviado: 'Envio entregue à rede',
   bp_ver_explorador: 'Ver no explorador',
   bp_err_direccion: 'Esse endereço não serve para esta rede.',
   bp_err_a_si_mismo: 'Esse é o seu próprio endereço.',
@@ -2383,6 +2383,17 @@ const pt: TranslationKeys = {
   bp_direccion_lightning_ocupada: 'Esse nome já está em uso.',
   bp_explorador_cuenta: 'Movimentos no explorador',
   bp_otras: 'Outras moedas',
+  bp_enviado_ayuda: 'A rede pode levar alguns minutos para confirmar.',
+  bp_resumen_red: 'Rede',
+  bp_cotizacion_vencida: 'A taxa da rede mudou enquanto você revisava. Veja os dados novos e confirme de novo.',
+  bp_err_qr: 'Esse código é de outra moeda ou de outra rede. Digite o endereço ou peça outro código.',
+  bp_err_lectura_titulo: 'Não conseguimos ler sua carteira',
+  bp_err_lectura_cuerpo: 'O armazenamento seguro do telefone não respondeu. Seu dinheiro continua na rede. Tente de novo daqui a pouco.',
+  bp_err_ya_hay_billetera: 'Este telefone já tem outra carteira salva para sua conta. Abra-a, ou remova-a primeiro se quiser usar estas palavras.',
+  bp_deposito_pendiente: '{sats} sats chegaram pela rede bitcoin e ainda não estão no seu saldo.',
+  bp_deposito_comision: 'Para somá-los é preciso pagar {comision} sats de taxa da rede, mais do que a carteira paga sem perguntar.',
+  bp_deposito_sumar: 'Somar pagando {comision} sats',
+  bp_deposito_chico: 'É tão pouco que a taxa da rede levaria tudo, então não dá para somar.',
 };
 
 export default pt;

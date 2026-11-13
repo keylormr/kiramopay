@@ -2344,7 +2344,7 @@ const hi: TranslationKeys = {
   bp_resumen_comision_max: 'नेटवर्क शुल्क, अधिकतम',
   bp_confirmar: 'पुष्टि करें और भेजें',
   bp_confirmar_razon: 'भेजने की पुष्टि करें',
-  bp_enviado: 'भेज दिया गया',
+  bp_enviado: 'नेटवर्क को सौंप दिया गया',
   bp_ver_explorador: 'एक्सप्लोरर में देखें',
   bp_err_direccion: 'यह पता इस नेटवर्क के लिए नहीं है।',
   bp_err_a_si_mismo: 'यह आपका अपना पता है।',
@@ -2374,6 +2374,17 @@ const hi: TranslationKeys = {
   bp_direccion_lightning_ocupada: 'यह नाम पहले से लिया जा चुका है।',
   bp_explorador_cuenta: 'एक्सप्लोरर में लेन-देन',
   bp_otras: 'अन्य सिक्के',
+  bp_enviado_ayuda: 'नेटवर्क को इसकी पुष्टि करने में कुछ मिनट लग सकते हैं।',
+  bp_resumen_red: 'नेटवर्क',
+  bp_cotizacion_vencida: 'आपके जाँचते समय नेटवर्क शुल्क बदल गया। नई जानकारी देखें और फिर से पुष्टि करें।',
+  bp_err_qr: 'यह कोड किसी दूसरी मुद्रा या दूसरे नेटवर्क का है। पता खुद लिखें या दूसरा कोड माँगें।',
+  bp_err_lectura_titulo: 'आपका वॉलेट पढ़ा नहीं जा सका',
+  bp_err_lectura_cuerpo: 'फ़ोन के सुरक्षित भंडार ने जवाब नहीं दिया। आपका पैसा नेटवर्क पर सुरक्षित है। थोड़ी देर में फिर कोशिश करें।',
+  bp_err_ya_hay_billetera: 'इस फ़ोन में आपके खाते के लिए पहले से एक दूसरा वॉलेट सहेजा है। उसे खोलें, या इन शब्दों का उपयोग करना हो तो पहले उसे हटाएँ।',
+  bp_deposito_pendiente: 'बिटकॉइन नेटवर्क से {sats} sats आए हैं, पर अभी आपके बैलेंस में नहीं जुड़े।',
+  bp_deposito_comision: 'इन्हें जोड़ने के लिए {comision} sats का नेटवर्क शुल्क लगेगा, जो वॉलेट बिना पूछे चुकाई जाने वाली सीमा से ज़्यादा है।',
+  bp_deposito_sumar: '{comision} sats चुकाकर जोड़ें',
+  bp_deposito_chico: 'रकम इतनी कम है कि नेटवर्क शुल्क में पूरी चली जाएगी, इसलिए जोड़ी नहीं जा सकती।',
 };
 
 export default hi;

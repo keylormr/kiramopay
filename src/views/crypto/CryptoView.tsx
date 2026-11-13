@@ -1176,7 +1176,8 @@ export const CryptoView: React.FC = () => {
 
       {activeTab === 'propia' && billeteraPropia && (
         <Suspense fallback={<p className="p-4 text-sm uv-text-muted">{t('loading')}</p>}>
-          <BilleteraPropia />
+          {/* Una cuenta distinta es otra billetera: nada de la anterior queda montado. */}
+          <BilleteraPropia key={state.user?.id ?? ''} />
         </Suspense>
       )}
 

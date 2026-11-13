@@ -13,6 +13,7 @@ import {
   posicionesParaVerificar,
   semillaValida,
 } from '@/billetera/semilla';
+import { BilleteraYaGuardada } from '@/billetera/boveda';
 
 interface Props {
   modo: 'crear' | 'restaurar';
@@ -59,8 +60,8 @@ export function CrearBilletera({ modo, onListo, onCancelar }: Props) {
     setError('');
     try {
       await onListo(lista);
-    } catch {
-      setError(t('bp_guardar_error'));
+    } catch (e) {
+      setError(e instanceof BilleteraYaGuardada ? t('bp_err_ya_hay_billetera') : t('bp_guardar_error'));
       setGuardando(false);
     }
   };

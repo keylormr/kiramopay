@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrepareSendPaymentResponse } from '@breeztech/breez-sdk-spark/web';
-import { bitcoinConfigurado, comisionDe, opcionesDeEnvio } from '../bitcoin';
+import { bitcoinConfigurado, carpetaDeDatos, comisionDe, depositoSinSumar, opcionesDeEnvio } from '../bitcoin';
 
 function preparado(paymentMethod: unknown): PrepareSendPaymentResponse {
   return { paymentMethod, amount: 1000n, feePolicy: 'feesExcluded' } as PrepareSendPaymentResponse;
@@ -40,5 +40,21 @@ describe('bitcoin en la billetera propia', () => {
     const r = preparado({ type: 'sparkAddress', address: 'sp1', fee: 3n });
     expect(comisionDe(r)).toBe(3);
     expect(opcionesDeEnvio(r)).toBeUndefined();
+  });
+
+  it('guarda los datos de cada cuenta y de cada semilla aparte', () => {
+    const hardhat = 'test test test test test test test test test test test junk';
+    const cero = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+    expect(carpetaDeDatos('u1', hardhat)).toBe('kiramopay-btc-u1-f39fd6e51a');
+    expect(carpetaDeDatos('u1', cero)).not.toBe(carpetaDeDatos('u1', hardhat));
+    expect(carpetaDeDatos('u2', hardhat)).not.toBe(carpetaDeDatos('u1', hardhat));
+  });
+
+  it('explica por que un deposito por la red de bitcoin no se sumo', () => {
+    const base = { txid: 't', vout: 1, amountSats: 5000, isMature: true };
+    expect(depositoSinSumar({ ...base, claimError: { type: 'maxDepositClaimFeeExceeded', tx: 't', vout: 1, requiredFeeSats: 700 } }))
+      .toEqual({ txid: 't', vout: 1, sats: 5000, motivo: 'comision-alta', comisionSats: 700 });
+    expect(depositoSinSumar({ ...base, claimError: { type: 'depositTooSmall', tx: 't', vout: 1 } }).motivo).toBe('muy-chico');
+    expect(depositoSinSumar({ ...base, isMature: false }).motivo).toBe('esperando');
   });
 });

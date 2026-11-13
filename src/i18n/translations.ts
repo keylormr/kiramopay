@@ -2467,6 +2467,17 @@ export type TranslationKeys = {
   bp_direccion_lightning_ocupada: string;
   bp_explorador_cuenta: string;
   bp_otras: string;
+  bp_enviado_ayuda: string;
+  bp_resumen_red: string;
+  bp_cotizacion_vencida: string;
+  bp_err_qr: string;
+  bp_err_lectura_titulo: string;
+  bp_err_lectura_cuerpo: string;
+  bp_err_ya_hay_billetera: string;
+  bp_deposito_pendiente: string;
+  bp_deposito_comision: string;
+  bp_deposito_sumar: string;
+  bp_deposito_chico: string;
 };
 
 import es from './languages/es';

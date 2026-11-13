@@ -38,29 +38,53 @@ async function conAlmacen<T>(uso: (almacen: SecureStoragePlugin) => Promise<T>):
   return uso(SecureStorage);
 }
 
-/** Si esta cuenta ya tiene billetera propia en este telefono. No pide la huella. */
-export async function hayBilletera(userId: string): Promise<boolean> {
-  if (!bovedaDisponible()) return false;
+export type EstadoDeLaBilletera = 'hay' | 'no-hay' | 'error';
+
+/**
+ * Si esta cuenta ya tiene billetera propia en este telefono. No pide la huella.
+ * 'error' es que el almacen no contesto, y NO equivale a no tener billetera:
+ * ofrecer crear una en ese caso podria tapar la que ya existe.
+ */
+export async function estadoDeLaBilletera(userId: string): Promise<EstadoDeLaBilletera> {
+  if (!bovedaDisponible()) return 'no-hay';
   try {
     const guardada = await conAlmacen(a => a.getItem(llaveDe(userId)));
-    return typeof guardada === 'string' && guardada.length > 0;
+    return typeof guardada === 'string' && guardada.length > 0 ? 'hay' : 'no-hay';
   } catch {
-    return false;
+    return 'error';
   }
 }
 
-/** Guarda la semilla de esta cuenta. Rechaza una semilla que no es valida. */
+/** Ya hay otra semilla guardada para esta cuenta: no se escribe encima. */
+export class BilleteraYaGuardada extends Error {
+  constructor() {
+    super('esta cuenta ya tiene otra billetera en este telefono');
+  }
+}
+
+/**
+ * Guarda la semilla de esta cuenta. Rechaza una semilla que no es valida y
+ * nunca reemplaza otra: perderia el unico acceso a ese dinero. Si el almacen
+ * no se puede leer, tampoco escribe.
+ */
 export async function guardarSemilla(userId: string, semilla: string): Promise<void> {
   if (!bovedaDisponible()) throw new Error('la billetera propia solo existe en la app');
   const limpia = normalizarSemilla(semilla);
   if (!semillaValida(limpia)) throw new Error('semilla invalida');
+  const guardada = await conAlmacen(a => a.getItem(llaveDe(userId)));
+  if (typeof guardada === 'string' && guardada.length > 0) {
+    if (guardada !== limpia) throw new BilleteraYaGuardada();
+    return;
+  }
   await conAlmacen(a => a.setItem(llaveDe(userId), limpia));
 }
 
 export type ResultadoApertura =
   | { estado: 'abierta'; semilla: string }
   | { estado: 'sin-billetera' }
-  | { estado: 'cancelada' };
+  | { estado: 'cancelada' }
+  /** El almacen no contesto: la billetera puede seguir ahi. */
+  | { estado: 'error' };
 
 /**
  * Devuelve la semilla despues de la huella o el rostro. `razon` es el texto
@@ -74,11 +98,11 @@ export async function abrirSemilla(userId: string, razon: string): Promise<Resul
     const r = await biometricService.authenticate(razon);
     if (!r.success) return { estado: 'cancelada' };
   }
-  let guardada: string | null = null;
+  let guardada: string | null;
   try {
     guardada = await conAlmacen(a => a.getItem(llaveDe(userId)));
   } catch {
-    guardada = null;
+    return { estado: 'error' };
   }
   if (!guardada) return { estado: 'sin-billetera' };
   return { estado: 'abierta', semilla: guardada };

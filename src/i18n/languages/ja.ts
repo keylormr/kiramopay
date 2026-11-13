@@ -2344,7 +2344,7 @@ const ja: TranslationKeys = {
   bp_resumen_comision_max: 'ネットワーク手数料（最大）',
   bp_confirmar: '確認して送る',
   bp_confirmar_razon: '送金を確認',
-  bp_enviado: '送金しました',
+  bp_enviado: 'ネットワークに送信しました',
   bp_ver_explorador: 'エクスプローラーで見る',
   bp_err_direccion: 'このアドレスはこのネットワークでは使えません。',
   bp_err_a_si_mismo: 'それはあなた自身のアドレスです。',
@@ -2374,6 +2374,17 @@ const ja: TranslationKeys = {
   bp_direccion_lightning_ocupada: 'この名前はすでに使われています。',
   bp_explorador_cuenta: 'エクスプローラーで取引を見る',
   bp_otras: 'その他のコイン',
+  bp_enviado_ayuda: 'ネットワークでの確認には数分かかることがあります。',
+  bp_resumen_red: 'ネットワーク',
+  bp_cotizacion_vencida: '確認中にネットワーク手数料が変わりました。新しい内容を確認して、もう一度確定してください。',
+  bp_err_qr: 'このコードは別の通貨か別のネットワーク用です。アドレスを入力するか、別のコードをもらってください。',
+  bp_err_lectura_titulo: 'ウォレットを読み込めませんでした',
+  bp_err_lectura_cuerpo: 'スマートフォンのセキュアストレージが応答しませんでした。資金はネットワーク上にあります。少ししてからお試しください。',
+  bp_err_ya_hay_billetera: 'このスマートフォンには、このアカウントの別のウォレットがすでに保存されています。それを開くか、これらの単語を使う場合は先に削除してください。',
+  bp_deposito_pendiente: 'ビットコインネットワークで {sats} sats が届きましたが、まだ残高に反映されていません。',
+  bp_deposito_comision: '反映するには {comision} sats のネットワーク手数料がかかり、ウォレットが確認なしで支払える上限を超えています。',
+  bp_deposito_sumar: '{comision} sats を払って反映する',
+  bp_deposito_chico: '金額が少なすぎて手数料ですべてなくなるため、反映できません。',
 };
 
 export default ja;

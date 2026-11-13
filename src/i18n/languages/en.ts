@@ -2352,7 +2352,7 @@ const en: TranslationKeys = {
   bp_resumen_comision_max: 'Network fee, at most',
   bp_confirmar: 'Confirm and send',
   bp_confirmar_razon: 'Confirm the transfer',
-  bp_enviado: 'Sent',
+  bp_enviado: 'Handed to the network',
   bp_ver_explorador: 'View in the explorer',
   bp_err_direccion: 'That address doesn\'t work on this network.',
   bp_err_a_si_mismo: 'That\'s your own address.',
@@ -2382,6 +2382,17 @@ const en: TranslationKeys = {
   bp_direccion_lightning_ocupada: 'That name is taken.',
   bp_explorador_cuenta: 'Activity in the explorer',
   bp_otras: 'Other coins',
+  bp_enviado_ayuda: 'The network can take a few minutes to confirm it.',
+  bp_resumen_red: 'Network',
+  bp_cotizacion_vencida: 'The network fee changed while you were reviewing. Check the new details and confirm again.',
+  bp_err_qr: 'That code is for another coin or another network. Type the address or ask for another code.',
+  bp_err_lectura_titulo: 'We couldn\'t read your wallet',
+  bp_err_lectura_cuerpo: 'The phone\'s secure storage didn\'t respond. Your money is still on the network. Try again in a moment.',
+  bp_err_ya_hay_billetera: 'This phone already has another wallet saved for your account. Open it, or remove it first if you want to use these words.',
+  bp_deposito_pendiente: '{sats} sats arrived over the bitcoin network and aren\'t in your balance yet.',
+  bp_deposito_comision: 'Adding them costs {comision} sats in network fees, more than the wallet pays without asking you.',
+  bp_deposito_sumar: 'Add them for {comision} sats',
+  bp_deposito_chico: 'It\'s so little that the network fee would take all of it, so it can\'t be added.',
 };
 
 export default en;

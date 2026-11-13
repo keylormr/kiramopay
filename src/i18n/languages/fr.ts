@@ -2353,7 +2353,7 @@ const fr: TranslationKeys = {
   bp_resumen_comision_max: 'Frais du réseau, au maximum',
   bp_confirmar: 'Confirmer et envoyer',
   bp_confirmar_razon: 'Confirmer l\'envoi',
-  bp_enviado: 'Envoyé',
+  bp_enviado: 'Transmis au réseau',
   bp_ver_explorador: 'Voir dans l\'explorateur',
   bp_err_direccion: 'Cette adresse ne convient pas à ce réseau.',
   bp_err_a_si_mismo: 'C\'est votre propre adresse.',
@@ -2383,6 +2383,17 @@ const fr: TranslationKeys = {
   bp_direccion_lightning_ocupada: 'Ce nom est déjà pris.',
   bp_explorador_cuenta: 'Mouvements dans l\'explorateur',
   bp_otras: 'Autres monnaies',
+  bp_enviado_ayuda: 'Le réseau peut mettre quelques minutes à le confirmer.',
+  bp_resumen_red: 'Réseau',
+  bp_cotizacion_vencida: 'Les frais du réseau ont changé pendant votre vérification. Regardez les nouvelles données et confirmez de nouveau.',
+  bp_err_qr: 'Ce code concerne une autre monnaie ou un autre réseau. Saisissez l\'adresse ou demandez un autre code.',
+  bp_err_lectura_titulo: 'Impossible de lire votre portefeuille',
+  bp_err_lectura_cuerpo: 'Le stockage sécurisé du téléphone n\'a pas répondu. Votre argent est toujours sur le réseau. Réessayez dans un instant.',
+  bp_err_ya_hay_billetera: 'Ce téléphone a déjà un autre portefeuille enregistré pour votre compte. Ouvrez-le, ou supprimez-le d\'abord si vous voulez utiliser ces mots.',
+  bp_deposito_pendiente: '{sats} sats sont arrivés par le réseau bitcoin et ne sont pas encore dans votre solde.',
+  bp_deposito_comision: 'Les ajouter coûte {comision} sats de frais de réseau, plus que ce que le portefeuille paie sans vous demander.',
+  bp_deposito_sumar: 'Les ajouter pour {comision} sats',
+  bp_deposito_chico: 'C\'est si peu que les frais du réseau prendraient tout : impossible de l\'ajouter.',
 };
 
 export default fr;

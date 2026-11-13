@@ -2344,7 +2344,7 @@ const zhCn: TranslationKeys = {
   bp_resumen_comision_max: '网络手续费（最高）',
   bp_confirmar: '确认并发送',
   bp_confirmar_razon: '确认转账',
-  bp_enviado: '已发送',
+  bp_enviado: '已提交到网络',
   bp_ver_explorador: '在浏览器中查看',
   bp_err_direccion: '这个地址不适用于此网络。',
   bp_err_a_si_mismo: '这是你自己的地址。',
@@ -2374,6 +2374,17 @@ const zhCn: TranslationKeys = {
   bp_direccion_lightning_ocupada: '这个名称已被占用。',
   bp_explorador_cuenta: '在浏览器中查看交易记录',
   bp_otras: '其他币种',
+  bp_enviado_ayuda: '网络可能需要几分钟才能确认。',
+  bp_resumen_red: '网络',
+  bp_cotizacion_vencida: '你核对期间网络手续费有变化。请查看新的信息后再次确认。',
+  bp_err_qr: '这个二维码属于其他币种或其他网络。请手动输入地址，或换一个二维码。',
+  bp_err_lectura_titulo: '无法读取你的钱包',
+  bp_err_lectura_cuerpo: '手机的安全存储没有响应。你的资金仍在网络上。请稍后再试。',
+  bp_err_ya_hay_billetera: '这部手机已为你的账户保存了另一个钱包。请打开它；如果想使用这些助记词，请先移除它。',
+  bp_deposito_pendiente: '{sats} 聪已通过比特币网络到账，但还没有计入你的余额。',
+  bp_deposito_comision: '计入余额需要支付 {comision} 聪的网络手续费，超过了钱包无需询问即可支付的上限。',
+  bp_deposito_sumar: '支付 {comision} 聪计入余额',
+  bp_deposito_chico: '金额太小，网络手续费会全部用掉，因此无法计入。',
 };
 
 export default zhCn;

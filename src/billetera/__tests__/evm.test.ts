@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIVOS_EVM, direccionEvm, enlaceDeTransaccion, prepararEnvioEvm, RechazoEvm, saldoLegible } from '../evm';
+import { ACTIVOS_EVM, destinoDeUnQrEvm, direccionEvm, enlaceDeTransaccion, NOMBRE_DE_LA_RED, prepararEnvioEvm, RechazoEvm, saldoLegible } from '../evm';
 
 // La semilla de prueba de Hardhat y Anvil y su primera cuenta (m/44'/60'/0'/0/0).
 // Es publica: nunca guardar fondos en ella.
@@ -56,5 +56,43 @@ describe('la billetera propia en redes EVM', () => {
     expect(await rechazo(prepararEnvioEvm(SEMILLA_DE_PRUEBA, ETH, otra, '0'))).toBe('monto-invalido');
     expect(await rechazo(prepararEnvioEvm(SEMILLA_DE_PRUEBA, ETH, otra, 'diez'))).toBe('monto-invalido');
     expect(await rechazo(prepararEnvioEvm(SEMILLA_DE_PRUEBA, ETH, otra, '-1'))).toBe('monto-invalido');
+  });
+});
+
+describe('la direccion mal copiada y los codigos QR de pago', () => {
+  const OTRA = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+  const LINK = ACTIVOS_EVM.find(a => a.simbolo === 'LINK')!;
+  const UNI = ACTIVOS_EVM.find(a => a.simbolo === 'UNI')!;
+  const POL = ACTIVOS_EVM.find(a => a.simbolo === 'POL')!;
+
+  it('rechaza una direccion con mayusculas que no cuadran con su suma de verificacion', async () => {
+    // Una sola letra cambiada de mayuscula a minuscula: EIP-55 la delata.
+    const malCopiada = '0x70997970c51812dc3A010C7d01b50e0d17dc79C8';
+    expect(await rechazo(prepararEnvioEvm(SEMILLA_DE_PRUEBA, ETH, malCopiada, '0.1'))).toBe('direccion-invalida');
+    expect(destinoDeUnQrEvm(malCopiada, ETH)).toBeNull();
+  });
+
+  it('acepta la direccion sola y el enlace de pago simple', () => {
+    expect(destinoDeUnQrEvm(OTRA, ETH)).toBe(OTRA);
+    expect(destinoDeUnQrEvm(`ethereum:${OTRA.toLowerCase()}`, ETH)).toBe(OTRA);
+    expect(destinoDeUnQrEvm(`ethereum:${OTRA}@1?value=1e18`, ETH)).toBe(OTRA);
+    expect(destinoDeUnQrEvm(`ethereum:${OTRA}@137`, POL)).toBe(OTRA);
+  });
+
+  it('en un pedido de token paga a quien cobra, no al contrato', () => {
+    expect(destinoDeUnQrEvm(`ethereum:${LINK.contrato}@1/transfer?address=${OTRA}&uint256=1e18`, LINK)).toBe(OTRA);
+  });
+
+  it('rechaza el codigo de otra red, de otro token o de otra operacion', () => {
+    expect(destinoDeUnQrEvm(`ethereum:${OTRA}@137`, ETH)).toBeNull();
+    expect(destinoDeUnQrEvm(`ethereum:${UNI.contrato}/transfer?address=${OTRA}`, LINK)).toBeNull();
+    expect(destinoDeUnQrEvm(`ethereum:${LINK.contrato}/transfer?address=${OTRA}`, ETH)).toBeNull();
+    expect(destinoDeUnQrEvm(`ethereum:${LINK.contrato}/approve?address=${OTRA}`, LINK)).toBeNull();
+    expect(destinoDeUnQrEvm(`ethereum:${LINK.contrato}/transfer`, LINK)).toBeNull();
+    expect(destinoDeUnQrEvm('bitcoin:bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', ETH)).toBeNull();
+  });
+
+  it('nombra cada red como la conocen los exchanges', () => {
+    expect(NOMBRE_DE_LA_RED).toEqual({ ethereum: 'Ethereum', polygon: 'Polygon', avalanche: 'Avalanche C-Chain' });
   });
 });

@@ -4,21 +4,24 @@
 // en las redes y solo este telefono puede moverlo. La semilla se abre con la
 // huella al entrar y se suelta al salir de la pestana: no queda en memoria
 // mientras la persona hace otra cosa.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
 import { AvatarCripto } from '@/components/cripto/AvatarCripto';
 import { formatMoney } from '@/utils/money';
 import { localeDe } from '@/utils/periodos';
-import { abrirSemilla, borrarSemilla, bovedaDisponible, confirmarConHuella, guardarSemilla, hayBilletera } from '@/billetera/boveda';
-import { abrirBitcoin, bitcoinConfigurado, type BilleteraBitcoin, type MovimientoBitcoin } from '@/billetera/bitcoin';
+import { abrirSemilla, borrarSemilla, bovedaDisponible, confirmarConHuella, estadoDeLaBilletera, guardarSemilla } from '@/billetera/boveda';
+import { abrirBitcoin, bitcoinConfigurado, type BilleteraBitcoin, type DepositoSinSumar, type MovimientoBitcoin } from '@/billetera/bitcoin';
+import { rellenar } from '@/utils/planes';
 import { ACTIVOS_EVM, direccionEvm as derivarDireccionEvm, enlaceDeDireccion, saldoEvm, saldoLegible } from '@/billetera/evm';
 import { recortarDecimales, satsABtc, valorEnUsd } from '@/billetera/formato';
 import { CrearBilletera } from './CrearBilletera';
 import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera } from './HojasBilletera';
 
-type Fase = 'cargando' | 'web' | 'sin-billetera' | 'crear' | 'restaurar' | 'cerrada' | 'abierta';
+// 'error': el almacen seguro no contesto. No es 'sin-billetera': ofrecer crear
+// una ahi podria tapar la que ya existe.
+type Fase = 'cargando' | 'web' | 'error' | 'sin-billetera' | 'crear' | 'restaurar' | 'cerrada' | 'abierta';
 
 /** Lo que falta sumar: el catalogo de la app las lista, la billetera propia todavia no. */
 const PROXIMAMENTE = ['SOL', 'ADA', 'DOT', 'ATOM'] as const;
@@ -52,33 +55,50 @@ export function BilleteraPropia() {
   const [btcEstado, setBtcEstado] = useState<'sin-configurar' | 'conectando' | 'lista' | 'error'>('conectando');
   const [saldos, setSaldos] = useState<Record<string, Saldo>>({});
   const [movimientos, setMovimientos] = useState<MovimientoBitcoin[]>([]);
+  const [depositos, setDepositos] = useState<DepositoSinSumar[]>([]);
   const [direccionDeCobro, setDireccionDeCobro] = useState<string | null>(null);
+  const [abriendo, setAbriendo] = useState(false);
   const [recibir, setRecibir] = useState<ActivoDeLaBilletera | null>(null);
   const [enviar, setEnviar] = useState<ActivoDeLaBilletera | null>(null);
   const [palabrasVisibles, setPalabrasVisibles] = useState<string | null>(null);
   const [quitando, setQuitando] = useState(false);
   const btcRef = useRef<BilleteraBitcoin | null>(null);
+  // Cada apertura es una sesion. Lo que termina de cargar despues de quitar la
+  // billetera, de volver a entrar o de salir de la pestana ya no es de la
+  // sesion vigente: se descarta (y una conexion de bitcoin que llega tarde se
+  // cierra en vez de quedar abierta sin dueno).
+  const sesionRef = useRef(0);
+  const abriendoRef = useRef(false);
 
-  const direccionEvm = semilla ? derivarDireccionEvm(semilla) : null;
+  const direccionEvm = useMemo(() => (semilla ? derivarDireccionEvm(semilla) : null), [semilla]);
 
   // Al salir de la pestana se suelta todo: la semilla y la conexion de bitcoin.
   useEffect(() => () => {
+    sesionRef.current += 1;
     void btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
   }, []);
 
-  useEffect(() => {
-    let vigente = true;
+  const comprobar = useCallback(async () => {
     if (!bovedaDisponible() || !userId) return;
-    void hayBilletera(userId).then(hay => { if (vigente) setFase(hay ? 'cerrada' : 'sin-billetera'); });
-    return () => { vigente = false; };
+    const sesion = sesionRef.current;
+    setFase('cargando');
+    const estado = await estadoDeLaBilletera(userId);
+    if (sesion !== sesionRef.current) return;
+    setFase(estado === 'hay' ? 'cerrada' : estado === 'no-hay' ? 'sin-billetera' : 'error');
   }, [userId]);
+
+  useEffect(() => {
+    void comprobar();
+  }, [comprobar]);
 
   const precioDe = (simboloDelCatalogo: string) =>
     state.crypto.assets.find(a => a.symbol === simboloDelCatalogo)?.currentPrice;
   const activoDelCatalogo = (simbolo: string) => state.crypto.assets.find(a => a.symbol === simbolo);
 
   const leerSaldos = useCallback(async (frase: string, billeteraBtc: BilleteraBitcoin | null) => {
+    const sesion = sesionRef.current;
+    const vigente = () => sesion === sesionRef.current;
     const direccion = derivarDireccionEvm(frase);
     const pendientes: Record<string, Saldo> = {};
     for (const a of ACTIVOS_EVM) pendientes[a.simbolo] = { texto: null, error: false };
@@ -87,32 +107,41 @@ export function BilleteraPropia() {
 
     await Promise.all([
       ...ACTIVOS_EVM.map(async a => {
+        let saldo: Saldo;
         try {
-          const minimo = await saldoEvm(a, direccion);
-          setSaldos(s => ({ ...s, [a.simbolo]: { texto: recortarDecimales(saldoLegible(a, minimo), 8), error: false } }));
+          saldo = { texto: recortarDecimales(saldoLegible(a, await saldoEvm(a, direccion)), 8), error: false };
         } catch {
-          setSaldos(s => ({ ...s, [a.simbolo]: { texto: null, error: true } }));
+          saldo = { texto: null, error: true };
         }
+        if (vigente()) setSaldos(s => ({ ...s, [a.simbolo]: saldo }));
       }),
       (async () => {
         if (!billeteraBtc) return;
         try {
-          const [sats, lista, cobro] = await Promise.all([
+          const [sats, lista, cobro, sinSumar] = await Promise.all([
             billeteraBtc.saldoSats(),
             billeteraBtc.movimientos(),
             billeteraBtc.direccionLightning(),
+            billeteraBtc.depositosSinSumar().catch(() => []),
           ]);
+          if (!vigente()) return;
           setSaldos(s => ({ ...s, BTC: { texto: satsABtc(sats), error: false } }));
           setMovimientos(lista);
           setDireccionDeCobro(cobro);
+          setDepositos(sinSumar);
         } catch {
-          setSaldos(s => ({ ...s, BTC: { texto: null, error: true } }));
+          if (vigente()) setSaldos(s => ({ ...s, BTC: { texto: null, error: true } }));
         }
       })(),
     ]);
   }, []);
 
   const entrar = useCallback(async (frase: string) => {
+    sesionRef.current += 1;
+    const sesion = sesionRef.current;
+    void btcRef.current?.desconectar().catch(() => undefined);
+    btcRef.current = null;
+    setBtc(null);
     setSemilla(frase);
     setFase('abierta');
     let billeteraBtc: BilleteraBitcoin | null = null;
@@ -122,20 +151,36 @@ export function BilleteraPropia() {
       setBtcEstado('conectando');
       try {
         billeteraBtc = await abrirBitcoin(frase, userId);
+      } catch {
+        if (sesion === sesionRef.current) setBtcEstado('error');
+      }
+      if (billeteraBtc && sesion !== sesionRef.current) {
+        void billeteraBtc.desconectar().catch(() => undefined);
+        return;
+      }
+      if (billeteraBtc) {
         btcRef.current = billeteraBtc;
         setBtc(billeteraBtc);
         setBtcEstado('lista');
-      } catch {
-        setBtcEstado('error');
       }
     }
-    await leerSaldos(frase, billeteraBtc);
+    if (sesion === sesionRef.current) await leerSaldos(frase, billeteraBtc);
   }, [leerSaldos, userId]);
 
   const abrir = async () => {
-    const r = await abrirSemilla(userId, t('bp_abrir_razon'));
-    if (r.estado === 'abierta') await entrar(r.semilla);
-    else if (r.estado === 'sin-billetera') setFase('sin-billetera');
+    // Un segundo toque mientras la huella esta en pantalla no abre otra sesion.
+    if (abriendoRef.current) return;
+    abriendoRef.current = true;
+    setAbriendo(true);
+    try {
+      const r = await abrirSemilla(userId, t('bp_abrir_razon'));
+      if (r.estado === 'abierta') await entrar(r.semilla);
+      else if (r.estado === 'sin-billetera') setFase('sin-billetera');
+      else if (r.estado === 'error') setFase('error');
+    } finally {
+      abriendoRef.current = false;
+      setAbriendo(false);
+    }
   };
 
   const guardar = async (frase: string) => {
@@ -144,6 +189,7 @@ export function BilleteraPropia() {
   };
 
   const quitar = async () => {
+    sesionRef.current += 1;
     await btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
     await borrarSemilla(userId);
@@ -151,6 +197,7 @@ export function BilleteraPropia() {
     setSemilla(null);
     setSaldos({});
     setMovimientos([]);
+    setDepositos([]);
     setDireccionDeCobro(null);
     setQuitando(false);
     setFase('sin-billetera');
@@ -158,6 +205,17 @@ export function BilleteraPropia() {
 
   if (fase === 'cargando') {
     return <p className="p-4 text-sm uv-text-muted">{t('loading')}</p>;
+  }
+
+  if (fase === 'error') {
+    return (
+      <section className={`${TARJETA} space-y-4 p-5`} role="alert">
+        <Icons.AlertTriangle size={24} className="text-[var(--color-danger)]" aria-hidden />
+        <h3 className="text-lg font-bold uv-text-primary">{t('bp_err_lectura_titulo')}</h3>
+        <p className="text-sm uv-text-secondary">{t('bp_err_lectura_cuerpo')}</p>
+        <button type="button" className={BOTON_PRINCIPAL} onClick={() => void comprobar()}>{t('error_retry')}</button>
+      </section>
+    );
   }
 
   if (fase === 'web') {
@@ -197,7 +255,7 @@ export function BilleteraPropia() {
         <Icons.Fingerprint size={40} className="mx-auto uv-text-primary" aria-hidden />
         <h3 className="text-lg font-bold uv-text-primary">{t('bp_cerrada_titulo')}</h3>
         <p className="text-sm uv-text-secondary">{t('bp_cerrada_cuerpo')}</p>
-        <button type="button" className={BOTON_PRINCIPAL} onClick={abrir}>{t('bp_abrir')}</button>
+        <button type="button" className={BOTON_PRINCIPAL} disabled={abriendo} onClick={abrir}>{t('bp_abrir')}</button>
       </section>
     );
   }
@@ -233,6 +291,9 @@ export function BilleteraPropia() {
                 <span className="inline-flex items-center gap-2"><Icons.Send size={18} aria-hidden /> {t('send')}</span>
               </button>
             </div>
+            {btc && depositos.length > 0 && (
+              <DepositosSinSumar btc={btc} lista={depositos} onSumado={() => void leerSaldos(semilla, btc)} />
+            )}
             <DireccionDeCobro btc={btc} actual={direccionDeCobro} sugerida={state.user?.username} onCreada={setDireccionDeCobro} />
             <MovimientosBitcoin lista={movimientos} />
           </>
@@ -306,6 +367,57 @@ export function BilleteraPropia() {
       <HojaEnviar activo={enviar} onClose={() => setEnviar(null)} semilla={semilla} btc={btc} onEnviado={() => void leerSaldos(semilla, btc)} />
       <HojaPalabras semilla={palabrasVisibles} onClose={() => setPalabrasVisibles(null)} />
       <HojaQuitar abierta={quitando} onClose={() => setQuitando(false)} onQuitar={quitar} />
+    </div>
+  );
+}
+
+/**
+ * Bitcoin que llego por la red de bitcoin y el SDK no sumo solo porque la
+ * comision para hacerlo pasaba su maximo. Sin este aviso la persona veria un
+ * envio hecho desde su exchange y un saldo que no sube.
+ */
+function DepositosSinSumar({ btc, lista, onSumado }: { btc: BilleteraBitcoin; lista: DepositoSinSumar[]; onSumado: () => void }) {
+  const { t, language } = useLanguage();
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const numero = (n: number) => n.toLocaleString(localeDe(language));
+
+  const sumar = async (d: DepositoSinSumar) => {
+    if (ocupado) return;
+    setOcupado(`${d.txid}:${d.vout}`);
+    setError('');
+    try {
+      await btc.sumarDeposito(d);
+      onSumado();
+    } catch {
+      setError(t('bp_err_red'));
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl uv-chip-warning p-3 text-sm">
+      {lista.map(d => (
+        <div key={`${d.txid}:${d.vout}`} className="space-y-2">
+          <p>{rellenar(t('bp_deposito_pendiente'), { sats: numero(d.sats) })}</p>
+          {d.motivo === 'muy-chico' && <p>{t('bp_deposito_chico')}</p>}
+          {d.motivo === 'comision-alta' && d.comisionSats !== undefined && (
+            <>
+              <p>{rellenar(t('bp_deposito_comision'), { comision: numero(d.comisionSats) })}</p>
+              <button
+                type="button"
+                className={BOTON_SECUNDARIO}
+                disabled={ocupado !== null}
+                onClick={() => void sumar(d)}
+              >
+                {rellenar(t('bp_deposito_sumar'), { comision: numero(d.comisionSats) })}
+              </button>
+            </>
+          )}
+        </div>
+      ))}
+      {error && <p role="alert" className="font-semibold text-[var(--color-danger)]">{error}</p>}
     </div>
   );
 }
