@@ -128,7 +128,9 @@ jobs:
 
   frontend-e2e:
     name: Frontend E2E Tests
-    runs-on: ubuntu-latest
+    # Fijo en 24.04: ubuntu-latest ya es 26.04 y Playwright 1.58 no soporta
+    # Chromium ahi. Volver a ubuntu-latest cuando Playwright lo soporte.
+    runs-on: ubuntu-24.04
     needs: frontend-build
     # Re-gated: the suite is now deterministic — auth is stubbed at the browser
     # with page.route(), the locale is forced to es-CR, and onboarding is skipped.
