@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { jsonRoute, stubBackend } from './helpers';
+import { jsonRoute, sinIntroDeErgane, stubBackend } from './helpers';
 
 // Auth ALWAYS goes through the real backend (no mock adapter). The E2E job
 // runs the Vite dev server with no backend behind it, so we stub the network
@@ -25,6 +25,7 @@ async function submitPassword(page: Page, password: string) {
 
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
+    await sinIntroDeErgane(page);
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
   });

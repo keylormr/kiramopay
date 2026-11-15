@@ -31,7 +31,9 @@ concurrency:
 jobs:
   recorrido:
     name: Recorrido de los flujos de dinero
-    runs-on: ubuntu-latest
+    # Fijo en 24.04: ubuntu-latest ya es 26.04 y Playwright 1.58 no soporta
+    # Chromium ahi. Volver a ubuntu-latest cuando Playwright lo soporte.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:
