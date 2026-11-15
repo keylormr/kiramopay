@@ -1,7 +1,8 @@
 // Ayudas del navegador. Cada persona abre su propio contexto (la sesion de la
 // pantalla vive en memoria y no sobrevive a una recarga). Las llaves de
 // localStorage de abajo saltan el carrusel de bienvenida y la hoja de invitacion
-// que a los 2,5 s tapa la pantalla; no cambian nada de lo que se prueba.
+// que a los 2,5 s tapa la pantalla, y la intro de Ergane de la primera visita
+// (tapa todo y un clic suyo la salta); no cambian nada de lo que se prueba.
 import { chromium } from '@playwright/test';
 import { APP, API_BASE } from './entorno.mjs';
 import { entrar } from './api.mjs';
@@ -27,6 +28,7 @@ const INICIO_SIN_BIENVENIDA = () => {
     localStorage.setItem('kiramopay_onboarded', '1');
     localStorage.setItem('kiramopay-campana-invitar-2026-09-referidos', '1');
     localStorage.setItem('kiramopay_language', 'es');
+    localStorage.setItem('ergane-intro-vista', '1');
   } catch {
     // almacenamiento no disponible: la pantalla se arregla sola
   }

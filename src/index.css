@@ -325,6 +325,13 @@ html {
 html:has(.kp-capa) {
   overflow: hidden;
 }
+/* La intro de Ergane (solo la web, una vez por navegador) cubre toda la
+   pantalla. Con el carril de la barra reservado, en escritorio con barras
+   clasicas su borde derecho quedaba como una franja del color de la pagina.
+   El carril vuelve cuando la intro se va. */
+html:has([data-ergane-intro]) {
+  scrollbar-gutter: auto;
+}
 .kp-capa > .overflow-y-auto {
   overscroll-behavior-y: contain;
 }

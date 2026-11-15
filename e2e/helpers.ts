@@ -25,6 +25,17 @@ export function jsonRoute(route: Route, body: unknown, status = 200) {
 }
 
 /**
+ * La intro de Ergane (la web la muestra una vez por navegador) tapa la pantalla
+ * y un clic suyo la salta sin llegar a la app: sin esto, el primer arranque de
+ * cada prueba la veria. Chromium con WebGL de software (el del CI) si la pinta.
+ * addInitScript la marca como vista en cada navegacion, aunque la prueba limpie
+ * localStorage.
+ */
+export async function sinIntroDeErgane(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('ergane-intro-vista', '1'));
+}
+
+/**
  * Stub every /api/v1 call with an empty success, plus a successful login.
  * Registered last → the login route takes precedence over the catch-all.
  */
@@ -32,6 +43,7 @@ export async function stubBackend(page: Page) {
   // Skip the first-run onboarding carousel so login lands on the app shell.
   // addInitScript re-applies on every navigation, surviving localStorage.clear().
   await page.addInitScript(() => localStorage.setItem('kiramopay_onboarded', '1'));
+  await sinIntroDeErgane(page);
   await page.route('**/api/v1/**', (route) => jsonRoute(route, { success: true, data: [] }));
   // El stub LEE EL CUERPO: la pantalla sondea primero con la contrasena vacia
   // para saber si esta cuenta entra sin ella. Un stub que respondiera exito a

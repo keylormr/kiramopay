@@ -25,6 +25,15 @@ export default tseslint.config(
   },
   prettier,
   {
-    ignores: ['dist/', 'android/', 'node_modules/', '*.config.*'],
+    ignores: [
+      'dist/',
+      'android/',
+      'node_modules/',
+      '*.config.*',
+      // Copia sin cambios de la fuente unica de la intro de Ergane: JavaScript
+      // plano de navegador, sin la configuracion de globales de este repo. Se
+      // actualiza copiandola de nuevo, no editandola aca.
+      'src/ergane/ergane-intro.js',
+    ],
   },
 );

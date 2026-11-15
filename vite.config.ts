@@ -79,8 +79,13 @@ export default defineConfig(({ mode }) => {
         // El arte 3D (.webp) tampoco: la version de 64 px pesa 2-3 KB y Vite la
         // metia en base64 dentro del JavaScript del Inicio, que la bajaba
         // aunque la pantalla pidiera la de 128.
+        // La Trama de Ergane (src/ergane/trama.svg) tampoco: la intro la pide con
+        // fetch(), y el CSP de nginx.conf (`connect-src 'self'`) no deja pasar
+        // una URL data: aunque el archivo bajara de 4 KB algun dia.
         assetsInlineLimit: (archivo: string) =>
-          archivo.endsWith('.woff2') || archivo.endsWith('.webp') ? false : undefined,
+          archivo.endsWith('.woff2') || archivo.endsWith('.webp') || archivo.endsWith('/ergane/trama.svg')
+            ? false
+            : undefined,
         rollupOptions: {
           output: {
             manualChunks(id) {
@@ -99,6 +104,13 @@ export default defineConfig(({ mode }) => {
               if (/node_modules\/viem\/_esm\/actions\//.test(id)) return 'billetera-evm-acciones';
               if (/node_modules\/viem\//.test(id)) return 'billetera-evm';
               if (/node_modules\/@(noble|scure)\//.test(id)) return 'billetera-llaves';
+              // three (la intro de Ergane de la web) es UN solo archivo de 688 KB
+              // minificado: no se puede partir en bloques bajo el tope de 200 KB
+              // como viem. Queda en un bloque propio, fijo en la 0.170.0, que solo
+              // baja la web en el primer arranque de un navegador (import() del
+              // modulo de la intro; nunca en la carga inicial ni en Android e iOS).
+              // El CI le da su propio tope: ver ci.yml.
+              if (/node_modules\/three\//.test(id)) return 'three';
             },
           },
         },
