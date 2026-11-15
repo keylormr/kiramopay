@@ -447,19 +447,54 @@ export async function mostrarIntroErgane(opciones) {
   raiz.style.overflow = "hidden";
   document.body.append(ui.capa);
 
+  // Saltar, Esc y el toque funcionan desde que la capa aparece, tambien mientras carga three.
+  let terminado = false;
+  let idCuadro = 0;
+  let ajustarRef = null;
+  let limpiar = () => {};
+  let alCerrar = () => {};
+  const resultado = new Promise((r) => { alCerrar = r; });
+  const cerrar = (ms, como = "mostrada", recordar = true) => {
+    if (terminado) return;
+    terminado = true;
+    cancelAnimationFrame(idCuadro);
+    if (recordar) guardarVista(clave);
+    window.removeEventListener("keydown", tecla);
+    if (ajustarRef) window.removeEventListener("resize", ajustarRef);
+    ui.capa.style.transition = `opacity ${ms}ms cubic-bezier(0.23, 1, 0.32, 1)`;
+    ui.capa.style.opacity = "0";
+    ui.capa.style.pointerEvents = "none";
+    raiz.style.overflow = overflowPrevio;
+    setTimeout(() => {
+      ui.capa.remove();
+      limpiar();
+      alCerrar(como);
+    }, ms + 30);
+  };
+  const tecla = (ev) => { if (ev.key === "Escape") cerrar(SALTO_MS); };
+  window.addEventListener("keydown", tecla);
+  ui.capa.addEventListener("click", () => cerrar(SALTO_MS));
+
   let THREE, E, M, lienzoE;
+  const SALTADA = Symbol("saltada");
+  const carga = conTope(Promise.all([
+    import("three"),
+    svgALienzo(marcaErgane, 512),
+    construirMarca(destino),
+  ]), esperaMaxima);
+  carga.catch(() => {}); // si la saltan antes, que un rechazo tardio no quede sin atender
   try {
-    [THREE, lienzoE, M] = await conTope(Promise.all([
-      import("three"),
-      svgALienzo(marcaErgane, 512),
-      construirMarca(destino),
-    ]), esperaMaxima);
+    // Si la saltan mientras carga, quien llamo no espera a que termine de bajar three.
+    const primero = await Promise.race([carga, resultado.then(() => SALTADA)]);
+    if (primero === SALTADA) return resultado;
+    [THREE, lienzoE, M] = primero;
     E = construirE(lienzoE) || eMosaico(lienzoE);
   } catch {
-    ui.capa.remove();
-    raiz.style.overflow = overflowPrevio;
-    return "omitida";
+    // no cargo a tiempo: se retira sin marcarla como vista, para que salga en otra visita
+    cerrar(0, "omitida", false);
+    return resultado;
   }
+  if (terminado) return resultado; // la saltaron mientras cargaba
 
   // la E chica de la firma, dibujada en un canvas (sin imagenes data: por la CSP)
   {
@@ -479,9 +514,8 @@ export async function mostrarIntroErgane(opciones) {
   try {
     renderer = new THREE.WebGLRenderer({ canvas: ui.lienzo, antialias: true, alpha: true, preserveDrawingBuffer: tiempoFijo !== null });
   } catch {
-    ui.capa.remove();
-    raiz.style.overflow = overflowPrevio;
-    return "omitida";
+    cerrar(0, "omitida", false);
+    return resultado;
   }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   const escena = new THREE.Scene();
@@ -607,53 +641,33 @@ export async function mostrarIntroErgane(opciones) {
     renderer.render(escena, camara);
   };
 
+  limpiar = () => {
+    caja.dispose();
+    material.dispose();
+    textura.dispose();
+    plano.geometry.dispose();
+    plano.material.dispose();
+    malla.dispose();
+    renderer.dispose();
+    renderer.forceContextLoss();
+  };
   ajustar();
+  ajustarRef = ajustar;
   window.addEventListener("resize", ajustar);
 
-  return new Promise((resolver) => {
-    let terminado = false;
-    let id = 0;
-    const cerrar = (ms) => {
-      if (terminado) return;
-      terminado = true;
-      cancelAnimationFrame(id);
-      guardarVista(clave);
-      window.removeEventListener("resize", ajustar);
-      window.removeEventListener("keydown", tecla);
-      ui.capa.style.transition = `opacity ${ms}ms cubic-bezier(0.23, 1, 0.32, 1)`;
-      ui.capa.style.opacity = "0";
-      ui.capa.style.pointerEvents = "none";
-      raiz.style.overflow = overflowPrevio;
-      setTimeout(() => {
-        ui.capa.remove();
-        caja.dispose();
-        material.dispose();
-        textura.dispose();
-        plano.geometry.dispose();
-        plano.material.dispose();
-        malla.dispose();
-        renderer.dispose();
-        renderer.forceContextLoss();
-        resolver("mostrada");
-      }, ms + 30);
-    };
-    const tecla = (ev) => { if (ev.key === "Escape") cerrar(SALTO_MS); };
-    window.addEventListener("keydown", tecla);
-    ui.capa.addEventListener("click", () => cerrar(SALTO_MS));
+  if (tiempoFijo !== null) { dibujar(tiempoFijo); return resultado; } // capturas: queda quieta en ese cuadro
 
-    if (tiempoFijo !== null) { dibujar(tiempoFijo); return; } // capturas: queda quieta en ese cuadro
-
-    // El reloj arranca en el primer cuadro dibujado: si la pestana se abrio en segundo plano,
-    // la intro empieza cuando se ve, no a mitad de camino.
-    let t0 = null;
-    const cuadro = (ahora) => {
-      if (terminado) return;
-      if (t0 === null) t0 = ahora;
-      const t = ((ahora - t0) / 1000) * velocidad;
-      dibujar(Math.min(t, T.fin));
-      if (t < T.fin) id = requestAnimationFrame(cuadro);
-      else cerrar(SALIDA_MS);
-    };
-    id = requestAnimationFrame(cuadro);
-  });
+  // El reloj arranca en el primer cuadro dibujado: si la pestana se abrio en segundo plano,
+  // la intro empieza cuando se ve, no a mitad de camino.
+  let t0 = null;
+  const cuadro = (ahora) => {
+    if (terminado) return;
+    if (t0 === null) t0 = ahora;
+    const t = ((ahora - t0) / 1000) * velocidad;
+    dibujar(Math.min(t, T.fin));
+    if (t < T.fin) idCuadro = requestAnimationFrame(cuadro);
+    else cerrar(SALIDA_MS);
+  };
+  idCuadro = requestAnimationFrame(cuadro);
+  return resultado;
 }
