@@ -7,7 +7,11 @@
 // KiramoPay y cuando se llama. three se baja con el import() del propio modulo,
 // en su bloque aparte: no pesa en la carga inicial.
 import { Capacitor } from '@capacitor/core';
-import trama from './trama.svg?url';
+// `no-inline`: la Trama SIEMPRE sale como archivo, pese lo que pese (el logo
+// limpio pesa menos de los 4 KB que Vite incrusta como data:). La intro la pide
+// con fetch(), y el CSP de nginx.conf (`connect-src 'self'`) no deja pasar una
+// URL data:. Vale igual en la build y en las pruebas.
+import trama from './trama.svg?url&no-inline';
 import type { DestinoErgane } from './ergane-intro';
 
 /** Donde se recuerda que este navegador ya la vio (es la clave de siempre del modulo). */

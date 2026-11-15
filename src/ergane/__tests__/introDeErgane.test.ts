@@ -55,6 +55,8 @@ describe('cuando sale la intro de Ergane', () => {
     // La Trama sale como archivo del mismo origen, que es lo que el CSP deja pedir.
     expect(typeof opciones.marcaErgane).toBe('string');
     expect(opciones.marcaErgane).not.toMatch(/^data:/);
+    // Una ruta de archivo (en la build lleva el hash; en las pruebas, el query de Vite).
+    expect(opciones.marcaErgane).toMatch(/^\/.*trama[^/?]*\.svg(\?.*)?$/);
   });
 
   it('en Android e iOS no sale: esas apps ya tienen su intro de la K', async () => {

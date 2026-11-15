@@ -79,13 +79,11 @@ export default defineConfig(({ mode }) => {
         // El arte 3D (.webp) tampoco: la version de 64 px pesa 2-3 KB y Vite la
         // metia en base64 dentro del JavaScript del Inicio, que la bajaba
         // aunque la pantalla pidiera la de 128.
-        // La Trama de Ergane (src/ergane/trama.svg) tampoco: la intro la pide con
-        // fetch(), y el CSP de nginx.conf (`connect-src 'self'`) no deja pasar
-        // una URL data: aunque el archivo bajara de 4 KB algun dia.
+        // (La Trama de Ergane, src/ergane/trama.svg, tampoco se incrusta: lo
+        // pide el propio import con `?url&no-inline`, que vale tambien en las
+        // pruebas, donde esta regla no corre.)
         assetsInlineLimit: (archivo: string) =>
-          archivo.endsWith('.woff2') || archivo.endsWith('.webp') || archivo.endsWith('/ergane/trama.svg')
-            ? false
-            : undefined,
+          archivo.endsWith('.woff2') || archivo.endsWith('.webp') ? false : undefined,
         rollupOptions: {
           output: {
             manualChunks(id) {
