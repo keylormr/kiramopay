@@ -5,9 +5,10 @@
 // con un bitcoind 26 o posterior arrancado con -regtest -txindex=1 -fallbackfee=0.0002.
 //
 // Comprueba lo que una prueba unitaria no puede: que la red acepta lo que firma
-// la app, que el heredero no puede gastar ni un bloque antes del plazo y si
-// justo al cumplirse, y que Bitcoin Core con el descriptor del kit encuentra la
-// boveda y cobra por la ruta del heredero.
+// la app (renovar y sacar por la ruta del titular, con RBF), que una renovacion
+// atascada se reemplaza con mas comision, que el heredero no puede gastar ni un
+// bloque antes del plazo y si justo al cumplirse, y que Bitcoin Core con el
+// descriptor del kit encuentra la boveda y cobra por la ruta del heredero.
 import { HDKey } from '@scure/bip32';
 import { mnemonicToSeedSync } from '@scure/bip39';
 import { TaprootControlBlock, Transaction, utils } from '@scure/btc-signer';
@@ -17,7 +18,7 @@ import { direccionDeLaBoveda } from '../direcciones';
 import type { FuenteDeLaRed } from '../esplora';
 import { leerEstado, plazoDe } from '../estado';
 import { llaveDeLaCuenta, llavePrivadaDe, PARAMETROS, rutaDeLaCuenta, textoDeLaLlave } from '../llaves';
-import { prepararMovimiento, type MonedaDeLaBoveda } from '../transacciones';
+import { prepararMovimiento, SECUENCIA_DEL_TITULAR, type MonedaDeLaBoveda } from '../transacciones';
 
 const RPC = process.env.KP_REGTEST_RPC;
 const PLAZO = 10;
@@ -37,6 +38,12 @@ async function rpc<T = unknown>(method: string, params: unknown[] = [], billeter
 }
 
 const sats = (btc: number) => Math.round(btc * 1e8);
+
+/** Las secuencias de las entradas, como las ve Core. */
+async function secuencias(hex: string): Promise<number[]> {
+  const tx = await rpc<{ vin: { sequence: number }[] }>('decoderawtransaction', [hex]);
+  return tx.vin.map(v => v.sequence);
+}
 
 /** Una fuente de la red hecha con una billetera de Core que solo mira la boveda. */
 function fuenteDeCore(vigia: string): FuenteDeLaRed {
@@ -125,30 +132,42 @@ describe.skipIf(!RPC)('boveda de herencia en regtest', () => {
     const mitad = await leerEstado(datos, red);
     expect(mitad.plazo?.nivel).toBe('renovar-pronto');
 
-    const renovacion = prepararMovimiento({
+    const renovacionCon = (e: typeof mitad) => ({
       datos,
       semilla: titular,
-      monedas: mitad.monedas,
-      destino: direccionDeLaBoveda(datos, 1, mitad.siguienteCambio).direccion,
-      tasaSatsVb: 2,
+      monedas: e.monedas,
+      destino: direccionDeLaBoveda(datos, 1, e.siguienteCambio).direccion,
     });
+    const renovacion = prepararMovimiento({ ...renovacionCon(mitad), tasaSatsVb: 2 });
     // Una entrada taproot por la ruta de la llave y una salida taproot.
     expect(renovacion.vsize).toBe(111);
     expect(renovacion.comisionSats).toBe(222);
     const aceptada = await rpc<{ allowed: boolean; vsize: number }[]>('testmempoolaccept', [[renovacion.hex]]);
     expect(aceptada[0].allowed).toBe(true);
     expect(aceptada[0].vsize).toBe(renovacion.vsize);
+    // La entrada del titular senala RBF (BIP-125) y no pide plazo relativo.
+    expect(await secuencias(renovacion.hex)).toEqual([SECUENCIA_DEL_TITULAR]);
     await red.emitir(renovacion.hex);
     // Emitirla otra vez (respuesta perdida) no es un error.
     await red.emitir(renovacion.hex).catch(() => undefined);
+    const entrada = await rpc<Record<string, unknown>>('getmempoolentry', [renovacion.txid]);
+    if ('bip125-replaceable' in entrada) expect(entrada['bip125-replaceable']).toBe(true);
+
+    // Atascada con poca comision: se rehace con mas, a la misma direccion, y la reemplaza.
+    const reemplazo = prepararMovimiento({ ...renovacionCon(mitad), tasaSatsVb: 4 });
+    expect(reemplazo.txid).not.toBe(renovacion.txid);
+    await red.emitir(reemplazo.hex);
+    const enMempool = await rpc<string[]>('getrawmempool');
+    expect(enMempool).toContain(reemplazo.txid);
+    expect(enMempool).not.toContain(renovacion.txid);
     await minar(1);
 
     const renovada = await leerEstado(datos, red);
     expect(renovada.siguienteCambio).toBe(1);
-    expect(renovada.confirmadoSats).toBe(1_000_000 - 222);
+    expect(renovada.confirmadoSats).toBe(1_000_000 - 444);
     expect(renovada.monedas).toHaveLength(1);
     expect(renovada.plazo?.bloquesQueFaltan).toBe(PLAZO - 1);
-    expect(renovada.monedas[0].txid).toBe(renovacion.txid);
+    expect(renovada.monedas[0].txid).toBe(reemplazo.txid);
     monedaRenovada = renovada.monedas[0];
   }, 120_000);
 
@@ -254,6 +273,29 @@ describe.skipIf(!RPC)('boveda de herencia en regtest', () => {
     expect(tx.getInput(0).finalScriptWitness).toHaveLength(3);
     expect(tx.getInput(0).sequence).toBe(PLAZO);
     expect(utils.isBytes(tx.getInput(0).finalScriptWitness?.[0])).toBe(true);
+  }, 120_000);
+
+  it('el titular saca a su saldo por su ruta, aun con el plazo vencido', async () => {
+    // Queda la moneda que lleno la prueba anterior (el heredero solo la probo, no la gasto).
+    const estado = await leerEstado(datos, red);
+    expect(estado.confirmadoSats).toBe(200_000);
+    expect(estado.plazo?.nivel).toBe('vencido');
+    // La direccion del saldo bitcoin del titular, aqui una de la billetera que mina.
+    const saldo = await rpc<string>('getnewaddress', [], minero);
+    const sacar = prepararMovimiento({ datos, semilla: titular, monedas: estado.monedas, destino: saldo, tasaSatsVb: 2 });
+    // Destino P2WPKH (lo que da Core por defecto): 99 vB a 2 sat/vB.
+    expect(sacar.vsize).toBe(99);
+    expect(sacar.comisionSats).toBe(sacar.vsize * 2);
+    expect(await secuencias(sacar.hex)).toEqual([SECUENCIA_DEL_TITULAR]);
+    // Por la ruta de la llave: un solo elemento en el testigo, nada revela la hoja.
+    const tx = Transaction.fromRaw(Uint8Array.from(Buffer.from(sacar.hex, 'hex')));
+    expect(tx.getInput(0).finalScriptWitness).toHaveLength(1);
+    await red.emitir(sacar.hex);
+    await minar(1);
+
+    expect((await leerEstado(datos, red)).confirmadoSats).toBe(0);
+    await rpc('syncwithvalidationinterfacequeue');
+    expect(sats(await rpc<number>('getreceivedbyaddress', [saldo, 1], minero))).toBe(200_000 - sacar.comisionSats);
   }, 120_000);
 
   it('el plazo calculado coincide con el de la red en el borde', () => {
