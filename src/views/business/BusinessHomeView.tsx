@@ -18,6 +18,7 @@ import type {
   CatalogItem,
   MerchantLocation,
   ResumenDelComercio,
+  MediosDeCobro,
 } from '@/api/repositories/qrpayment.repository';
 import { mensajeDelRechazoDelCobro, minutosParaVencer, textoDeDuracion } from '@/utils/erroresQr';
 import { conteoConPlural } from '@/utils/conteo';
@@ -26,6 +27,9 @@ import { movimientoDeCobro, type MovimientoDelComercio } from '@/utils/movimient
 import { DetalleDeMovimiento } from './DetalleDeMovimiento';
 import { MovimientoFila } from './MovimientoFila';
 import { VentasDelNegocio, ventasDelPeriodo } from './VentasDelNegocio';
+import { PanelLightning, SelectorDeMedio, type MedioDeCobro } from './CobroLightning';
+import { sinpeMovilLegible } from '@/utils/lightning';
+import { rellenar } from '@/utils/planes';
 
 interface Props {
   merchant: QRMerchant;
@@ -78,6 +82,10 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   const [locations, setLocations] = useState<MerchantLocation[]>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [locationId, setLocationId] = useState('');
+  // Como cobra el comercio fuera de KiramoPay (Lightning y SINPE Movil). null =
+  // no se pudo leer: no se ofrece nada que el servidor no confirmo.
+  const [medios, setMedios] = useState<MediosDeCobro | null>(null);
+  const [medio, setMedio] = useState<MedioDeCobro>('kiramopay');
 
   // Business balance: the shop's own money, separate from the owner's wallet.
   const [balance, setBalance] = useState<number | null>(null);
@@ -152,10 +160,18 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     void (async () => {
       const api = getApiLayer().qrPayments;
       if (!api) return;
-      const [cRes, lRes] = await Promise.all([api.getCatalog(merchant.id), api.getLocations(merchant.id)]);
+      const [cRes, lRes, mRes] = await Promise.all([
+        api.getCatalog(merchant.id),
+        api.getLocations(merchant.id),
+        // Si no se puede leer, la hoja cobra como siempre: solo con KiramoPay.
+        Promise.resolve()
+          .then(() => api.getPaymentMethods(merchant.id))
+          .catch(() => null),
+      ]);
       if (cancelled) return;
       if (cRes.success && cRes.data) setCatalog(cRes.data.filter((c) => c.active));
       if (lRes.success && lRes.data) setLocations(lRes.data.filter((l) => l.active));
+      setMedios(mRes?.success && mRes.data ? mRes.data : null);
     })();
     return () => { cancelled = true; };
   }, [showCharge, merchant.id]);
@@ -216,6 +232,22 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   const hoy = resumen?.periods.find((p) => p.period === 'today');
   const ventasDeHoy = hoy ? ventasDelPeriodo(hoy, ccy) : null;
   const sinResumen = resumen === null;
+
+  // Lightning se ofrece solo con la bandera abierta y la billetera conectada,
+  // y solo sobre un cobro con monto que sigue pendiente.
+  const lightningListo = !!medios?.lightningHabilitado && !!medios.lightningAddress;
+  const conLightning = lightningListo && cobro?.status === 'pending' && medio === 'lightning';
+
+  // El panel de Lightning supo que el cobro ya no esta pendiente: se lee de nuevo.
+  const releerCobro = async () => {
+    const api = getApiLayer().qrPayments;
+    if (!api || !cobro) return;
+    const actual = await api.getCharge(cobro.id);
+    if (actual.success && actual.data) {
+      setCobro(actual.data);
+      if (actual.data.status === 'paid') onReload();
+    }
+  };
 
   const cartItems = catalog.filter((c) => (cart[c.id] ?? 0) > 0);
   const cartTotal = cartItems.reduce((s, c) => s + c.price * (cart[c.id] ?? 0), 0);
@@ -284,6 +316,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
   // intacto. El codigo del mostrador NO se descarta nunca.
   const siguienteCliente = () => {
     setCobro(null);
+    setMedio('kiramopay');
     setAmount('');
     setCart({});
     setError('');
@@ -292,6 +325,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
 
   const closeCharge = () => {
     setShowCharge(false);
+    setMedio('kiramopay');
     setAmount('');
     setCart({});
     setError('');
@@ -512,25 +546,35 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
             <span className="text-[11px] font-semibold text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
               {cobro ? t('qr_cobrando').replace('{amount}', money(cobro.amount, cobro.currency)) : t('qr_rotulo_mostrador')}
             </span>
-            <div ref={qrRef} className="bg-white p-4 rounded-2xl border border-gray-200">
-              {code || cobro ? (
-                <QRCodeSVG value={(cobro ?? code)!.qrData} size={200} />
-              ) : (
-                <div className="w-[200px] h-[200px] flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-                </div>
-              )}
-            </div>
+            {lightningListo && cobro?.status === 'pending' && <SelectorDeMedio medio={medio} onCambio={setMedio} />}
+            {conLightning && cobro ? (
+              <PanelLightning key={cobro.id} cobro={cobro} onCobroDesactualizado={() => void releerCobro()} />
+            ) : (
+              <div ref={qrRef} className="bg-white p-4 rounded-2xl border border-gray-200">
+                {code || cobro ? (
+                  <QRCodeSVG value={(cobro ?? code)!.qrData} size={200} />
+                ) : (
+                  <div className="w-[200px] h-[200px] flex items-center justify-center">
+                    <div className="w-8 h-8 border-2 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+            )}
 
             {cobro?.status === 'paid' ? (
               <div className="flex items-center gap-2 uv-chip-success px-3 py-1.5 rounded-full" role="status">
                 <Icons.Check size={16} />
-                <span className="text-sm font-bold">{t('qr_pagado')}</span>
+                <span className="text-sm font-bold">
+                  {cobro.paidVia === 'lightning' ? t('qr_pagado_lightning') : t('qr_pagado')}
+                </span>
               </div>
             ) : cobro ? (
-              <p className="text-xs uv-text-muted">
-                {t('qr_vence_en').replace('{tiempo}', textoDeDuracion(minutosParaVencer(cobro.expiresAt), t))}
-              </p>
+              // Con Lightning manda el plazo del precio, que el panel ya dice.
+              !conLightning && (
+                <p className="text-xs uv-text-muted">
+                  {t('qr_vence_en').replace('{tiempo}', textoDeDuracion(minutosParaVencer(cobro.expiresAt), t))}
+                </p>
+              )
             ) : (
               <p className="text-sm uv-text-muted text-center max-w-[280px]">{t('qr_rotulo_ayuda')}</p>
             )}
@@ -539,7 +583,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
                 ven los clientes; no la razon social ni el del dueno). El rotulo
                 fijo dice el comercio y la sede; un cobro, el monto grande y el
                 comercio debajo. Solo se ofrece un QR que todavia sirve. */}
-            {(cobro ? cobro.status === 'pending' : !!code) && (
+            {!conLightning && (cobro ? cobro.status === 'pending' : !!code) && (
               <BotonCompartirQr
                 key={(cobro ?? code)!.qrData}
                 contenedor={qrRef}
@@ -548,6 +592,14 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
                 pie={t('qr_card_pie')}
                 nombreArchivo={cobro ? 'kiramopay-cobro.png' : 'kiramopay-comercio.png'}
               />
+            )}
+
+            {/* SINPE Movil no pasa por KiramoPay: solo el numero, y que se
+                confirma en el banco. Nunca un "pagado" por algo que no se ve. */}
+            {medios?.sinpeMovil && cobro?.status !== 'paid' && !conLightning && (
+              <p className="max-w-[300px] text-center text-xs leading-relaxed uv-text-secondary">
+                {rellenar(t('ln_sinpe_movil'), { numero: sinpeMovilLegible(medios.sinpeMovil) })}
+              </p>
             )}
           </div>
 

@@ -8,6 +8,7 @@ import { getApiLayer } from '@/api';
 import { BusinessTeamSheet } from './BusinessTeamSheet';
 import { BusinessLocationsSheet } from './BusinessLocationsSheet';
 import { BusinessCatalogSheet } from './BusinessCatalogSheet';
+import { SeccionMediosDeCobro } from './MediosDeCobro';
 import type { QRMerchant, MerchantVerificationStatus } from '@/api/repositories/qrpayment.repository';
 import { fechaLarga, porcentajeDeBps, rellenar } from '@/utils/planes';
 import { rechazoDelCierre, type RechazoDelCierre } from '@/utils/cierreDeComercio';
@@ -244,6 +245,8 @@ export const BusinessSettingsView: React.FC<Props> = ({ merchant, onSwitchProfil
       )}
 
       <p className="text-xs uv-text-muted px-1">{t('business_commission_note')}</p>
+
+      <SeccionMediosDeCobro merchantId={merchant.id} />
 
       {/* Para un piloto el administrador asigna el plan por este identificador. */}
       {isOwner && (

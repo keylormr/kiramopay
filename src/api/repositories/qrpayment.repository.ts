@@ -187,6 +187,62 @@ export interface QRCharge {
   paidAt?: string;
   supersededBy?: string;
   createdAt: string;
+  /** 'lightning' cuando se pago fuera de KiramoPay, a la billetera propia del comercio. */
+  paidVia?: 'lightning';
+  /** La ultima factura Lightning del cobro, si se pidio una. */
+  lightning?: FacturaLightning;
+}
+
+export type EstadoFacturaLightning = 'pending' | 'paid' | 'expired';
+
+/**
+ * La factura Lightning de un cobro: el servidor cotiza en sats y se la pide a
+ * la direccion Lightning del comercio. El bitcoin llega a la billetera propia
+ * del comercio; KiramoPay nunca lo recibe ni lo mueve.
+ */
+export interface FacturaLightning {
+  id: string;
+  chargeId: string;
+  /** BOLT11 en minusculas, tal como la dio el proveedor. */
+  invoice: string;
+  paymentHash: string;
+  sats: number;
+  /** El monto del cobro en unidades MAYORES. */
+  monto: number;
+  currency: string;
+  /** Precio de un bitcoin en la moneda del cobro, como texto decimal. */
+  precioBtc: string;
+  /** Hasta cuando vale la cotizacion; despues se pide otra. */
+  cotizacionVence: string;
+  facturaVence: string;
+  status: EstadoFacturaLightning;
+  paidAt?: string;
+  createdAt: string;
+}
+
+/** Como cobra el comercio fuera de KiramoPay. */
+export interface MediosDeCobro {
+  /** El servidor deja a este comercio cobrar con Lightning. */
+  lightningHabilitado: boolean;
+  lightningAddress?: string;
+  sinpeMovil?: string;
+  /** Quien pregunta es el dueno y puede cambiarlos. */
+  puedeEditar: boolean;
+}
+
+/** Un cobro pagado por Lightning, para el contador. */
+export interface VentaLightning {
+  chargeId: string;
+  note: string;
+  /** Unidades MAYORES. */
+  monto: number;
+  currency: string;
+  sats: number;
+  precioBtc: string;
+  paymentHash: string;
+  paidAt: string;
+  /** El estado del cobro: un pago que llego tarde sobre un cobro cancelado sigue siendo una venta. */
+  chargeStatus: string;
 }
 
 /**
@@ -374,6 +430,25 @@ export interface IQRPaymentRepository {
   createCharge(request: CreateChargeRequest): Promise<ApiResponse<QRCharge>>;
   getCharge(chargeId: string): Promise<ApiResponse<QRCharge>>;
   cancelCharge(chargeId: string): Promise<ApiResponse<void>>;
+  /**
+   * La factura Lightning de un cobro pendiente del comercio. Mientras la
+   * cotizacion vale, devuelve la misma. Rechazos con su codigo:
+   * LIGHTNING_UNAVAILABLE, LIGHTNING_NO_ADDRESS, PRICE_STALE, PRICE_UNAVAILABLE,
+   * LIGHTNING_PROVIDER_FAILED, LIGHTNING_AMOUNT_OUT_OF_RANGE y los del cobro.
+   */
+  createChargeLightning(chargeId: string): Promise<ApiResponse<FacturaLightning>>;
+  /** La direccion Lightning y el SINPE Movil del comercio. Todo el equipo los lee. */
+  getPaymentMethods(merchantId: string): Promise<ApiResponse<MediosDeCobro>>;
+  /**
+   * Solo el dueno. Un campo ausente queda como esta; uno vacio se quita.
+   * Rechazos: LIGHTNING_ADDRESS_INVALID, SINPE_MOVIL_INVALID.
+   */
+  updatePaymentMethods(
+    merchantId: string,
+    cambios: { lightningAddress?: string; sinpeMovil?: string },
+  ): Promise<ApiResponse<MediosDeCobro>>;
+  /** Los cobros pagados por Lightning en un mes calendario ('2026-11'). Dueno o encargado. */
+  getLightningSales(merchantId: string, mes: string): Promise<ApiResponse<VentaLightning[]>>;
   listCharges(status?: QRChargeStatus): Promise<ApiResponse<QRCharge[]>>;
   scanAndPay(request: ScanQRPayRequest): Promise<ApiResponse<QRPayment>>;
   getPaymentHistory(): Promise<ApiResponse<QRPayment[]>>;

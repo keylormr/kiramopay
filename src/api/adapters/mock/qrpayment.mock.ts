@@ -20,9 +20,13 @@ import type {
   RetiroDelComercio,
   TotalDelDia,
   VentasPorMoneda,
+  FacturaLightning,
+  MediosDeCobro,
+  VentaLightning,
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
 import { VENTAS_POR_PAGINA } from '../../repositories/qrpayment.repository';
+import { normalizarSinpeMovil, pareceDireccionLightning } from '../../../utils/lightning';
 import type { ApiResponse, ArchivoDescargado } from '../../types';
 import { apiSuccess, apiError, apiErrorConDetalle } from '../../types';
 
@@ -105,6 +109,41 @@ function readMerchants(): QRMerchant[] {
 function readList<T>(field: string): T[] {
   const state = getState();
   return Array.isArray(state?.[field]) ? state[field] : [];
+}
+
+// ── Cobro con Lightning en la demo ──
+// La factura es el ejemplo de BOLT 11 ("1 cup coffee"), vencida desde 2017:
+// ninguna billetera la paga. Y la demo nunca marca un cobro como pagado por
+// Lightning, porque nadie recibio nada: no hay comprobante sin pago.
+const FACTURA_DE_LA_DEMO =
+  'lnbc2500u1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpu9qrsgquk0rl77nj30yxdy8j9vdx85fkpmdla2087ne0xh8nhedh8w27kyke0lp53ut353s06fv3qfegext0eh0ymjpf39tuven09sam30g4vgpfna3rh';
+// El precio de un bitcoin de la demo: el de mock-data (42.850 USD) y, en
+// colones, por el tipo de cambio de country.mock (526,50).
+const PRECIO_DEMO_BTC: Readonly<Record<string, number>> = { USD: 42_850, CRC: 42_850 * 526.5 };
+const DOMINIOS_DE_LA_DEMO = ['breez.tips'];
+
+type MediosGuardados = { lightningAddress?: string; sinpeMovil?: string };
+
+function leerMediosLightning(): Record<string, MediosGuardados> {
+  const v = getState()?.qrPaymentMethods;
+  return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+}
+
+function leerFacturasLightning(): FacturaLightning[] {
+  return readList<FacturaLightning>('qrLightningInvoices');
+}
+
+/** Una factura pendiente cuyo plazo paso se lee vencida, como en el servidor. */
+function conVencimiento(f: FacturaLightning): FacturaLightning {
+  return f.status === 'pending' && Date.parse(f.facturaVence) <= Date.now() ? { ...f, status: 'expired' } : f;
+}
+
+function rechazoDelEstado(c: QRCharge): string | null {
+  if (c.status === 'paid') return 'COBRO_YA_PAGADO';
+  if (c.status === 'cancelled') return 'COBRO_CANCELADO';
+  if (c.status === 'superseded') return 'COBRO_REEMPLAZADO';
+  if (c.status === 'expired' || Date.parse(c.expiresAt) <= Date.now()) return 'COBRO_VENCIDO';
+  return null;
 }
 
 /**
@@ -375,7 +414,102 @@ export class MockQRPaymentRepository implements IQRPaymentRepository {
     const cobros: QRCharge[] = getState()?.qrCharges ?? [];
     const c = cobros.find((x) => x.id === chargeId);
     if (!c) return apiError('QR_INVALIDO', 'cobro no encontrado');
-    return apiSuccess(c);
+    // Como el servidor: el cobro viene con su ultima factura Lightning.
+    const factura = leerFacturasLightning()
+      .filter((f) => f.chargeId === chargeId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    return apiSuccess(factura ? { ...c, lightning: conVencimiento(factura) } : c);
+  }
+
+  async createChargeLightning(chargeId: string): Promise<ApiResponse<FacturaLightning>> {
+    const cobros: QRCharge[] = getState()?.qrCharges ?? [];
+    const cobro = cobros.find((x) => x.id === chargeId);
+    if (!cobro) return apiError('QR_INVALIDO', 'cobro no encontrado');
+    if (!cobro.merchantId) return apiError('LIGHTNING_UNAVAILABLE', 'solo los cobros de un comercio');
+    const rechazo = rechazoDelEstado(cobro);
+    if (rechazo) return apiError(rechazo, 'el cobro ya no esta pendiente');
+    const direccion = leerMediosLightning()[cobro.merchantId]?.lightningAddress;
+    if (!direccion) return apiError('LIGHTNING_NO_ADDRESS', 'el comercio no tiene direccion Lightning');
+    const precio = PRECIO_DEMO_BTC[cobro.currency];
+    if (!precio) return apiError('PRICE_UNAVAILABLE', 'sin precio para esa moneda');
+
+    const ahora = Date.now();
+    const facturas = leerFacturasLightning();
+    const vigente = facturas.find(
+      (f) => f.chargeId === chargeId && f.status === 'pending' && Date.parse(f.cotizacionVence) - ahora > 30_000,
+    );
+    if (vigente) return apiSuccess(vigente);
+
+    const centimos = Math.round(cobro.amount * 100);
+    const factura: FacturaLightning = {
+      id: `ln-${ahora}-${Math.random().toString(36).slice(2, 8)}`,
+      chargeId,
+      invoice: FACTURA_DE_LA_DEMO,
+      paymentHash: '0001020304050607080900010203040506070809000102030405060708090102',
+      sats: Math.ceil((centimos * 1_000_000) / precio),
+      monto: cobro.amount,
+      currency: cobro.currency,
+      precioBtc: String(precio),
+      cotizacionVence: new Date(Math.min(ahora + 10 * 60_000, Date.parse(cobro.expiresAt))).toISOString(),
+      facturaVence: new Date(ahora + 60 * 60_000).toISOString(),
+      status: 'pending',
+      createdAt: new Date(ahora).toISOString(),
+    };
+    facturas.unshift(factura);
+    saveField('qrLightningInvoices', facturas.slice(0, 200));
+    return apiSuccess(factura);
+  }
+
+  async getPaymentMethods(merchantId: string): Promise<ApiResponse<MediosDeCobro>> {
+    const m = readMerchants().find((x) => x.id === merchantId);
+    if (!m) return apiError('MERCHANT_NOT_FOUND', 'comercio no encontrado');
+    const medios = leerMediosLightning()[merchantId] ?? {};
+    return apiSuccess({
+      // La demo es como una cuenta demo del servidor: siempre puede probarlo.
+      lightningHabilitado: true,
+      lightningAddress: medios.lightningAddress,
+      sinpeMovil: medios.sinpeMovil,
+      puedeEditar: m.role === 'owner',
+    });
+  }
+
+  async updatePaymentMethods(
+    merchantId: string,
+    cambios: { lightningAddress?: string; sinpeMovil?: string },
+  ): Promise<ApiResponse<MediosDeCobro>> {
+    const m = readMerchants().find((x) => x.id === merchantId);
+    if (!m || m.role !== 'owner') return apiError('MERCHANT_NOT_FOUND', 'comercio no encontrado');
+    const todos = leerMediosLightning();
+    const medios = { ...(todos[merchantId] ?? {}) };
+    if (cambios.sinpeMovil !== undefined) {
+      if (cambios.sinpeMovil.trim() === '') delete medios.sinpeMovil;
+      else {
+        const numero = normalizarSinpeMovil(cambios.sinpeMovil);
+        if (!numero) return apiError('SINPE_MOVIL_INVALID', 'numero de SINPE Movil invalido');
+        medios.sinpeMovil = numero;
+      }
+    }
+    if (cambios.lightningAddress !== undefined) {
+      const dir = cambios.lightningAddress.trim().toLowerCase();
+      if (dir === '') delete medios.lightningAddress;
+      else {
+        const dominio = dir.slice(dir.lastIndexOf('@') + 1);
+        if (!pareceDireccionLightning(dir) || !DOMINIOS_DE_LA_DEMO.includes(dominio)) {
+          return apiError('LIGHTNING_ADDRESS_INVALID', 'direccion Lightning invalida');
+        }
+        medios.lightningAddress = dir;
+      }
+    }
+    saveField('qrPaymentMethods', { ...todos, [merchantId]: medios });
+    return this.getPaymentMethods(merchantId);
+  }
+
+  async getLightningSales(merchantId: string, mes: string): Promise<ApiResponse<VentaLightning[]>> {
+    const m = readMerchants().find((x) => x.id === merchantId);
+    if (!m || (m.role !== 'owner' && m.role !== 'manager')) return apiError('MERCHANT_NOT_FOUND', 'comercio no encontrado');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return apiError('INVALID_MONTH', 'mes invalido');
+    // La demo nunca recibe un pago por Lightning: no hay ventas que mostrar.
+    return apiSuccess([]);
   }
 
   async cancelCharge(chargeId: string): Promise<ApiResponse<void>> {

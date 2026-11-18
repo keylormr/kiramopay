@@ -1,6 +1,7 @@
 import { rellenar } from '@/utils/planes';
 import type { Ingreso } from './tipos';
 import { sumar } from './ingresos';
+import { sumarLightning, type CobroLightningDelMes } from './lightning';
 
 /** Los textos ya traducidos que lleva el PDF. Los pone la pantalla (`t`). */
 export interface TextosPdf {
@@ -28,6 +29,12 @@ export interface TextosPdf {
   pie: string;
   /** Con `{n}` y `{total}`. */
   pagina: string;
+  /** Solo cuando hay cobros por Lightning en el mes. */
+  lightning?: {
+    titulo: string;
+    /** Con `{monto}`. */
+    porLightning: string;
+  };
 }
 
 /**
@@ -40,6 +47,8 @@ export interface FormatosPdf {
   mes: (mes: string) => string;
   /** AAAA-MM-DD -> "07/11/2026". */
   fecha: (iso: string) => string;
+  /** "12,345 sats · 1 BTC = ₡40,000,000.00", como en la pantalla. */
+  detalleLightning?: (x: CobroLightningDelMes) => string;
 }
 
 export interface DatosPdf {
@@ -52,6 +61,8 @@ export interface DatosPdf {
   omitidas: number;
   /** AAAA-MM-DD del dia en que se arma el archivo, en la zona de la persona. */
   hoy: string;
+  /** Los cobros por Lightning del mes en esa moneda. */
+  lightning?: CobroLightningDelMes[];
 }
 
 export interface FilaPdf {
@@ -122,20 +133,39 @@ export function construirContenidoPdf(d: DatosPdf, tx: TextosPdf, f: FormatosPdf
       vacio: sinpe.length === 0 ? tx.sinSinpe : null,
     },
   ];
+  // Los cobros por Lightning son ventas: van al total y en su propia seccion,
+  // con los sats y el precio del bitcoin en la descripcion.
+  const lightning = d.lightning && tx.lightning ? d.lightning : [];
+  if (lightning.length > 0 && tx.lightning) {
+    secciones.push({
+      titulo: tx.lightning.titulo,
+      filas: lightning.map((x) => ({
+        fecha: f.fecha(x.fecha),
+        descripcion: [descripcionParaPdf(x.descripcion), f.detalleLightning?.(x)].filter(Boolean).join(' · '),
+        monto: f.dinero(x.centimos, x.moneda),
+        venta: tx.si,
+      })),
+      vacio: null,
+    });
+  }
   if (otros.length > 0) {
     secciones.push({ titulo: rellenar(tx.otros, { n: otros.length }), filas: otros.map(fila), vacio: null });
   }
 
   const notas: string[] = [];
+  if (lightning.length > 0 && tx.lightning) {
+    notas.push(rellenar(tx.lightning.porLightning, { monto: f.dinero(sumarLightning(lightning), d.moneda) }));
+  }
   if (d.sinSigno) notas.push(tx.sinSigno);
   if (d.omitidas > 0) notas.push(rellenar(tx.omitidas, { n: d.omitidas }));
+  const cantidadDeVentas = ventas.length + lightning.length;
 
   return {
     titulo: tx.titulo,
     subtitulo: `${f.mes(d.mes)} · ${tx.moneda}: ${d.moneda}`,
     rotuloTotal: tx.totalVentas,
-    total: f.dinero(sumar(ventas), d.moneda),
-    cantidad: ventas.length === 1 ? tx.cantidadUna : rellenar(tx.cantidadOtras, { n: ventas.length }),
+    total: f.dinero(sumar(ventas) + sumarLightning(lightning), d.moneda),
+    cantidad: cantidadDeVentas === 1 ? tx.cantidadUna : rellenar(tx.cantidadOtras, { n: cantidadDeVentas }),
     aviso: tx.aviso,
     notas,
     columnas: { fecha: tx.fecha, descripcion: tx.descripcion, monto: tx.monto, venta: tx.esVenta },
