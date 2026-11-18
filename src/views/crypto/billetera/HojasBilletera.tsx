@@ -25,7 +25,8 @@ import {
   type EnvioEvmPreparado,
 } from '@/billetera/evm';
 import { direccionCorta, recortarDecimales } from '@/billetera/formato';
-import { GrillaDePalabras } from './CrearBilletera';
+import { usePantallaSegura } from '@/billetera/pantalla';
+import { GrillaDePalabras, PantallaSinProteccion } from './CrearBilletera';
 import { palabrasDe } from '@/billetera/semilla';
 
 export type ActivoDeLaBilletera =
@@ -195,6 +196,12 @@ interface HojaEnviarProps {
   btc: BilleteraBitcoin | null;
   /** Para refrescar los saldos despues de enviar. */
   onEnviado: () => void;
+  /**
+   * Avisa cuando un envio esta en marcha (desde que se toca Confirmar hasta que
+   * termina o falla). Mientras dure, la billetera no se cierra por pasar a
+   * segundo plano: cerrarla descartaria la llave de idempotencia del intento.
+   */
+  onEnviando?: (enviando: boolean) => void;
 }
 
 type Preparado = { en: number } & (
@@ -225,7 +232,7 @@ interface Intento {
 }
 const nuevoIntento = (): Intento => ({ llave: crypto.randomUUID() });
 
-export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnviarProps) {
+export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviando }: HojaEnviarProps) {
   const { t, language } = useLanguage();
   const [destino, setDestino] = useState('');
   const [monto, setMonto] = useState('');
@@ -317,6 +324,7 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
   const confirmar = async () => {
     if (!preparado || enviando.current) return;
     enviando.current = true;
+    onEnviando?.(true);
     setOcupado(true);
     setError('');
     setAviso('');
@@ -344,6 +352,7 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
     } finally {
       enviando.current = false;
       setOcupado(false);
+      onEnviando?.(false);
     }
   };
 
@@ -494,9 +503,14 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
 
 export function HojaPalabras({ semilla, onClose }: { semilla: string | null; onClose: () => void }) {
   const { t } = useLanguage();
+  // Protegida solo mientras la hoja muestra las palabras.
+  const proteccion = usePantallaSegura(semilla !== null);
   return (
     <BottomSheet isOpen={semilla !== null} onClose={onClose} title={t('bp_palabras_titulo')}>
-      {semilla && (
+      {semilla && proteccion !== 'protegida' && (
+        <PantallaSinProteccion estado={proteccion} etiqueta={t('close')} onCerrar={onClose} />
+      )}
+      {semilla && proteccion === 'protegida' && (
         <div className="space-y-4">
           <p className="uv-chip-warning flex gap-2 rounded-xl p-3 text-sm">
             <Icons.AlertTriangle size={18} className="shrink-0" aria-hidden />

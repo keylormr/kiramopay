@@ -14,6 +14,7 @@ import {
   semillaValida,
 } from '@/billetera/semilla';
 import { BilleteraYaGuardada } from '@/billetera/boveda';
+import { usePantallaSegura, type EstadoDeLaProteccion } from '@/billetera/pantalla';
 
 interface Props {
   modo: 'crear' | 'restaurar';
@@ -42,8 +43,31 @@ export function GrillaDePalabras({ palabras }: { palabras: string[] }) {
   );
 }
 
+/**
+ * Lo que se ve en lugar de las palabras mientras la pantalla no esta protegida.
+ * Si el telefono no puede bloquear las capturas (un binario viejo sin el plugin),
+ * las palabras no se muestran ni se piden: se pide actualizar la app.
+ */
+export function PantallaSinProteccion({ estado, etiqueta, onCerrar }: { estado: EstadoDeLaProteccion; etiqueta: string; onCerrar: () => void }) {
+  const { t } = useLanguage();
+  if (estado !== 'sin-proteccion') {
+    return <p className="p-4 text-sm uv-text-muted">{t('loading')}</p>;
+  }
+  return (
+    <section role="alert" className="space-y-4 uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5">
+      <Icons.AlertTriangle size={24} className="text-[var(--color-danger)]" aria-hidden />
+      <h3 className="text-lg font-bold uv-text-primary">{t('bp_pantalla_titulo')}</h3>
+      <p className="text-sm uv-text-secondary">{t('bp_pantalla_cuerpo')}</p>
+      <button type="button" className={BOTON_SECUNDARIO} onClick={onCerrar}>{etiqueta}</button>
+    </section>
+  );
+}
+
 export function CrearBilletera({ modo, onListo, onCancelar }: Props) {
   const { t } = useLanguage();
+  // Las palabras se muestran (crear) o se escriben (restaurar) en esta pantalla:
+  // protegida desde que se monta hasta que se cierra.
+  const proteccion = usePantallaSegura(true);
   const semilla = useMemo(() => (modo === 'crear' ? nuevaSemilla() : ''), [modo]);
   const palabras = useMemo(() => palabrasDe(semilla), [semilla]);
   const posiciones = useMemo(() => posicionesParaVerificar(palabras.length || 12), [palabras.length]);
@@ -65,6 +89,10 @@ export function CrearBilletera({ modo, onListo, onCancelar }: Props) {
       setGuardando(false);
     }
   };
+
+  if (proteccion !== 'protegida') {
+    return <PantallaSinProteccion estado={proteccion} etiqueta={t('cancel')} onCerrar={onCancelar} />;
+  }
 
   if (paso === 'mostrar') {
     return (
