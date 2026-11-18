@@ -2488,6 +2488,7 @@ export type TranslationKeys = {
   hb_err_sin_monedas: string;
   hb_err_no_alcanza: string;
   hb_err_comision: string;
+  hb_err_tasa: string;
   hb_err_rechazada: string;
   hb_llenar_en_camino: string;
   hb_err_quitar_reciente: string;

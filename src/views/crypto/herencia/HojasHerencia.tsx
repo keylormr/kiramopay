@@ -525,6 +525,7 @@ const MENSAJE_DE_MOVIMIENTO: Record<RechazoMovimiento['motivo'], string> = {
   'sin-monedas': 'hb_err_sin_monedas',
   'no-alcanza': 'hb_err_no_alcanza',
   'comision-excesiva': 'hb_err_comision',
+  'tasa-fuera-de-rango': 'hb_err_tasa',
   'otras-palabras': 'hb_otras_palabras',
 };
 

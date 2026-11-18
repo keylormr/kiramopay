@@ -21,7 +21,15 @@ import {
 } from '../descriptor';
 import { direccionDeLaBoveda, hojaDelHeredero } from '../direcciones';
 import { leerLlave, llaveDeLaCuenta, LlaveInvalida, mismaLlave, textoDeLaLlave, type Red } from '../llaves';
-import { MINIMO_A_MOVER_SATS, prepararMovimiento, RechazoMovimiento, SECUENCIA_DEL_TITULAR, type MonedaDeLaBoveda } from '../transacciones';
+import {
+  FRACCION_MAXIMA_DE_COMISION,
+  MINIMO_A_MOVER_SATS,
+  prepararMovimiento,
+  RechazoMovimiento,
+  SECUENCIA_DEL_TITULAR,
+  TASA_MAXIMA_SATS_VB,
+  type MonedaDeLaBoveda,
+} from '../transacciones';
 
 const TITULAR = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const HEREDERO = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
@@ -173,11 +181,25 @@ describe('mover la boveda por la ruta del titular', () => {
     expect(intento).toThrow(expect.objectContaining({ motivo: 'sin-monedas' }));
   });
 
-  it('no deja una salida bajo el minimo ni una comision mayor que la mitad', () => {
+  it('no deja una salida bajo el minimo ni una comision de mas del 10 % de lo que se mueve', () => {
+    expect(FRACCION_MAXIMA_DE_COMISION).toBe(0.1);
     expect(() => prepararMovimiento({ datos, semilla: TITULAR, monedas: [moneda(MINIMO_A_MOVER_SATS + 50)], destino: destino(), tasaSatsVb: 1 }))
       .toThrow(expect.objectContaining({ motivo: 'no-alcanza' }));
-    expect(() => prepararMovimiento({ datos, semilla: TITULAR, monedas: [moneda(4_000)], destino: destino(), tasaSatsVb: 20 }))
+    // 111 vB a 10 sat/vB = 1.110 sats: justo el 10 % de 11.100 pasa; un sat menos, no.
+    expect(prepararMovimiento({ datos, semilla: TITULAR, monedas: [moneda(11_100)], destino: destino(), tasaSatsVb: 10 }).comisionSats).toBe(1_110);
+    expect(() => prepararMovimiento({ datos, semilla: TITULAR, monedas: [moneda(11_099)], destino: destino(), tasaSatsVb: 10 }))
       .toThrow(expect.objectContaining({ motivo: 'comision-excesiva' }));
+  });
+
+  it('una tasa absurda de la red se rechaza antes de firmar', () => {
+    expect(TASA_MAXIMA_SATS_VB).toBe(1_000);
+    const con = (tasaSatsVb: number) => () =>
+      prepararMovimiento({ datos, semilla: TITULAR, monedas: [moneda(5_000_000)], destino: destino(), tasaSatsVb });
+    // En el techo todavia se puede (111.000 sats sobre 5.000.000).
+    expect(con(TASA_MAXIMA_SATS_VB)().comisionSats).toBe(111 * TASA_MAXIMA_SATS_VB);
+    for (const tasa of [TASA_MAXIMA_SATS_VB + 0.5, 50_000, Number.NaN, Number.POSITIVE_INFINITY, -1]) {
+      expect(con(tasa)).toThrow(expect.objectContaining({ motivo: 'tasa-fuera-de-rango' }));
+    }
   });
 
   it('redondea la tasa hacia arriba y nunca baja de 1 sat/vB', () => {

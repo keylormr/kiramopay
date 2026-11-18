@@ -321,6 +321,21 @@ describe('la boveda de herencia', () => {
     expect(screen.queryByRole('button', { name: es.hb_quitar })).not.toBeInTheDocument();
   });
 
+  it('una tasa absurda de la API no deja firmar: se dice y no se emite nada', async () => {
+    almacen.leer.mockResolvedValue({ estado: 'hay', boveda: bovedaDe(TITULAR) });
+    const fuente = redCon(800_100);
+    fuente.tasas = vi.fn(async () => ({ rapida: 90_000, media: 50_000, lenta: 20_000 }));
+    red.fuente = fuente;
+    montar();
+    await userEvent.click(await screen.findByRole('button', { name: new RegExp(es.hb_renovar) }));
+    const hoja = await screen.findByRole('dialog');
+    expect(await within(hoja).findByText(es.hb_err_tasa)).toBeInTheDocument();
+    expect(within(hoja).queryByRole('button', { name: new RegExp(es.hb_mover_confirmar_renovar) })).not.toBeInTheDocument();
+    expect(huella.confirmarConHuella).not.toHaveBeenCalled();
+    expect(fuente.emitir).not.toHaveBeenCalled();
+    expect(almacen.anotar).not.toHaveBeenCalled();
+  });
+
   it('renovar firma hacia la siguiente direccion de cambio y emite con la huella', async () => {
     almacen.leer.mockResolvedValue({ estado: 'hay', boveda: bovedaDe(TITULAR) });
     const fuente = redCon(800_100);

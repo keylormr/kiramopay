@@ -37,8 +37,10 @@ export type MotivoRechazoMovimiento =
   | 'sin-monedas'
   /** Despues de la comision no queda lo suficiente para una salida valida. */
   | 'no-alcanza'
-  /** La comision se comeria mas de la mitad. */
+  /** La comision pasaria de FRACCION_MAXIMA_DE_COMISION de lo que se mueve. */
   | 'comision-excesiva'
+  /** La tasa que dio la red no es un numero o pasa de TASA_MAXIMA_SATS_VB. */
+  | 'tasa-fuera-de-rango'
   /** Las 12 palabras abiertas no son las del titular de esta boveda. */
   | 'otras-palabras';
 
@@ -53,6 +55,22 @@ export class RechazoMovimiento extends Error {
  * taproot y 294 para segwit v0; se deja margen.
  */
 export const MINIMO_A_MOVER_SATS = 1000;
+
+/**
+ * Techo de la tasa, en sats por byte virtual. La tasa la da un servidor ajeno
+ * (Esplora); una respuesta absurda, por error o a proposito, no puede
+ * regalarle la boveda a los mineros. Es una decision de producto: diez veces
+ * menos que el maxfeerate por defecto de sendrawtransaction en Bitcoin Core
+ * (0,10 BTC/kvB = 10.000 sat/vB), que es su freno para comisiones absurdas.
+ */
+export const TASA_MAXIMA_SATS_VB = 1_000;
+
+/**
+ * La comision no puede pasar de esta fraccion de lo que se mueve. Con una
+ * moneda chica y la red cara se rechaza y se espera a que baje: el plazo se
+ * mide en meses y los avisos empiezan a la mitad.
+ */
+export const FRACCION_MAXIMA_DE_COMISION = 0.1;
 
 const TXID = /^[0-9a-f]{64}$/;
 
@@ -117,7 +135,11 @@ export function prepararMovimiento(opciones: {
       throw new Error('moneda invalida');
     }
   }
-  const tasa = Math.max(1, Math.ceil(opciones.tasaSatsVb));
+  const pedida = opciones.tasaSatsVb;
+  if (typeof pedida !== 'number' || !Number.isFinite(pedida) || pedida < 0 || pedida > TASA_MAXIMA_SATS_VB) {
+    throw new RechazoMovimiento('tasa-fuera-de-rango');
+  }
+  const tasa = Math.max(1, Math.ceil(pedida));
   const total = monedas.reduce((s, m) => s + m.sats, 0);
   const llaves = monedas.map(m => llavePrivadaDe(semilla, datos.red, m.rama, m.indice));
 
@@ -128,7 +150,7 @@ export function prepararMovimiento(opciones: {
   const comisionSats = vsize * tasa;
   const llegaSats = total - comisionSats;
   if (llegaSats < MINIMO_A_MOVER_SATS) throw new RechazoMovimiento('no-alcanza');
-  if (comisionSats * 2 > total) throw new RechazoMovimiento('comision-excesiva');
+  if (comisionSats > Math.floor(total * FRACCION_MAXIMA_DE_COMISION)) throw new RechazoMovimiento('comision-excesiva');
 
   const tx = construir(datos, llaves, monedas, destino, llegaSats);
   if (tx.vsize !== vsize) throw new Error('el tamano cambio al firmar');
