@@ -1329,6 +1329,50 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	CREATE INDEX IF NOT EXISTS idx_qr_charges_vencidos
 		ON qr_charges (expires_at) WHERE status = 'pending';
 
+	-- 090: cobro con Lightning en la billetera propia del comercio.
+	ALTER TABLE qr_charges ADD COLUMN IF NOT EXISTS paid_via VARCHAR(20);
+	ALTER TABLE qr_charges DROP CONSTRAINT IF EXISTS chk_qr_charge_paid_via;
+	ALTER TABLE qr_charges ADD  CONSTRAINT chk_qr_charge_paid_via
+		CHECK (paid_via IS NULL OR paid_via = 'lightning');
+	CREATE TABLE IF NOT EXISTS merchant_payment_methods (
+		merchant_id UUID PRIMARY KEY REFERENCES qr_merchants(id),
+		lightning_address VARCHAR(320),
+		sinpe_movil VARCHAR(8),
+		updated_by UUID NOT NULL REFERENCES users(id),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_mpm_sinpe CHECK (sinpe_movil IS NULL OR sinpe_movil ~ '^[5-8][0-9]{7}$')
+	);
+	CREATE TABLE IF NOT EXISTS qr_charge_lightning (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		charge_id UUID NOT NULL REFERENCES qr_charges(id),
+		merchant_id UUID NOT NULL REFERENCES qr_merchants(id),
+		created_by UUID NOT NULL REFERENCES users(id),
+		lightning_address VARCHAR(320) NOT NULL,
+		invoice TEXT NOT NULL,
+		payment_hash CHAR(64) NOT NULL UNIQUE,
+		amount_msat BIGINT NOT NULL,
+		sats BIGINT NOT NULL CHECK (sats > 0),
+		fiat_amount BIGINT NOT NULL CHECK (fiat_amount > 0),
+		currency VARCHAR(10) NOT NULL,
+		btc_price NUMERIC(24,6) NOT NULL CHECK (btc_price > 0),
+		btc_usd NUMERIC(24,6) NOT NULL CHECK (btc_usd > 0),
+		usd_rate NUMERIC(18,6),
+		verify_url TEXT NOT NULL,
+		quote_expires_at TIMESTAMPTZ NOT NULL,
+		invoice_expires_at TIMESTAMPTZ NOT NULL,
+		status VARCHAR(20) NOT NULL DEFAULT 'pending',
+		preimage CHAR(64),
+		paid_at TIMESTAMPTZ,
+		checked_at TIMESTAMPTZ,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		CONSTRAINT chk_qcl_status CHECK (status IN ('pending','paid','expired')),
+		CONSTRAINT chk_qcl_pagada CHECK ((status = 'paid') = (preimage IS NOT NULL AND paid_at IS NOT NULL)),
+		CONSTRAINT chk_qcl_msat CHECK (amount_msat = sats * 1000)
+	);
+	CREATE INDEX IF NOT EXISTS idx_qcl_cobro ON qr_charge_lightning (charge_id, created_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_qcl_pendientes ON qr_charge_lightning (invoice_expires_at) WHERE status = 'pending';
+	CREATE INDEX IF NOT EXISTS idx_qcl_pagadas ON qr_charge_lightning (merchant_id, paid_at) WHERE status = 'paid';
+
 	CREATE TABLE IF NOT EXISTS qr_payments (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		qr_code_id UUID NOT NULL REFERENCES qr_payment_codes(id) ON DELETE CASCADE,
@@ -1856,6 +1900,7 @@ func truncateAll(ctx context.Context, pool *pgxpool.Pool) error {
 		"split_shares", "split_groups",
 		"payouts",
 		"merchant_staff", "merchant_catalog_items", "merchant_locations",
+		"qr_charge_lightning", "merchant_payment_methods",
 		"qr_payments", "qr_charges", "qr_payment_codes", "qr_merchants",
 		"payment_history", "service_providers",
 		"food_order_items", "food_orders", "ride_requests",

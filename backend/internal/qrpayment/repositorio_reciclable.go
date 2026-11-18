@@ -168,13 +168,13 @@ func (r *Repository) RevocarCodigo(ctx context.Context, id, creatorID string) er
 const chargeCols = `id, qr_code_id, COALESCE(merchant_id::text, ''), COALESCE(location_id::text, ''),
 	created_by, amount, currency, note, channel, status, qr_data, expires_at,
 	COALESCE(paid_by::text, ''), COALESCE(paid_tx_id, ''), paid_at,
-	COALESCE(superseded_by::text, ''), created_at`
+	COALESCE(superseded_by::text, ''), created_at, COALESCE(paid_via, '')`
 
 func scanCharge(row pgx.Row) (*QRCharge, error) {
 	var c QRCharge
 	if err := row.Scan(&c.ID, &c.QRCodeID, &c.MerchantID, &c.LocationID, &c.CreatedBy,
 		&c.Amount, &c.Currency, &c.Note, &c.Channel, &c.Status, &c.QRData, &c.ExpiresAt,
-		&c.PaidBy, &c.PaidTxID, &c.PaidAt, &c.SupersededBy, &c.CreatedAt); err != nil {
+		&c.PaidBy, &c.PaidTxID, &c.PaidAt, &c.SupersededBy, &c.CreatedAt, &c.PaidVia); err != nil {
 		return nil, err
 	}
 	return &c, nil

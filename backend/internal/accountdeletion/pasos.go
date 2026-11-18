@@ -519,6 +519,9 @@ var pasosDelDiaTreinta = []paso{
 	// El comercio ya lo cerro cerrarComercios, antes de estos pasos.
 	{"desactivar sedes", `UPDATE merchant_locations SET active = false
 		WHERE active AND merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
+	{"borrar medios de cobro", `DELETE FROM merchant_payment_methods
+		WHERE updated_by = $1::uuid
+		   OR merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
 	{"desactivar catalogo", `UPDATE merchant_catalog_items SET active = false
 		WHERE active AND merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
 	{"cerrar cuentas del libro", `UPDATE ledger_accounts SET closed_at = COALESCE(closed_at, NOW())
@@ -701,6 +704,10 @@ var pasosDeLaDesasociacion = []paso{
 	{"desasociar solicitudes web", `UPDATE account_deletion_requests
 		SET contact_hash = 'dissociated:' || id::text, verification_hash = NULL
 		WHERE user_id = $1::uuid`},
+	// La direccion Lightning puede llevar el nombre de la persona
+	// (maria@breez.tips). La factura, los sats y el precio quedan.
+	{"desasociar facturas lightning", `UPDATE qr_charge_lightning SET lightning_address = ''
+		WHERE merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
 	{"desasociar sedes", `UPDATE merchant_locations SET name = 'Sede', address = ''
 		WHERE merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)`},
 	// La constancia de la respuesta escrita queda (fechas y via); la nota de

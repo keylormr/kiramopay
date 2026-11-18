@@ -226,6 +226,20 @@ func (s *Service) GetCharge(ctx context.Context, userID, chargeID string) (*QRCh
 	if err := s.puedeAdministrarCobro(ctx, userID, cobro); err != nil {
 		return nil, err
 	}
+	// Con una factura Lightning pendiente, esta misma consulta le pregunta al
+	// proveedor si ya se pago: la pantalla del cajero no cambia su forma de
+	// esperar. La factura que se muestra es la mas reciente, o la pagada.
+	if cobro.MerchantID != "" && s.ln != nil {
+		s.revisarLightningDelCobro(ctx, cobro.ID)
+		if actual, err := s.repo.GetCharge(ctx, chargeID); err == nil {
+			cobro = actual
+		}
+		f, err := s.repo.UltimaFacturaLightning(ctx, cobro.ID)
+		if err != nil {
+			return nil, err
+		}
+		cobro.Lightning = f
+	}
 	return cobro, nil
 }
 

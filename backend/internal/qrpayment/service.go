@@ -89,6 +89,9 @@ type Options struct {
 	// es el tope (5 si no se dice). nil: sin tope, como en las pruebas.
 	Lockout             middleware.LockoutStore
 	MaxIntentosDeCierre int
+	// Lightning cablea el cobro con Lightning en la billetera propia del
+	// comercio (lightning.go). nil: apagado.
+	Lightning *OpcionesLightning
 }
 
 type Service struct {
@@ -100,6 +103,7 @@ type Service struct {
 	totp                TOTPChecker
 	lockout             middleware.LockoutStore
 	maxIntentosDeCierre int
+	ln                  *OpcionesLightning
 }
 
 func NewService(repo *Repository, tx *transaction.Service, users userLookup, opts *Options) *Service {
@@ -109,6 +113,7 @@ func NewService(repo *Repository, tx *transaction.Service, users userLookup, opt
 		s.auditLogger = opts.AuditLogger
 		s.totp = opts.TOTP
 		s.lockout = opts.Lockout
+		s.ln = opts.Lightning
 		if opts.MaxIntentosDeCierre > 0 {
 			s.maxIntentosDeCierre = opts.MaxIntentosDeCierre
 		}

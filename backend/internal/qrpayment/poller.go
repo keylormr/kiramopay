@@ -10,6 +10,9 @@ import (
 	"github.com/kiramopay/backend/internal/cluster"
 )
 
+// loteLightning: facturas Lightning consultadas por pasada del barrido.
+const loteLightning = 25
+
 // Poller marca vencidos los cobros pendientes cuyo plazo paso.
 //
 // Es COSMETICO para la correctitud, y conviene decirlo para que nadie lo trate
@@ -55,6 +58,17 @@ func (p *Poller) Run(ctx context.Context) {
 
 func (p *Poller) tick(ctx context.Context) {
 	ran, err := cluster.TryRunExclusive(ctx, p.pool, cluster.KeyQRCharges, func(c context.Context) error {
+		// Primero las facturas Lightning: una pagada en el ultimo minuto marca
+		// su cobro pagado antes de que el barrido de abajo lo de por vencido.
+		// Un fallo aqui no detiene el barrido de los cobros.
+		// Cada consulta espera al proveedor hasta 8 s: el lote es chico para
+		// que el barrido no retenga el lock de cluster por minutos.
+		revisadas, vencidas, lerr := p.svc.RevisarLightningPendientes(c, loteLightning)
+		if lerr != nil && p.logger != nil {
+			p.logger.Error("facturas lightning: barrido fallido", "error", lerr)
+		} else if (revisadas > 0 || vencidas > 0) && p.logger != nil {
+			p.logger.Info("facturas lightning revisadas", "revisadas", revisadas, "vencidas", vencidas)
+		}
 		n, rerr := p.svc.repo.ExpirarCobrosVencidos(c, p.batch)
 		if n > 0 && p.logger != nil {
 			p.logger.Info("cobros QR vencidos", "count", n)

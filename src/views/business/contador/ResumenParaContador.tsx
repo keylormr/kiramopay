@@ -4,7 +4,9 @@ import { Icons } from '@/components/Icons';
 import { Button } from '@/components/ui';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { rellenar } from '@/utils/planes';
-import { formatMoney, type CurrencyCode } from '@/utils/money';
+import { formatMoney, MONEY_LOCALE, type CurrencyCode } from '@/utils/money';
+import { getApiLayer } from '@/api';
+import type { VentaLightning } from '@/api/repositories/qrpayment.repository';
 import { entregarArchivo, type EstadoExport } from '@/utils/entregarArchivo';
 import { leerEstadoDeCuenta, leerIngresos, type Lectura } from './lector';
 import { mesesDe, monedasDe, sumar } from './ingresos';
@@ -13,9 +15,15 @@ import { construirCsv } from './csvSalida';
 import { construirContenidoPdf } from './pdfContenido';
 import { construirPdf } from './pdfSalida';
 import { ErrorDeLectura, type CodigoError, type Ingreso } from './tipos';
+import { cobrosLightningDelMes, sumarLightning, type CobroLightningDelMes } from './lightning';
 
 interface Props {
   onClose: () => void;
+  /**
+   * El comercio cuyos cobros por Lightning entran al resumen. Sin el (un
+   * cajero, o fuera del negocio) el resumen es solo el del banco.
+   */
+  merchantId?: string;
 }
 
 type Formato = 'csv' | 'pdf';
@@ -50,7 +58,7 @@ const CAMPO =
  * El archivo vive solo en el estado de este componente: no se envia al
  * servidor ni se guarda en el almacenamiento del navegador.
  */
-export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
+export const ResumenParaContador: React.FC<Props> = ({ onClose, merchantId }) => {
   const { t, language } = useLanguage();
   const [fase, setFase] = useState<Fase>('inicio');
   const [codigoError, setCodigoError] = useState<CodigoError>('ILEGIBLE');
@@ -72,6 +80,10 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
   const entrada = useRef<HTMLInputElement>(null);
   const encabezado = useRef<HTMLHeadingElement>(null);
   const primeraVez = useRef(true);
+  // Los cobros por Lightning del mes que se ve, del servidor. `lista: null` =
+  // no se pudieron traer: se dice, y no se pinta un cero en su lugar.
+  const [ventasLn, setVentasLn] = useState<{ mes: string; lista: VentaLightning[] | null } | null>(null);
+  const [intentoLn, setIntentoLn] = useState(0);
 
   useEffect(() => () => { lecturaVigente.current += 1; }, []);
 
@@ -82,6 +94,24 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
   }, [fase]);
 
   const meses = useMemo(() => mesesDe(ingresos), [ingresos]);
+
+  useEffect(() => {
+    if (fase !== 'resumen' || !merchantId || !mes) return;
+    const api = getApiLayer().qrPayments;
+    if (!api) return;
+    let cancelado = false;
+    void Promise.resolve()
+      .then(() => api.getLightningSales(merchantId, mes))
+      .then((res) => {
+        if (!cancelado) setVentasLn({ mes, lista: res.success && res.data ? res.data : null });
+      })
+      .catch(() => {
+        if (!cancelado) setVentasLn({ mes, lista: null });
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [fase, merchantId, mes, intentoLn]);
   const monedas = useMemo(() => monedasDe(ingresos), [ingresos]);
 
   const dinero = (centimos: number, codigo: string) =>
@@ -179,6 +209,20 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
   const otros = delMes.filter((x) => !x.esSinpe);
   const ventas = delMes.filter(esVenta);
   const totalVentas = sumar(ventas);
+  const lnDelMesVisto = ventasLn?.mes === mes ? ventasLn.lista : undefined;
+  // undefined mientras llegan: el archivo espera, para no salir sin ellos.
+  const cargandoLn = !!merchantId && lnDelMesVisto === undefined;
+  const errorLn = !!merchantId && lnDelMesVisto === null;
+  const lnDelMes: CobroLightningDelMes[] = lnDelMesVisto
+    ? cobrosLightningDelMes(lnDelMesVisto, moneda, t('contador_ln_sin_nota'))
+    : [];
+  const totalLn = sumarLightning(lnDelMes);
+  const cantidadVentas = ventas.length + lnDelMes.length;
+  const detalleLn = (x: CobroLightningDelMes) =>
+    rellenar(t('contador_ln_detalle'), {
+      sats: new Intl.NumberFormat(MONEY_LOCALE).format(x.sats),
+      precio: dinero(Math.round(Number(x.precioBtc) * 100), x.moneda),
+    });
 
   const alternar = (x: Ingreso) => {
     setMarcas((m) => ({ ...m, [x.id]: !esVenta(x) }));
@@ -198,10 +242,19 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
     cantidadVentas: t('contador_csv_cantidad'),
   });
 
+  const textosCsvLn = () => ({
+    medio: t('contador_csv_medio'),
+    banco: t('contador_csv_banco'),
+    sats: t('contador_csv_sats'),
+    precioBtc: t('contador_csv_precio_btc'),
+    totalLightning: t('contador_csv_total_ln'),
+    cantidadLightning: t('contador_csv_cantidad_ln'),
+  });
+
   const pdfDelMes = () =>
     construirPdf(
       construirContenidoPdf(
-        { delMes, esVenta, mes, moneda, sinSigno, omitidas, hoy: hoyLocal() },
+        { delMes, esVenta, mes, moneda, sinSigno, omitidas, hoy: hoyLocal(), lightning: lnDelMes },
         {
           titulo: t('contador_pdf_titulo'),
           moneda: t('contador_csv_moneda'),
@@ -222,14 +275,17 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
           no: t('contador_csv_no'),
           pie: t('contador_pdf_pie'),
           pagina: t('contador_pdf_pagina'),
+          lightning: { titulo: t('contador_ln_titulo'), porLightning: t('contador_ln_total') },
         },
-        { dinero, mes: etiquetaDeMes, fecha: fechaCorta },
+        { dinero, mes: etiquetaDeMes, fecha: fechaCorta, detalleLightning: detalleLn },
       ),
       language,
     );
 
   const compartir = async (como: Formato) => {
-    if (entregando.current || delMes.length === 0) return;
+    // Sin los cobros por Lightning el total saldria corto: el archivo espera a
+    // tenerlos, tanto mientras llegan como si no se pudieron traer.
+    if (entregando.current || (delMes.length === 0 && lnDelMes.length === 0) || cargandoLn || errorLn) return;
     entregando.current = true;
     setFormato(como);
     setEntrega('exportando');
@@ -237,7 +293,7 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
       const blob =
         como === 'pdf'
           ? await pdfDelMes()
-          : new Blob([construirCsv(delMes, esVenta, textosCsv())], { type: 'text/csv;charset=utf-8;' });
+          : new Blob([construirCsv(delMes, esVenta, textosCsv(), lnDelMes, textosCsvLn())], { type: 'text/csv;charset=utf-8;' });
       const sufijo = monedas.length > 1 ? `-${moneda}` : '';
       setEntrega(await entregarArchivo(blob, `KiramoPay-${t('contador_archivo')}-${mes}${sufijo}.${como}`));
     } catch {
@@ -462,11 +518,16 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
                 {t('contador_total_ventas')}
               </h2>
               <p className="mt-1 text-2xl font-black tracking-tight tabular-nums uv-text-primary">
-                {dinero(totalVentas, moneda)}
+                {dinero(totalVentas + totalLn, moneda)}
               </p>
               <p className="mt-0.5 text-sm uv-text-muted">
-                {ventas.length === 1 ? t('contador_cantidad_una') : rellenar(t('contador_cantidad_otras'), { n: String(ventas.length) })}
+                {cantidadVentas === 1 ? t('contador_cantidad_una') : rellenar(t('contador_cantidad_otras'), { n: String(cantidadVentas) })}
               </p>
+              {lnDelMes.length > 0 && (
+                <p className="mt-0.5 text-sm font-semibold uv-text-secondary tabular-nums">
+                  {rellenar(t('contador_ln_total'), { monto: dinero(totalLn, moneda) })}
+                </p>
+              )}
             </div>
 
             <p className="text-xs leading-relaxed uv-text-muted">{t('contador_aviso')}</p>
@@ -479,6 +540,30 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
                 <ul className={`uv-surface-1 rounded-2xl uv-shadow-soft px-4 ${divisor}`}>{sinpe.map(fila)}</ul>
               )}
             </div>
+
+            {lnDelMes.length > 0 && (
+              <div>
+                <h3 className="mb-1 text-xs font-semibold uv-text-muted">{t('contador_ln_titulo')}</h3>
+                <ul className={`uv-surface-1 rounded-2xl uv-shadow-soft px-4 ${divisor}`}>
+                  {lnDelMes.map((x) => (
+                    <li key={x.id} className="py-2.5">
+                      <p className="text-sm font-semibold uv-text-primary break-words">{x.descripcion}</p>
+                      <p className="mt-0.5 text-xs uv-text-muted tabular-nums">
+                        {fechaCorta(x.fecha)} · <span className="font-semibold uv-text-secondary">{dinero(x.centimos, x.moneda)}</span>
+                      </p>
+                      <p className="mt-0.5 text-xs uv-text-muted tabular-nums">{detalleLn(x)}</p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs leading-relaxed uv-text-muted">{t('contador_ln_ayuda')}</p>
+              </div>
+            )}
+            {errorLn && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--color-surface-2)] dark:bg-[var(--color-surface-2-dark)] p-4">
+                <p role="alert" className="text-sm leading-relaxed uv-text-secondary">{t('contador_ln_error')}</p>
+                <Button variant="ghost" size="sm" onClick={() => setIntentoLn((n) => n + 1)}>{t('error_retry')}</Button>
+              </div>
+            )}
 
             {otros.length > 0 && (
               <div>
@@ -522,7 +607,7 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose }) => {
                       fullWidth
                       onClick={() => void compartir(como)}
                       loading={entrega === 'exportando' && formato === como}
-                      disabled={delMes.length === 0 || entrega === 'exportando'}
+                      disabled={(delMes.length === 0 && lnDelMes.length === 0) || cargandoLn || errorLn || entrega === 'exportando'}
                       aria-label={`${t('contador_compartir')}: ${como.toUpperCase()}`}
                       leftIcon={<Icons.Share size={18} aria-hidden="true" />}
                     >

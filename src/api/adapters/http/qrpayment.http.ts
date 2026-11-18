@@ -26,6 +26,10 @@ import type {
   TotalDelDia,
   TotalesDeVentas,
   VentasPorMoneda,
+  FacturaLightning,
+  EstadoFacturaLightning,
+  MediosDeCobro,
+  VentaLightning,
 } from '../../repositories/qrpayment.repository';
 import type { PlanComercio } from '../../repositories/plans.repository';
 import type { ApiResponse, ArchivoDescargado } from '../../types';
@@ -268,6 +272,70 @@ interface ChargeDTO {
   paid_at?: string;
   superseded_by?: string;
   created_at: string;
+  paid_via?: string;
+  lightning?: FacturaLightningDTO;
+}
+
+interface FacturaLightningDTO {
+  id: string;
+  charge_id: string;
+  invoice: string;
+  payment_hash: string;
+  sats: number;
+  fiat_amount: number;
+  currency: string;
+  btc_price: string;
+  quote_expires_at: string;
+  invoice_expires_at: string;
+  status: string;
+  paid_at?: string | null;
+  created_at: string;
+}
+
+interface MediosDeCobroDTO {
+  lightning_enabled: boolean;
+  lightning_address?: string;
+  sinpe_movil?: string;
+  can_edit: boolean;
+}
+
+interface VentaLightningDTO {
+  charge_id: string;
+  note: string;
+  fiat_amount: number;
+  currency: string;
+  sats: number;
+  btc_price: string;
+  payment_hash: string;
+  paid_at: string;
+  charge_status: string;
+}
+
+export function mapFacturaLightning(d: FacturaLightningDTO): FacturaLightning {
+  return {
+    id: d.id,
+    chargeId: d.charge_id,
+    invoice: d.invoice,
+    paymentHash: d.payment_hash,
+    sats: d.sats,
+    monto: (d.fiat_amount || 0) / 100,
+    currency: d.currency,
+    precioBtc: d.btc_price,
+    cotizacionVence: d.quote_expires_at,
+    facturaVence: d.invoice_expires_at,
+    status: d.status as EstadoFacturaLightning,
+    paidAt: d.paid_at || undefined,
+    createdAt: d.created_at,
+  };
+}
+
+function mapMedios(d: MediosDeCobroDTO): MediosDeCobro {
+  return {
+    lightningHabilitado: d.lightning_enabled === true,
+    lightningAddress: d.lightning_address || undefined,
+    sinpeMovil: d.sinpe_movil || undefined,
+    puedeEditar: d.can_edit === true,
+  };
 }
 
 function mapCharge(d: ChargeDTO): QRCharge {
@@ -288,6 +356,8 @@ function mapCharge(d: ChargeDTO): QRCharge {
     paidAt: d.paid_at || undefined,
     supersededBy: d.superseded_by || undefined,
     createdAt: d.created_at,
+    paidVia: d.paid_via === 'lightning' ? 'lightning' : undefined,
+    lightning: d.lightning ? mapFacturaLightning(d.lightning) : undefined,
   };
 }
 
@@ -493,6 +563,52 @@ export class HttpQRPaymentRepository implements IQRPaymentRepository {
     const res = await this.client.del<void>(`/api/v1/qr/charges/${chargeId}`);
     if (!res.success) return falla(res, 'CANCEL_FAILED');
     return apiSuccess(undefined as void);
+  }
+
+  async createChargeLightning(chargeId: string): Promise<ApiResponse<FacturaLightning>> {
+    const res = await this.client.post<FacturaLightningDTO>(`/api/v1/qr/charges/${chargeId}/lightning`);
+    if (!res.success || !res.data) return falla(res, 'LIGHTNING_FAILED');
+    return apiSuccess(mapFacturaLightning(res.data));
+  }
+
+  async getPaymentMethods(merchantId: string): Promise<ApiResponse<MediosDeCobro>> {
+    const res = await this.client.get<MediosDeCobroDTO>(`/api/v1/qr/merchants/${merchantId}/payment-methods`);
+    if (!res.success || !res.data) return falla(res, 'PAYMENT_METHODS_FAILED');
+    return apiSuccess(mapMedios(res.data));
+  }
+
+  async updatePaymentMethods(
+    merchantId: string,
+    cambios: { lightningAddress?: string; sinpeMovil?: string },
+  ): Promise<ApiResponse<MediosDeCobro>> {
+    // Un campo que no se toca no viaja: el servidor lo deja como esta.
+    const cuerpo: { lightning_address?: string; sinpe_movil?: string } = {};
+    if (cambios.lightningAddress !== undefined) cuerpo.lightning_address = cambios.lightningAddress;
+    if (cambios.sinpeMovil !== undefined) cuerpo.sinpe_movil = cambios.sinpeMovil;
+    const res = await this.client.put<MediosDeCobroDTO>(`/api/v1/qr/merchants/${merchantId}/payment-methods`, cuerpo);
+    if (!res.success || !res.data) return falla(res, 'PAYMENT_METHODS_FAILED');
+    return apiSuccess(mapMedios(res.data));
+  }
+
+  async getLightningSales(merchantId: string, mes: string): Promise<ApiResponse<VentaLightning[]>> {
+    const tz = new Date().getTimezoneOffset();
+    const res = await this.client.get<VentaLightningDTO[]>(
+      `/api/v1/qr/merchants/${merchantId}/lightning-sales?month=${encodeURIComponent(mes)}&tz=${tz}`,
+    );
+    if (!res.success || !res.data) return falla(res, 'LIGHTNING_SALES_FAILED');
+    return apiSuccess(
+      res.data.map((d) => ({
+        chargeId: d.charge_id,
+        note: d.note ?? '',
+        monto: (d.fiat_amount || 0) / 100,
+        currency: d.currency,
+        sats: d.sats,
+        precioBtc: d.btc_price,
+        paymentHash: d.payment_hash,
+        paidAt: d.paid_at,
+        chargeStatus: d.charge_status,
+      })),
+    );
   }
 
   async listCharges(status?: QRChargeStatus): Promise<ApiResponse<QRCharge[]>> {

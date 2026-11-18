@@ -100,6 +100,15 @@ func sembrarTodo(t *testing.T, pool *pgxpool.Pool, c cuenta, otra cuenta) string
 	exec(t, pool, `INSERT INTO qr_charges (qr_code_id, merchant_id, created_by, amount, currency, note, status, qr_data, expires_at)
 		SELECT q.id, $1::uuid, $2::uuid, 100, 'CRC', 'mesa 4', 'cancelled', 'cobro-' || $1::text, NOW()
 		  FROM qr_payment_codes q WHERE q.creator_id = $2::uuid`, comercio, id)
+	// Como cobra el comercio fuera del libro, y la factura Lightning de ese cobro.
+	exec(t, pool, `INSERT INTO merchant_payment_methods (merchant_id, lightning_address, sinpe_movil, updated_by)
+		VALUES ($1::uuid, 'maria@breez.tips', '88887777', $2::uuid)`, comercio, id)
+	exec(t, pool, `INSERT INTO qr_charge_lightning (charge_id, merchant_id, created_by, lightning_address, invoice,
+	                                                payment_hash, amount_msat, sats, fiat_amount, currency, btc_price,
+	                                                btc_usd, usd_rate, verify_url, quote_expires_at, invoice_expires_at, status)
+		SELECT c.id, $1::uuid, $2::uuid, 'maria@breez.tips', 'lnbc1', repeat('ab', 32), 250000, 250, 100, 'CRC',
+		       40000000, 80000, 500, 'https://breez.tips/v', NOW(), NOW(), 'expired'
+		  FROM qr_charges c WHERE c.merchant_id = $1::uuid`, comercio, id)
 	// Un pago con nota que escribio la persona.
 	exec(t, pool, `INSERT INTO qr_payments (qr_code_id, payer_id, receiver_id, amount, status, note)
 		SELECT q.id, $1::uuid, $2::uuid, 100, 'completed', 'para el cafe de Laura'
@@ -125,14 +134,16 @@ func sembrarTransfronteriza(t *testing.T, pool *pgxpool.Pool, c cuenta) {
 // predicado dice como encontrar las filas de una persona en cada tabla de la
 // clasificacion. La mayoria tiene user_id; estas no.
 var predicado = map[string]string{
-	"users":                  "id = $1::uuid",
-	"qr_payment_codes":       "creator_id = $1::uuid",
-	"split_groups":           "creator_id = $1::uuid",
-	"escrow_agreements":      "buyer_id = $1::uuid OR seller_id = $1::uuid",
-	"cross_border_transfers": "sender_id = $1::uuid OR receiver_id = $1::uuid",
-	"qr_payments":            "payer_id = $1::uuid OR receiver_id = $1::uuid",
-	"qr_charges":             "created_by = $1::uuid",
-	"journal_postings":       "created_by = $1::uuid",
+	"users":                    "id = $1::uuid",
+	"qr_payment_codes":         "creator_id = $1::uuid",
+	"split_groups":             "creator_id = $1::uuid",
+	"escrow_agreements":        "buyer_id = $1::uuid OR seller_id = $1::uuid",
+	"cross_border_transfers":   "sender_id = $1::uuid OR receiver_id = $1::uuid",
+	"qr_payments":              "payer_id = $1::uuid OR receiver_id = $1::uuid",
+	"qr_charges":               "created_by = $1::uuid",
+	"qr_charge_lightning":      "created_by = $1::uuid OR merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)",
+	"merchant_payment_methods": "updated_by = $1::uuid OR merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid)",
+	"journal_postings":         "created_by = $1::uuid",
 }
 
 // filasDe cuenta, tabla por tabla de la clasificacion, cuantas filas son de la
@@ -977,6 +988,7 @@ func TestDesasociar_AlVencerLaConservacion(t *testing.T) {
 		"cobros":         `SELECT COUNT(*) FROM qr_charges WHERE created_by = $1::uuid AND note <> ''`,
 		"comercio":       `SELECT COUNT(*) FROM qr_merchants WHERE user_id = $1::uuid AND (cedula <> '' OR legal_name <> '' OR description <> '' OR logo_url IS NOT NULL OR name <> 'Comercio cerrado')`,
 		"sedes":          `SELECT COUNT(*) FROM merchant_locations WHERE merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid) AND address <> ''`,
+		"lightning":      `SELECT COUNT(*) FROM qr_charge_lightning WHERE merchant_id IN (SELECT id FROM qr_merchants WHERE user_id = $1::uuid) AND lightning_address <> ''`,
 	} {
 		if n := cuenta1[int](t, pool, sql, a.ID); n != 0 {
 			t.Errorf("%s: %d filas todavia identifican a la persona", nombre, n)

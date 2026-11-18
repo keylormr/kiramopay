@@ -5700,6 +5700,240 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/qr/merchants/{id}/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How the business collects outside KiramoPay (Lightning and SINPE Movil)
+         * @description Any member of the business's team can read it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The business's payment methods. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantPaymentMethods"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_METHODS_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        /**
+         * Set the business's Lightning address and SINPE Movil number (owner only)
+         * @description A missing field stays as it is; an empty one is removed. The Lightning address must be on an allowed domain and answer as a LUD-16 address.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @description user@domain of the business's own wallet. */
+                        lightning_address?: string;
+                        /** @description A Costa Rican mobile number, 8 digits. */
+                        sinpe_movil?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description The business's payment methods after the change. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MerchantPaymentMethods"];
+                    };
+                };
+                /** @description SINPE_MOVIL_INVALID or INVALID_BODY. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND (also when the caller is not the owner). */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_ADDRESS_INVALID - not a user@domain address, the domain is not allowed, or the address did not answer. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_METHODS_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_UNAVAILABLE - the server has no Lightning client. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/merchants/{id}/lightning-sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Charges paid by Lightning in a calendar month (owner and manager) */
+        get: {
+            parameters: {
+                query: {
+                    month: string;
+                    /** @description Minutes west of UTC, as JavaScript's getTimezoneOffset (Costa Rica = 360). */
+                    tz?: number;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The sales, oldest first. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LightningSale"][];
+                    };
+                };
+                /** @description INVALID_MONTH */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_NOT_FOUND */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description MERCHANT_CLOSED — the merchant was closed and the caller is not its owner (the owner can still read its sales). */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_SALES_FAILED */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/qr/charges": {
         parameters: {
             query?: never;
@@ -5788,7 +6022,50 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Read a charge (the counter polls it)
+         * @description While the charge has a pending Lightning invoice, this same read asks the provider's verify URL (LUD-21) whether it was paid, at most once every few seconds. A charge is only marked paid by Lightning when the verify URL returns a preimage whose SHA-256 is the invoice's payment hash.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The charge, with its latest Lightning invoice if there is one. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["QRCharge"];
+                    };
+                };
+                /** @description QR_INVALIDO - the charge does not exist or the caller cannot manage it. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description PAYMENT_FAILED - the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
         put?: never;
         post?: never;
         /** Cancel a pending charge */
@@ -5839,6 +6116,101 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/qr/charges/{id}/lightning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get the Lightning invoice of a pending business charge
+         * @description Quotes the charge in sats with the server's own price (BTC/USD feed and, for colones, the BCCR rate), asks the business's Lightning address (LUD-16/LUD-06) for an invoice of exactly that amount and returns it. The bitcoin goes to the business's own wallet: the server never receives, holds or moves it. While a quote is still valid, the same invoice is returned again. The quote lasts 10 minutes.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The invoice to show. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ChargeLightningInvoice"];
+                    };
+                };
+                /** @description QR_INVALIDO - the charge does not exist or the caller cannot manage it. */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_NO_ADDRESS (the business has not linked its wallet's address), MERCHANT_CLOSED, or the charge is no longer pending: COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO. */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_AMOUNT_OUT_OF_RANGE - the address does not accept that amount. */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_FAILED - the server failed; the detail stays in the log. */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_PROVIDER_FAILED - the address's server did not answer, or answered an invoice for another amount or without a verify URL. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+                /** @description LIGHTNING_UNAVAILABLE (waiting for COBRO_LIGHTNING in production, or not a business charge), PRICE_STALE or PRICE_UNAVAILABLE. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -13134,6 +13506,99 @@ export interface components {
                 fully_backed?: boolean;
                 ratio_pct?: number;
             }[];
+        };
+        QRCharge: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            qr_code_id: string;
+            merchant_id?: string;
+            location_id?: string;
+            created_by: string;
+            /**
+             * Format: int64
+             * @description Minor units.
+             */
+            amount: number;
+            currency: string;
+            note?: string;
+            /** @enum {string} */
+            channel: "counter" | "link";
+            /** @enum {string} */
+            status: "pending" | "paid" | "cancelled" | "expired" | "superseded";
+            qr_data: string;
+            /** Format: date-time */
+            expires_at: string;
+            paid_by?: string;
+            paid_tx_id?: string;
+            /** Format: date-time */
+            paid_at?: string | null;
+            superseded_by?: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * @description Present when the charge was paid outside KiramoPay.
+             * @enum {string}
+             */
+            paid_via?: "lightning";
+            lightning?: components["schemas"]["ChargeLightningInvoice"];
+        };
+        ChargeLightningInvoice: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            charge_id: string;
+            /** @description BOLT 11 invoice in lower case. */
+            invoice: string;
+            /** @description 64 hex characters. */
+            payment_hash: string;
+            /** Format: int64 */
+            sats: number;
+            /**
+             * Format: int64
+             * @description The charge's amount in minor units.
+             */
+            fiat_amount: number;
+            currency: string;
+            /** @description Price of one bitcoin in the charge's currency as a decimal. */
+            btc_price: string;
+            /** Format: date-time */
+            quote_expires_at: string;
+            /** Format: date-time */
+            invoice_expires_at: string;
+            /** @enum {string} */
+            status: "pending" | "paid" | "expired";
+            /** Format: date-time */
+            paid_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MerchantPaymentMethods: {
+            /** @description The flag lets this business collect with Lightning. */
+            lightning_enabled: boolean;
+            lightning_address?: string;
+            sinpe_movil?: string;
+            /** @description The caller is the owner. */
+            can_edit: boolean;
+        };
+        LightningSale: {
+            /** Format: uuid */
+            charge_id: string;
+            note: string;
+            /**
+             * Format: int64
+             * @description The sale's price in minor units.
+             */
+            fiat_amount: number;
+            currency: string;
+            /** Format: int64 */
+            sats: number;
+            /** @description Price of one bitcoin in the sale's currency when it was quoted. */
+            btc_price: string;
+            payment_hash: string;
+            /** Format: date-time */
+            paid_at: string;
+            charge_status: string;
         };
     };
     responses: {

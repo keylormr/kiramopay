@@ -393,7 +393,13 @@ export const BusinessReportsView: React.FC<Props> = ({ merchant }) => {
           </span>
           <Icons.ChevronRight size={18} className="shrink-0 uv-text-muted" aria-hidden="true" />
         </button>
-        {contadorAbierto && <ResumenParaContador onClose={() => setContadorAbierto(false)} />}
+        {contadorAbierto && (
+          <ResumenParaContador
+            onClose={() => setContadorAbierto(false)}
+            // Las ventas por Lightning las leen el dueno y el encargado.
+            merchantId={merchant.role === 'owner' || merchant.role === 'manager' ? merchant.id : undefined}
+          />
+        )}
 
         {empty ? (
           <div className="flex flex-col items-center py-10 text-center">

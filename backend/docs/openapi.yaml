@@ -3905,6 +3905,178 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/v1/qr/merchants/{id}/payment-methods:
+    get:
+      tags: [QR Payments]
+      summary: How the business collects outside KiramoPay (Lightning and SINPE Movil)
+      description: Any member of the business's team can read it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The business's payment methods.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantPaymentMethods'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_METHODS_FAILED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [QR Payments]
+      summary: Set the business's Lightning address and SINPE Movil number (owner only)
+      description: >-
+        A missing field stays as it is; an empty one is removed. The Lightning
+        address must be on an allowed domain and answer as a LUD-16 address.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lightning_address:
+                  type: string
+                  description: user@domain of the business's own wallet.
+                sinpe_movil:
+                  type: string
+                  description: A Costa Rican mobile number, 8 digits.
+      responses:
+        '200':
+          description: The business's payment methods after the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantPaymentMethods'
+        '400':
+          description: SINPE_MOVIL_INVALID or INVALID_BODY.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND (also when the caller is not the owner).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: >-
+            LIGHTNING_ADDRESS_INVALID - not a user@domain address, the domain is
+            not allowed, or the address did not answer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_METHODS_FAILED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: LIGHTNING_UNAVAILABLE - the server has no Lightning client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/merchants/{id}/lightning-sales:
+    get:
+      tags: [QR Payments]
+      summary: Charges paid by Lightning in a calendar month (owner and manager)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            example: '2026-11'
+        - name: tz
+          in: query
+          required: false
+          description: Minutes west of UTC, as JavaScript's getTimezoneOffset (Costa Rica = 360).
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: The sales, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LightningSale'
+        '400':
+          description: INVALID_MONTH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MERCHANT_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: MERCHANT_CLOSED — the merchant was closed and the caller is not its owner (the owner can still read its sales).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: LIGHTNING_SALES_FAILED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/v1/qr/charges:
     post:
       tags: [QR Payments]
@@ -3967,6 +4139,42 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /api/v1/qr/charges/{id}:
+    get:
+      tags: [QR Payments]
+      summary: Read a charge (the counter polls it)
+      description: >-
+        While the charge has a pending Lightning invoice, this same read asks the
+        provider's verify URL (LUD-21) whether it was paid, at most once every few
+        seconds. A charge is only marked paid by Lightning when the verify URL
+        returns a preimage whose SHA-256 is the invoice's payment hash.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The charge, with its latest Lightning invoice if there is one.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QRCharge'
+        '400':
+          description: QR_INVALIDO - the charge does not exist or the caller cannot manage it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: PAYMENT_FAILED - the server failed; the detail stays in the log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags: [QR Payments]
       summary: Cancel a pending charge
@@ -3998,6 +4206,77 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: PAYMENT_FAILED — the server failed; the detail stays in the log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/qr/charges/{id}/lightning:
+    post:
+      tags: [QR Payments]
+      summary: Get the Lightning invoice of a pending business charge
+      description: >-
+        Quotes the charge in sats with the server's own price (BTC/USD feed and,
+        for colones, the BCCR rate), asks the business's Lightning address
+        (LUD-16/LUD-06) for an invoice of exactly that amount and returns it. The
+        bitcoin goes to the business's own wallet: the server never receives,
+        holds or moves it. While a quote is still valid, the same invoice is
+        returned again. The quote lasts 10 minutes.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The invoice to show.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeLightningInvoice'
+        '400':
+          description: QR_INVALIDO - the charge does not exist or the caller cannot manage it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >-
+            LIGHTNING_NO_ADDRESS (the business has not linked its wallet's
+            address), MERCHANT_CLOSED, or the charge is no longer pending:
+            COBRO_YA_PAGADO, COBRO_CANCELADO, COBRO_VENCIDO or COBRO_REEMPLAZADO.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: LIGHTNING_AMOUNT_OUT_OF_RANGE - the address does not accept that amount.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: LIGHTNING_FAILED - the server failed; the detail stays in the log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: >-
+            LIGHTNING_PROVIDER_FAILED - the address's server did not answer, or
+            answered an invoice for another amount or without a verify URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: >-
+            LIGHTNING_UNAVAILABLE (waiting for COBRO_LIGHTNING in production, or
+            not a business charge), PRICE_STALE or PRICE_UNAVAILABLE.
           content:
             application/json:
               schema:
@@ -9096,3 +9375,77 @@ components:
                 type: boolean
                 description: The reserve covers everything owed to users.
               ratio_pct: { type: number }
+
+    QRCharge:
+      type: object
+      required: [id, qr_code_id, created_by, amount, currency, channel, status, qr_data, expires_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        qr_code_id: { type: string, format: uuid }
+        merchant_id: { type: string }
+        location_id: { type: string }
+        created_by: { type: string }
+        amount: { type: integer, format: int64, description: Minor units. }
+        currency: { type: string }
+        note: { type: string }
+        channel: { type: string, enum: [counter, link] }
+        status: { type: string, enum: [pending, paid, cancelled, expired, superseded] }
+        qr_data: { type: string }
+        expires_at: { type: string, format: date-time }
+        paid_by: { type: string }
+        paid_tx_id: { type: string }
+        paid_at: { type: string, format: date-time, nullable: true }
+        superseded_by: { type: string }
+        created_at: { type: string, format: date-time }
+        paid_via:
+          type: string
+          enum: [lightning]
+          description: Present when the charge was paid outside KiramoPay.
+        lightning:
+          $ref: '#/components/schemas/ChargeLightningInvoice'
+
+    ChargeLightningInvoice:
+      type: object
+      required: [id, charge_id, invoice, payment_hash, sats, fiat_amount, currency, btc_price,
+                 quote_expires_at, invoice_expires_at, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        charge_id: { type: string, format: uuid }
+        invoice: { type: string, description: BOLT 11 invoice in lower case. }
+        payment_hash: { type: string, description: 64 hex characters. }
+        sats: { type: integer, format: int64 }
+        fiat_amount: { type: integer, format: int64, description: The charge's amount in minor units. }
+        currency: { type: string }
+        btc_price: { type: string, description: Price of one bitcoin in the charge's currency as a decimal. }
+        quote_expires_at: { type: string, format: date-time }
+        invoice_expires_at: { type: string, format: date-time }
+        status: { type: string, enum: [pending, paid, expired] }
+        paid_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    MerchantPaymentMethods:
+      type: object
+      required: [lightning_enabled, can_edit]
+      properties:
+        lightning_enabled:
+          type: boolean
+          description: The flag lets this business collect with Lightning.
+        lightning_address: { type: string }
+        sinpe_movil: { type: string }
+        can_edit:
+          type: boolean
+          description: The caller is the owner.
+
+    LightningSale:
+      type: object
+      required: [charge_id, note, fiat_amount, currency, sats, btc_price, payment_hash, paid_at, charge_status]
+      properties:
+        charge_id: { type: string, format: uuid }
+        note: { type: string }
+        fiat_amount: { type: integer, format: int64, description: The sale's price in minor units. }
+        currency: { type: string }
+        sats: { type: integer, format: int64 }
+        btc_price: { type: string, description: Price of one bitcoin in the sale's currency when it was quoted. }
+        payment_hash: { type: string }
+        paid_at: { type: string, format: date-time }
+        charge_status: { type: string }
