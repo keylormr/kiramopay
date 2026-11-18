@@ -233,7 +233,10 @@ func TestLightning_EnEsperaSoloParaCuentasDemo(t *testing.T) {
 		t.Fatalf("en espera se pidio una factura")
 	}
 
-	if _, err := e.pool.Exec(ctx, `UPDATE users SET demo_login = true WHERE id = $1`, e.owner); err != nil {
+	// El dueno sembrado es administrador, y el CHECK chk_users_demo_login_no_admin
+	// no deja que un administrador entre sin contrasena: para volverlo cuenta
+	// demo deja de serlo, como las cuentas demo reales.
+	if _, err := e.pool.Exec(ctx, `UPDATE users SET demo_login = true, role = 'user' WHERE id = $1`, e.owner); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID); err != nil {
