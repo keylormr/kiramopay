@@ -2397,6 +2397,11 @@ const es: TranslationKeys = {
   bp_deposito_comision: 'Para sumarlos hay que pagar {comision} sats de comisión de la red, más de lo que la billetera paga sin preguntarte.',
   bp_deposito_sumar: 'Sumarlos pagando {comision} sats',
   bp_deposito_chico: 'Es tan poco que la comisión de la red se lo llevaría entero, así que no se puede sumar.',
+  bp_disponibilidad_error: 'No pudimos comprobar si Mi billetera está disponible. Inténtalo de nuevo.',
+  bp_resumen_comision_estimada: 'Comisión de la red, estimada',
+  bp_comision_estimada_aviso: 'La comisión es un estimado. La que cobre la red puede ser distinta.',
+  bp_pantalla_titulo: 'No podemos proteger esta pantalla',
+  bp_pantalla_cuerpo: 'Tus palabras solo se muestran o se escriben aquí cuando la app puede bloquear las capturas de pantalla, y esta versión no puede. Actualiza KiramoPay e inténtalo de nuevo.',
 };
 
 export default es;

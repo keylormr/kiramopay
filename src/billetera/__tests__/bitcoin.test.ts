@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PrepareSendPaymentResponse } from '@breeztech/breez-sdk-spark/web';
-import { bitcoinConfigurado, carpetaDeDatos, comisionDe, depositoSinSumar, opcionesDeEnvio } from '../bitcoin';
+import { bitcoinConfigurado, carpetaDeDatos, comisionDe, comisionEsEstimada, depositoSinSumar, opcionesDeEnvio } from '../bitcoin';
 
 function preparado(paymentMethod: unknown): PrepareSendPaymentResponse {
   return { paymentMethod, amount: 1000n, feePolicy: 'feesExcluded' } as PrepareSendPaymentResponse;
@@ -22,6 +22,14 @@ describe('bitcoin en la billetera propia', () => {
     const r = preparado({ type: 'bitcoinAddress', address: {}, feeQuote: cotizacion });
     expect(comisionDe(r)).toBe(560);
     expect(opcionesDeEnvio(r)).toEqual({ type: 'bitcoinAddress', confirmationSpeed: 'medium' });
+  });
+
+  it('la comision de la red de bitcoin es estimada solo cuando la cotizacion lo dice', () => {
+    expect(comisionEsEstimada(preparado({ type: 'bitcoinAddress', address: {}, feeQuote: cotizacion }))).toBe(false);
+    expect(comisionEsEstimada(preparado({ type: 'bitcoinAddress', address: {}, feeQuote: { ...cotizacion, isEstimate: true } }))).toBe(true);
+    // Las otras vias dan una comision firme: no traen la bandera.
+    expect(comisionEsEstimada(preparado({ type: 'bolt11Invoice', invoiceDetails: {}, lightningFeeSats: 7 }))).toBe(false);
+    expect(comisionEsEstimada(preparado({ type: 'sparkAddress', address: 'sp1', fee: 3n }))).toBe(false);
   });
 
   it('una factura de alguien en Spark sale por Spark con su comision', () => {

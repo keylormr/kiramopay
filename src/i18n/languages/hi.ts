@@ -2385,6 +2385,11 @@ const hi: TranslationKeys = {
   bp_deposito_comision: 'इन्हें जोड़ने के लिए {comision} sats का नेटवर्क शुल्क लगेगा, जो वॉलेट बिना पूछे चुकाई जाने वाली सीमा से ज़्यादा है।',
   bp_deposito_sumar: '{comision} sats चुकाकर जोड़ें',
   bp_deposito_chico: 'रकम इतनी कम है कि नेटवर्क शुल्क में पूरी चली जाएगी, इसलिए जोड़ी नहीं जा सकती।',
+  bp_disponibilidad_error: 'हम यह जाँच नहीं पाए कि मेरा वॉलेट उपलब्ध है या नहीं। फिर से कोशिश करें।',
+  bp_resumen_comision_estimada: 'नेटवर्क शुल्क, अनुमानित',
+  bp_comision_estimada_aviso: 'यह शुल्क एक अनुमान है। नेटवर्क जो वास्तव में लेगा वह अलग हो सकता है।',
+  bp_pantalla_titulo: 'हम इस स्क्रीन को सुरक्षित नहीं कर सकते',
+  bp_pantalla_cuerpo: 'आपके शब्द यहाँ तभी दिखाए या लिखे जाते हैं जब ऐप स्क्रीनशॉट रोक सके, और यह संस्करण ऐसा नहीं कर सकता। KiramoPay अपडेट करें और फिर कोशिश करें।',
 };
 
 export default hi;

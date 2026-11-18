@@ -2393,6 +2393,11 @@ const en: TranslationKeys = {
   bp_deposito_comision: 'Adding them costs {comision} sats in network fees, more than the wallet pays without asking you.',
   bp_deposito_sumar: 'Add them for {comision} sats',
   bp_deposito_chico: 'It\'s so little that the network fee would take all of it, so it can\'t be added.',
+  bp_disponibilidad_error: 'We couldn\'t check whether My wallet is available. Try again.',
+  bp_resumen_comision_estimada: 'Network fee, estimated',
+  bp_comision_estimada_aviso: 'The fee is an estimate. What the network charges may be different.',
+  bp_pantalla_titulo: 'We can\'t protect this screen',
+  bp_pantalla_cuerpo: 'Your words are only shown or typed here when the app can block screenshots, and this version can\'t. Update KiramoPay and try again.',
 };
 
 export default en;

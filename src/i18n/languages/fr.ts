@@ -2394,6 +2394,11 @@ const fr: TranslationKeys = {
   bp_deposito_comision: 'Les ajouter coûte {comision} sats de frais de réseau, plus que ce que le portefeuille paie sans vous demander.',
   bp_deposito_sumar: 'Les ajouter pour {comision} sats',
   bp_deposito_chico: 'C\'est si peu que les frais du réseau prendraient tout : impossible de l\'ajouter.',
+  bp_disponibilidad_error: 'Impossible de vérifier si Mon portefeuille est disponible. Réessayez.',
+  bp_resumen_comision_estimada: 'Frais du réseau, estimés',
+  bp_comision_estimada_aviso: 'Les frais sont une estimation. Ceux que facture le réseau peuvent être différents.',
+  bp_pantalla_titulo: 'Nous ne pouvons pas protéger cet écran',
+  bp_pantalla_cuerpo: 'Vos mots ne s\'affichent ou ne se saisissent ici que si l\'app peut bloquer les captures d\'écran, et cette version ne le peut pas. Mettez à jour KiramoPay et réessayez.',
 };
 
 export default fr;

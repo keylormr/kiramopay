@@ -63,13 +63,43 @@ describe('la pestana de la billetera propia', () => {
     await screen.findByRole('button', { name: es.crypto_my_portfolio }, ESPERA);
     await waitFor(() => expect(mocks.api.crypto.getAvailability).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: es.bp_tab })).toBeNull();
+    // Apagada es una respuesta del servidor: no se confunde con un fallo.
+    expect(screen.queryByText(es.bp_disponibilidad_error)).toBeNull();
   });
 
-  it('no aparece si no se pudo preguntar', async () => {
+  it('si no se pudo preguntar, no es una billetera apagada: avisa y deja reintentar', async () => {
     mocks.api.crypto.getAvailability.mockRejectedValue(new Error('sin red'));
     montar();
-    await screen.findByRole('button', { name: es.crypto_my_portfolio }, ESPERA);
-    await waitFor(() => expect(mocks.api.crypto.getAvailability).toHaveBeenCalled());
+    expect(await screen.findByText(es.bp_disponibilidad_error, undefined, ESPERA)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: es.error_retry })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: es.bp_tab })).toBeNull();
+  });
+
+  it('un 500 del servidor tampoco se toma por apagada', async () => {
+    mocks.api.crypto.getAvailability.mockResolvedValue({ success: false, error: { code: 'FETCH_FAILED', message: 'HTTP 500' } });
+    montar();
+    expect(await screen.findByText(es.bp_disponibilidad_error, undefined, ESPERA)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: es.bp_tab })).toBeNull();
+  });
+
+  it('al reintentar y contestar el servidor, se va el aviso y aparece la pestana', async () => {
+    mocks.api.crypto.getAvailability
+      .mockResolvedValueOnce({ success: false, error: { code: 'FETCH_FAILED', message: 'HTTP 500' } })
+      .mockResolvedValue(respuesta(true));
+    montar();
+    await userEvent.click(await screen.findByRole('button', { name: es.error_retry }, ESPERA));
+    expect(await screen.findByRole('button', { name: es.bp_tab }, ESPERA)).toBeInTheDocument();
+    expect(screen.queryByText(es.bp_disponibilidad_error)).toBeNull();
+    expect(mocks.api.crypto.getAvailability).toHaveBeenCalledTimes(2);
+  });
+
+  it('al reintentar y contestar que esta apagada, el aviso se va y la pestana no aparece', async () => {
+    mocks.api.crypto.getAvailability
+      .mockRejectedValueOnce(new Error('sin red'))
+      .mockResolvedValue(respuesta(false));
+    montar();
+    await userEvent.click(await screen.findByRole('button', { name: es.error_retry }, ESPERA));
+    await waitFor(() => expect(screen.queryByText(es.bp_disponibilidad_error)).toBeNull());
     expect(screen.queryByRole('button', { name: es.bp_tab })).toBeNull();
   });
 
@@ -79,5 +109,6 @@ describe('la pestana de la billetera propia', () => {
     await userEvent.click(await screen.findByRole('button', { name: es.bp_tab }, ESPERA));
     expect(await screen.findByText(es.bp_web_titulo, undefined, ESPERA)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: es.bp_crear })).toBeNull();
-  });
+  // Abrir la pestana baja el bloque de la billetera (viem y las llaves): en frio tarda mas que el limite de 5 s.
+  }, 20_000);
 });

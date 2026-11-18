@@ -2385,6 +2385,11 @@ const ja: TranslationKeys = {
   bp_deposito_comision: '反映するには {comision} sats のネットワーク手数料がかかり、ウォレットが確認なしで支払える上限を超えています。',
   bp_deposito_sumar: '{comision} sats を払って反映する',
   bp_deposito_chico: '金額が少なすぎて手数料ですべてなくなるため、反映できません。',
+  bp_disponibilidad_error: 'マイウォレットが利用できるか確認できませんでした。もう一度お試しください。',
+  bp_resumen_comision_estimada: 'ネットワーク手数料（概算）',
+  bp_comision_estimada_aviso: '手数料は概算です。ネットワークが実際に請求する額は異なる場合があります。',
+  bp_pantalla_titulo: 'この画面を保護できません',
+  bp_pantalla_cuerpo: '単語は、アプリがスクリーンショットを防止できる場合にのみここに表示・入力されます。このバージョンでは防止できません。KiramoPay を更新してもう一度お試しください。',
 };
 
 export default ja;

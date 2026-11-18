@@ -105,7 +105,7 @@ describe('confirmar un envio de la billetera propia', () => {
 
   it('en bitcoin, el reintento usa la misma llave de idempotencia', async () => {
     const preparado: EnvioBitcoinPreparado = {
-      destino: { tipo: 'direccion-bitcoin' }, montoSats: 1000, comisionSats: 120,
+      destino: { tipo: 'direccion-bitcoin' }, montoSats: 1000, comisionSats: 120, comisionEstimada: false,
       interno: { via: 'pago', respuesta: {} as never },
     };
     const enviar = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(undefined);
@@ -123,6 +123,34 @@ describe('confirmar un envio de la billetera propia', () => {
 
     expect(enviar).toHaveBeenCalledTimes(2);
     expect(enviar.mock.calls[1][1]).toBe(enviar.mock.calls[0][1]);
+  });
+
+  describe('la comision de la red de bitcoin', () => {
+    const direccion = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+    const revisarConComision = async (comisionEstimada: boolean) => {
+      const preparado: EnvioBitcoinPreparado = {
+        destino: { tipo: 'direccion-bitcoin' }, montoSats: 1000, comisionSats: 120, comisionEstimada,
+        interno: { via: 'pago', respuesta: {} as never },
+      };
+      montar(ACTIVO_BTC, { prepararEnvio: vi.fn().mockResolvedValue(preparado) } as unknown as BilleteraBitcoin);
+      await llenarYRevisar(direccion, '1000');
+    };
+
+    it('si es un estimado, la pantalla lo dice en la etiqueta, en el monto y en un aviso', async () => {
+      await revisarConComision(true);
+      expect(screen.getByText(es.bp_resumen_comision_estimada)).toBeInTheDocument();
+      expect(screen.queryByText(es.bp_resumen_comision)).toBeNull();
+      expect(screen.getByText(/^≈ 120 sats$/)).toBeInTheDocument();
+      expect(screen.getByRole('note')).toHaveTextContent(es.bp_comision_estimada_aviso);
+    });
+
+    it('si es firme, no se presenta como estimado', async () => {
+      await revisarConComision(false);
+      expect(screen.getByText(es.bp_resumen_comision)).toBeInTheDocument();
+      expect(screen.queryByText(es.bp_resumen_comision_estimada)).toBeNull();
+      expect(screen.getByText(/^120 sats$/)).toBeInTheDocument();
+      expect(screen.queryByRole('note')).toBeNull();
+    });
   });
 
   it('lo revisado hace mas de 90 segundos se recalcula antes de firmar', async () => {

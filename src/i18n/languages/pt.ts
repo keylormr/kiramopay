@@ -2394,6 +2394,11 @@ const pt: TranslationKeys = {
   bp_deposito_comision: 'Para somá-los é preciso pagar {comision} sats de taxa da rede, mais do que a carteira paga sem perguntar.',
   bp_deposito_sumar: 'Somar pagando {comision} sats',
   bp_deposito_chico: 'É tão pouco que a taxa da rede levaria tudo, então não dá para somar.',
+  bp_disponibilidad_error: 'Não foi possível verificar se Minha carteira está disponível. Tente de novo.',
+  bp_resumen_comision_estimada: 'Taxa da rede, estimada',
+  bp_comision_estimada_aviso: 'A taxa é uma estimativa. A que a rede cobrar pode ser diferente.',
+  bp_pantalla_titulo: 'Não conseguimos proteger esta tela',
+  bp_pantalla_cuerpo: 'Suas palavras só aparecem ou são digitadas aqui quando o app consegue bloquear capturas de tela, e esta versão não consegue. Atualize o KiramoPay e tente de novo.',
 };
 
 export default pt;

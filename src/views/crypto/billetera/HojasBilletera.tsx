@@ -404,14 +404,22 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado }: HojaEnv
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="uv-text-secondary">{preparado.tipo === 'evm' ? t('bp_resumen_comision_max') : t('bp_resumen_comision')}</dt>
+              <dt className="uv-text-secondary">
+                {preparado.tipo === 'evm'
+                  ? t('bp_resumen_comision_max')
+                  : preparado.envio.comisionEstimada ? t('bp_resumen_comision_estimada') : t('bp_resumen_comision')}
+              </dt>
               <dd className="text-right tabular-nums uv-text-primary">
                 {preparado.tipo === 'evm'
                   ? `${recortarDecimales(comisionLegible(preparado.envio), 8)} ${MONEDA_DE_LA_RED[preparado.envio.activo.red]}`
-                  : `${preparado.envio.comisionSats.toLocaleString(localeDe(language))} sats`}
+                  : `${preparado.envio.comisionEstimada ? '≈ ' : ''}${preparado.envio.comisionSats.toLocaleString(localeDe(language))} sats`}
               </dd>
             </div>
           </dl>
+          {/* Una comision estimada no es la que se cobra: se dice antes de confirmar. */}
+          {preparado.tipo === 'btc' && preparado.envio.comisionEstimada && (
+            <p role="note" className="uv-chip-warning rounded-xl p-3 text-sm">{t('bp_comision_estimada_aviso')}</p>
+          )}
           {error && <p role="alert" className={ERROR}>{error}</p>}
           {error && preparado.tipo === 'evm' && (
             <a

@@ -74,6 +74,12 @@ export interface EnvioBitcoinPreparado {
   destino: DestinoBitcoin;
   montoSats: number;
   comisionSats: number;
+  /**
+   * La comision es un estimado y no una cotizacion firme (la cotizacion de la
+   * red de bitcoin trae `isEstimate`): la que se cobre al final puede ser
+   * distinta, y la pantalla tiene que decirlo.
+   */
+  comisionEstimada: boolean;
   /** Lo que el SDK necesita para mandar exactamente lo que se mostro. */
   interno:
     | { via: 'pago'; respuesta: PrepareSendPaymentResponse }
@@ -258,7 +264,7 @@ function envolver(sdk: BreezSdk): BilleteraBitcoin {
         const payRequest = entrada.type === 'lightningAddress' ? entrada.payRequest : sinTipo(entrada);
         const respuesta = await sdk.prepareLnurlPay({ amount: BigInt(sats), payRequest });
         if (respuesta.amountSats + respuesta.feeSats > saldo) throw new RechazoBitcoin('saldo-insuficiente');
-        return { destino, montoSats: respuesta.amountSats, comisionSats: respuesta.feeSats, interno: { via: 'lnurl', respuesta } };
+        return { destino, montoSats: respuesta.amountSats, comisionSats: respuesta.feeSats, comisionEstimada: false, interno: { via: 'lnurl', respuesta } };
       }
 
       // Una factura con monto fijo manda ese monto; en lo demas lo pone la persona.
@@ -274,7 +280,7 @@ function envolver(sdk: BreezSdk): BilleteraBitcoin {
       const montoSats = comoNumero(respuesta.amount);
       const comisionSats = comisionDe(respuesta);
       if (montoSats + comisionSats > saldo) throw new RechazoBitcoin('saldo-insuficiente');
-      return { destino, montoSats, comisionSats, interno: { via: 'pago', respuesta } };
+      return { destino, montoSats, comisionSats, comisionEstimada: comisionEsEstimada(respuesta), interno: { via: 'pago', respuesta } };
     },
 
     async enviar(envio, llave) {
@@ -335,6 +341,18 @@ export function opcionesDeEnvio(r: PrepareSendPaymentResponse): SendPaymentOptio
   if (m.type === 'bitcoinAddress') return { type: 'bitcoinAddress', confirmationSpeed: 'medium' };
   if (m.type === 'bolt11Invoice') return { type: 'bolt11Invoice', preferSpark: m.sparkTransferFeeSats !== undefined };
   return undefined;
+}
+
+/**
+ * Si la comision que se mostrara es un estimado. Solo la cotizacion de la red
+ * de bitcoin lo dice (`isEstimate`): el SDK la marca cuando los sats salen de
+ * una conversion que todavia no termino y la comision sale de las tarifas
+ * actuales de la red, no de una cotizacion del proveedor. Las otras vias dan una
+ * comision firme.
+ */
+export function comisionEsEstimada(r: PrepareSendPaymentResponse): boolean {
+  const m = r.paymentMethod;
+  return m.type === 'bitcoinAddress' && m.feeQuote.isEstimate === true;
 }
 
 /** La comision que se mostrara y se cobrara, segun por donde sale el pago. */

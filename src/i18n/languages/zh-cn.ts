@@ -2385,6 +2385,11 @@ const zhCn: TranslationKeys = {
   bp_deposito_comision: '计入余额需要支付 {comision} 聪的网络手续费，超过了钱包无需询问即可支付的上限。',
   bp_deposito_sumar: '支付 {comision} 聪计入余额',
   bp_deposito_chico: '金额太小，网络手续费会全部用掉，因此无法计入。',
+  bp_disponibilidad_error: '无法确认“我的钱包”是否可用。请重试。',
+  bp_resumen_comision_estimada: '网络手续费（预估）',
+  bp_comision_estimada_aviso: '手续费为预估值，网络实际收取的金额可能不同。',
+  bp_pantalla_titulo: '无法保护此屏幕',
+  bp_pantalla_cuerpo: '只有在应用能够阻止截屏时，才会在这里显示或输入你的单词，而当前版本做不到。请更新 KiramoPay 后重试。',
 };
 
 export default zhCn;

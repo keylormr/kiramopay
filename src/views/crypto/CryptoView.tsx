@@ -198,6 +198,12 @@ export const CryptoView: React.FC = () => {
   const [selectedTx, setSelectedTx] = useState<CryptoTransaction | null>(null);
   const [activeTab, setActiveTab] = useState<'portfolio' | 'market' | 'staking' | 'propia'>('portfolio');
   const [billeteraPropia, setBilleteraPropia] = useState(false);
+  // La disponibilidad de la billetera propia tiene tres respuestas, no dos:
+  // abierta, apagada y no se pudo preguntar. Un servidor que responde 500 o no
+  // responde no es una billetera apagada (ni abierta): se dice, con reintento.
+  const [disponibilidadFallo, setDisponibilidadFallo] = useState(false);
+  const [comprobandoDisponibilidad, setComprobandoDisponibilidad] = useState(false);
+  const [reintentosDisponibilidad, setReintentosDisponibilidad] = useState(0);
 
   // Form states
   const [amount, setAmount] = useState('');
@@ -316,24 +322,36 @@ export const CryptoView: React.FC = () => {
       // Sin respuesta se ofrece igual: quien decide es el servidor, y si esta
       // en pausa lo rechaza con su mensaje.
       let abiertas = true;
-      // La billetera propia, al reves: sin respuesta no se ofrece.
+      // La billetera propia, al reves: sin respuesta no se ofrece, y la pantalla
+      // avisa que no pudo comprobarlo en vez de callar (disponibilidadFallo).
       let propia = false;
+      let fallo = false;
       try {
         const res = await getApiLayer().crypto.getAvailability();
         if (res.success && res.data) {
           abiertas = res.data.purchasesActive;
           propia = res.data.selfCustodyActive;
+        } else {
+          fallo = true;
         }
       } catch {
         // Se queda en abiertas: ver arriba.
+        fallo = true;
       }
       if (vigente) {
         setComprasAbiertas(abiertas);
         setBilleteraPropia(propia);
+        setDisponibilidadFallo(fallo);
+        setComprobandoDisponibilidad(false);
       }
     })();
     return () => { vigente = false; };
-  }, []);
+  }, [reintentosDisponibilidad]);
+
+  const reintentarDisponibilidad = () => {
+    setComprobandoDisponibilidad(true);
+    setReintentosDisponibilidad(n => n + 1);
+  };
 
   // Vender no se pausa, pero sin nada que vender tampoco se ofrece.
   const puedeVender = comprasAbiertas !== false || assetsWithBalance.length > 0;
@@ -1158,6 +1176,20 @@ export const CryptoView: React.FC = () => {
         <div role="status" className="uv-surface-2 rounded-2xl p-4 space-y-1">
           <p className="font-bold uv-text-primary text-sm">{t('crypto_pausa_titulo')}</p>
           <p className="text-sm uv-text-secondary">{t('crypto_pausa_cuerpo')}</p>
+        </div>
+      )}
+
+      {disponibilidadFallo && (
+        <div role="status" className="uv-surface-2 flex items-center gap-3 rounded-2xl p-4">
+          <p className="min-w-0 flex-1 text-sm uv-text-secondary">{t('bp_disponibilidad_error')}</p>
+          <button
+            type="button"
+            className="kp-toque kp-foco rounded-xl bg-[var(--color-primary-fill)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            disabled={comprobandoDisponibilidad}
+            onClick={reintentarDisponibilidad}
+          >
+            {t('error_retry')}
+          </button>
         </div>
       )}
 
