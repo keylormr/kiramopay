@@ -374,7 +374,7 @@ export function BilleteraPropia() {
       </section>
 
       {/* La boveda de herencia: solo si el servidor la ofrece (ver SeccionHerencia). */}
-      <SeccionHerencia semilla={semilla} btc={btc} userId={userId} />
+      <SeccionHerencia semilla={semilla} btc={btc} userId={userId} onEnviando={alEnviando} intentos={intentosRef.current} />
 
       <section className="space-y-3" aria-labelledby="bp-otras">
         <div className="flex items-center justify-between">

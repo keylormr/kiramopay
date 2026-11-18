@@ -12,14 +12,23 @@ import { rellenar } from '@/utils/planes';
 import { confirmarConHuella } from '@/billetera/boveda';
 import { RechazoBitcoin, type BilleteraBitcoin, type EnvioBitcoinPreparado } from '@/billetera/bitcoin';
 import { direccionCorta, satsABtc } from '@/billetera/formato';
-import { borrarBovedaGuardada, guardarBoveda, type BovedaGuardada } from '@/billetera/herencia/almacen';
+import { anotarMovimiento, borrarBovedaGuardada, guardarBoveda, leerBovedaGuardada, type BovedaGuardada } from '@/billetera/herencia/almacen';
 import { direccionDeLaBoveda } from '@/billetera/herencia/direcciones';
 import { TransaccionRechazada, type FuenteDeLaRed } from '@/billetera/herencia/esplora';
 import { diasAproximados, type EstadoDeLaBoveda } from '@/billetera/herencia/estado';
 import { contenidoDelKit, nombreDelKit, textoDelKit } from '@/billetera/herencia/kit';
 import { leerLlave, LlaveInvalida, mismaLlave, textoDeLaLlave, type LlaveConOrigen } from '@/billetera/herencia/llaves';
-import { cabeEnLaBoveda, PLAZO_POR_DEFECTO, PLAZOS, TOPE_POR_BOVEDA_SATS } from '@/billetera/herencia/reglas';
+import {
+  anotarLlenado,
+  cabeEnLaBoveda,
+  llenadoSinVer,
+  movimientoVigente,
+  PLAZO_POR_DEFECTO,
+  PLAZOS,
+  TOPE_POR_BOVEDA_SATS,
+} from '@/billetera/herencia/reglas';
 import { prepararMovimiento, RechazoMovimiento, type MovimientoPreparado } from '@/billetera/herencia/transacciones';
+import type { Intento, IntentosDeEnvio } from '../billetera/HojasBilletera';
 
 const BOTON_PRINCIPAL =
   'kp-toque kp-foco h-12 w-full rounded-[16px] bg-[var(--color-primary-fill)] px-6 font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50';
@@ -317,26 +326,39 @@ export function HojaKitHerencia({ abierta, onClose, boveda }: { abierta: boolean
 interface HojaLlenarProps {
   abierta: boolean;
   onClose: () => void;
+  userId: string;
   boveda: BovedaGuardada;
+  /** Lo que se leyo al abrir la hoja: una relectura no la cambia a mitad de camino. */
   estado: EstadoDeLaBoveda;
   btc: BilleteraBitcoin | null;
-  onHecho: () => void;
+  /** Lo guardado cambio (se anoto un movimiento o termino el envio): releer. */
+  onCambio: () => void;
+  /** Como en HojaEnviar: mientras dure el envio, la billetera no se cierra. */
+  onEnviando?: (enviando: boolean) => void;
+  /** Como en HojaEnviar: el intento de un envio dudoso sobrevive a la hoja. */
+  intentos?: IntentosDeEnvio;
 }
 
-export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHecho }: HojaLlenarProps) {
+/** Solo digitos: "1e3" o "0x10" no son montos. */
+const MONTO_EN_SATS = /^\d+$/;
+
+export function HojaLlenarHerencia({ abierta, onClose, userId, boveda, estado, btc, onCambio, onEnviando, intentos: intentosDeFuera }: HojaLlenarProps) {
   const { t, language } = useLanguage();
   const [monto, setMonto] = useState('');
-  const [preparado, setPreparado] = useState<{ envio: EnvioBitcoinPreparado; en: number } | null>(null);
+  const [preparado, setPreparado] = useState<{ envio: EnvioBitcoinPreparado; en: number; clave: string } | null>(null);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [hecho, setHecho] = useState(false);
+  const [ahora, setAhora] = useState(() => Date.now());
   const enviando = useRef(false);
-  // Mismo destino y monto = mismo intento: repetirlo no cobra dos veces (ver HojaEnviar).
-  const llave = useRef<string>(crypto.randomUUID());
+  const intentosPropios = useRef<IntentosDeEnvio>(new Map());
+  const intentos = intentosDeFuera ?? intentosPropios.current;
   const numero = (n: number) => n.toLocaleString(localeDe(language));
 
-  const maximo = cabeEnLaBoveda(estado.confirmadoSats, estado.pendienteSats);
+  // Lo que ya salio hacia la boveda y la red todavia no muestra cuenta para el tope.
+  const enCamino = llenadoSinVer(boveda.movimiento, estado.siguienteRecibir, ahora);
+  const maximo = Math.max(0, cabeEnLaBoveda(estado.confirmadoSats, estado.pendienteSats) - enCamino);
   const direccion = useMemo(
     () => direccionDeLaBoveda(boveda, 0, estado.siguienteRecibir).direccion,
     [boveda, estado.siguienteRecibir],
@@ -350,13 +372,14 @@ export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHe
     setAviso('');
     setOcupado(false);
     setHecho(false);
-    llave.current = crypto.randomUUID();
+    setAhora(Date.now());
   }, [abierta]);
 
   const preparar = async () => {
     if (!btc) return null;
-    const sats = Number(monto.trim());
-    if (!monto.trim() || !Number.isInteger(sats) || sats <= 0) {
+    const texto = monto.trim();
+    const sats = Number(texto);
+    if (!MONTO_EN_SATS.test(texto) || !Number.isSafeInteger(sats) || sats <= 0) {
       setError(t('bp_err_monto'));
       return null;
     }
@@ -368,7 +391,8 @@ export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHe
       const envio = await btc.prepararEnvio(direccion, sats);
       // La boveda solo se llena por la red de bitcoin, a su propia direccion.
       if (envio.destino.tipo !== 'direccion-bitcoin') throw new Error('destino inesperado');
-      return { envio, en: Date.now() };
+      // Mismo destino y monto = mismo intento: repetirlo no cobra dos veces (ver HojaEnviar).
+      return { envio, en: Date.now(), clave: `herencia|${direccion}|${sats}` };
     } catch (e) {
       if (e instanceof RechazoBitcoin && e.motivo === 'saldo-insuficiente') setError(t('bp_err_saldo'));
       else if (e instanceof RechazoBitcoin && e.motivo === 'monto-invalido') setError(t('bp_err_monto'));
@@ -392,6 +416,7 @@ export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHe
   const confirmar = async () => {
     if (!preparado || !btc || enviando.current) return;
     enviando.current = true;
+    onEnviando?.(true);
     setOcupado(true);
     setError('');
     setAviso('');
@@ -403,14 +428,27 @@ export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHe
         return;
       }
       if (!(await confirmarConHuella(t('hb_llenar_razon')))) return;
-      await btc.enviar(preparado.envio, llave.current);
+      // Un reintento del mismo envio dudoso ya esta anotado: no se suma dos veces.
+      const reintento = intentos.has(preparado.clave);
+      let intento: Intento | undefined = intentos.get(preparado.clave);
+      if (!intento) {
+        intento = { llave: crypto.randomUUID() };
+        intentos.set(preparado.clave, intento);
+      }
+      // Se anota ANTES de mandar: si la respuesta se pierde, la marca ya esta.
+      const sats = preparado.envio.montoSats;
+      await anotarMovimiento(userId, previo => anotarLlenado(previo, estado.siguienteRecibir, reintento ? 0 : sats, Date.now()));
+      onCambio();
+      await btc.enviar(preparado.envio, intento.llave);
+      intentos.delete(preparado.clave);
       setHecho(true);
-      onHecho();
+      onCambio();
     } catch {
       setError(t('bp_err_envio'));
     } finally {
       enviando.current = false;
       setOcupado(false);
+      onEnviando?.(false);
     }
   };
 
@@ -418,8 +456,6 @@ export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHe
     <BottomSheet isOpen={abierta} onClose={onClose} dismissable={!ocupado} title={t('hb_llenar_titulo')}>
       {hecho ? (
         <Hecho texto={t('hb_llenar_hecho')} onClose={onClose} />
-      ) : maximo === 0 ? (
-        <p className="uv-chip-warning rounded-xl p-3 text-sm">{rellenar(t('hb_tope'), { btc: satsABtc(TOPE_POR_BOVEDA_SATS) })}</p>
       ) : preparado ? (
         <div className="space-y-4">
           {aviso && <p role="status" className="uv-chip-warning rounded-xl p-3 text-sm">{aviso}</p>}
@@ -439,20 +475,29 @@ export function HojaLlenarHerencia({ abierta, onClose, boveda, estado, btc, onHe
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm uv-text-secondary">{rellenar(t('hb_llenar_ayuda'), { max: numero(maximo) })}</p>
-          <label className="block space-y-1">
-            <span className="text-sm font-semibold uv-text-secondary">{t('bp_monto_sats')}</span>
-            <input
-              className={CAMPO}
-              inputMode="numeric"
-              value={monto}
-              onChange={e => { setError(''); setMonto(e.target.value); llave.current = crypto.randomUUID(); }}
-            />
-          </label>
-          {error && <p role="alert" className={ERROR}>{error}</p>}
-          <button type="button" className={BOTON_PRINCIPAL} disabled={ocupado || !btc} onClick={() => void revisar()}>
-            {ocupado ? t('loading') : t('bp_revisar')}
-          </button>
+          {enCamino > 0 && (
+            <p role="status" className="uv-chip-warning rounded-xl p-3 text-sm">{rellenar(t('hb_llenar_en_camino'), { sats: numero(enCamino) })}</p>
+          )}
+          {maximo === 0 ? (
+            <p className="uv-chip-warning rounded-xl p-3 text-sm">{rellenar(t('hb_tope'), { btc: satsABtc(TOPE_POR_BOVEDA_SATS) })}</p>
+          ) : (
+            <>
+              <p className="text-sm uv-text-secondary">{rellenar(t('hb_llenar_ayuda'), { max: numero(maximo) })}</p>
+              <label className="block space-y-1">
+                <span className="text-sm font-semibold uv-text-secondary">{t('bp_monto_sats')}</span>
+                <input
+                  className={CAMPO}
+                  inputMode="numeric"
+                  value={monto}
+                  onChange={e => { setError(''); setMonto(e.target.value); }}
+                />
+              </label>
+              {error && <p role="alert" className={ERROR}>{error}</p>}
+              <button type="button" className={BOTON_PRINCIPAL} disabled={ocupado || !btc} onClick={() => void revisar()}>
+                {ocupado ? t('loading') : t('bp_revisar')}
+              </button>
+            </>
+          )}
         </div>
       )}
     </BottomSheet>
@@ -465,12 +510,15 @@ interface HojaMoverProps {
   modo: 'renovar' | 'sacar';
   abierta: boolean;
   onClose: () => void;
+  userId: string;
   boveda: BovedaGuardada;
+  /** Lo que se leyo al abrir la hoja: una relectura no la cambia a mitad de camino. */
   estado: EstadoDeLaBoveda;
   semilla: string;
   btc: BilleteraBitcoin | null;
   red: FuenteDeLaRed;
-  onHecho: () => void;
+  /** Lo guardado o la red cambiaron: releer. */
+  onCambio: () => void;
 }
 
 const MENSAJE_DE_MOVIMIENTO: Record<RechazoMovimiento['motivo'], string> = {
@@ -480,7 +528,7 @@ const MENSAJE_DE_MOVIMIENTO: Record<RechazoMovimiento['motivo'], string> = {
   'otras-palabras': 'hb_otras_palabras',
 };
 
-export function HojaMoverHerencia({ modo, abierta, onClose, boveda, estado, semilla, btc, red, onHecho }: HojaMoverProps) {
+export function HojaMoverHerencia({ modo, abierta, onClose, userId, boveda, estado, semilla, btc, red, onCambio }: HojaMoverProps) {
   const { t, language } = useLanguage();
   const [preparado, setPreparado] = useState<{ movimiento: MovimientoPreparado; en: number } | null>(null);
   const [error, setError] = useState('');
@@ -532,12 +580,17 @@ export function HojaMoverHerencia({ modo, abierta, onClose, boveda, estado, semi
         return;
       }
       if (!(await confirmarConHuella(t('hb_mover_razon')))) return;
+      // Se anota ANTES de emitir: un "sacar" en la mempool hace que la boveda se
+      // vea vacia, y si esa transaccion se cae las monedas vuelven.
+      await anotarMovimiento(userId, previo => ({ ...previo, en: new Date().toISOString() }));
       // Emitir la misma transaccion dos veces no mueve nada dos veces.
       await red.emitir(preparado.movimiento.hex);
       setHecho(red.enlaceDeTransaccion(preparado.movimiento.txid));
-      onHecho();
+      onCambio();
     } catch (e) {
       setError(t(e instanceof TransaccionRechazada ? 'hb_err_rechazada' : 'bp_err_envio'));
+      // Pudo haber salido aunque la respuesta no llego: se relee.
+      onCambio();
     } finally {
       enviando.current = false;
       setOcupado(false);
@@ -608,6 +661,13 @@ export function HojaQuitarHerencia({ abierta, onClose, userId, vacia, onQuitada 
     setError('');
     try {
       if (!(await confirmarConHuella(t('hb_quitar_razon')))) return;
+      // Se mira lo guardado, no la pantalla: un movimiento recien anotado manda.
+      const actual = await leerBovedaGuardada(userId);
+      if (actual.estado === 'error') throw new Error('almacen');
+      if (actual.estado === 'hay' && movimientoVigente(actual.boveda.movimiento, Date.now())) {
+        setError(t('hb_err_quitar_reciente'));
+        return;
+      }
       await borrarBovedaGuardada(userId);
       await onQuitada();
     } catch {

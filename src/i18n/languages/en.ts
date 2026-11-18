@@ -2404,6 +2404,8 @@ const en: TranslationKeys = {
   hb_err_no_alcanza: 'What is there is not enough to pay the network fee.',
   hb_err_comision: 'The fee would take more than half. Wait for it to go down.',
   hb_err_rechazada: 'The network rejected the transaction. Nothing was moved.',
+  hb_llenar_en_camino: 'Your last transfer to the vault ({sats} sats) doesn\'t show on the network yet. It counts toward the limit until it does.',
+  hb_err_quitar_reciente: 'This vault was moved less than 24 hours ago. So a transfer that isn\'t on the network yet doesn\'t get lost, you can remove it once that time has passed.',
   bp_tab: 'My wallet',
   bp_web_titulo: 'Your own wallet lives in the app',
   bp_web_cuerpo: 'The keys are kept in the phone\'s secure storage, which a browser doesn\'t have. Open KiramoPay on your phone to create it.',

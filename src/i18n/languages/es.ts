@@ -2408,6 +2408,8 @@ const es: TranslationKeys = {
   hb_err_no_alcanza: 'Lo que hay no alcanza para pagar la comisión de la red.',
   hb_err_comision: 'La comisión se llevaría más de la mitad. Espera a que baje.',
   hb_err_rechazada: 'La red rechazó la transacción. No se movió nada.',
+  hb_llenar_en_camino: 'Tu último envío a la bóveda ({sats} sats) todavía no aparece en la red. Cuenta para el tope hasta que aparezca.',
+  hb_err_quitar_reciente: 'Esta bóveda se movió hace menos de 24 horas. Para no perder un envío que todavía no aparece en la red, podrás quitarla cuando pase ese tiempo.',
   bp_tab: 'Mi billetera',
   bp_web_titulo: 'Tu billetera propia vive en la app',
   bp_web_cuerpo: 'Las llaves se guardan en el almacén seguro del teléfono, y un navegador no lo tiene. Abre KiramoPay en tu teléfono para crearla.',

@@ -21,7 +21,7 @@ import {
 } from '../descriptor';
 import { direccionDeLaBoveda, hojaDelHeredero } from '../direcciones';
 import { leerLlave, llaveDeLaCuenta, LlaveInvalida, mismaLlave, textoDeLaLlave, type Red } from '../llaves';
-import { MINIMO_A_MOVER_SATS, prepararMovimiento, RechazoMovimiento, type MonedaDeLaBoveda } from '../transacciones';
+import { MINIMO_A_MOVER_SATS, prepararMovimiento, RechazoMovimiento, SECUENCIA_DEL_TITULAR, type MonedaDeLaBoveda } from '../transacciones';
 
 const TITULAR = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const HEREDERO = 'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
@@ -150,6 +150,8 @@ describe('mover la boveda por la ruta del titular', () => {
     expect(tx.outputsLength).toBe(1);
     const salidas = monedas.map(m => direccionDeLaBoveda(datos, m.rama, m.indice));
     monedas.forEach((m, i) => {
+      // Senala RBF y no pone plazo relativo (bit 31): el camino del titular no lo necesita.
+      expect(tx.getInput(i).sequence).toBe(SECUENCIA_DEL_TITULAR);
       const testigo = tx.getInput(i).finalScriptWitness;
       // Key path: un solo elemento, la firma de 64 bytes (SIGHASH_DEFAULT). Nada revela la hoja.
       expect(testigo).toHaveLength(1);

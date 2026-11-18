@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { conAlmacen } from '@/services/almacenSeguro';
 import { plazoValido, type DatosDeLaBoveda } from './descriptor';
 import { leerLlave, textoDeLaLlave, type LlaveConOrigen } from './llaves';
+import type { MovimientoReciente } from './reglas';
 
 const PREFIJO = 'kp_herencia_boveda:';
 
@@ -18,6 +19,8 @@ export interface BovedaGuardada extends DatosDeLaBoveda {
   creada: string;
   /** Como la persona llama a su heredero. Solo en este telefono. */
   nombreDelHeredero?: string;
+  /** Lo ultimo que se movio desde este telefono (ver reglas.ts). */
+  movimiento?: MovimientoReciente;
 }
 
 function llaveDe(userId: string): string {
@@ -33,6 +36,7 @@ interface Guardado {
   plazo: number;
   creada: string;
   nombre?: string;
+  mov?: MovimientoReciente;
 }
 
 export function aTexto(b: BovedaGuardada): string {
@@ -45,6 +49,7 @@ export function aTexto(b: BovedaGuardada): string {
     plazo: b.plazoBloques,
     creada: b.creada,
     ...(b.nombreDelHeredero ? { nombre: b.nombreDelHeredero } : {}),
+    ...(b.movimiento ? { mov: b.movimiento } : {}),
   };
   return JSON.stringify(guardado);
 }
@@ -67,7 +72,20 @@ export function deTexto(texto: string): BovedaGuardada {
     plazoBloques: g.plazo,
     creada: g.creada,
     ...(typeof g.nombre === 'string' && g.nombre ? { nombreDelHeredero: g.nombre } : {}),
+    ...(g.mov !== undefined ? { movimiento: movimientoDe(g.mov) } : {}),
   };
+}
+
+// Un movimiento ilegible no se descarta: queda vigente (fecha invalida, ver
+// movimientoVigente), que deja la boveda sin quitar en vez de soltarla.
+function movimientoDe(m: unknown): MovimientoReciente {
+  const x = (m ?? {}) as Partial<MovimientoReciente>;
+  const en = typeof x.en === 'string' ? x.en : '';
+  const l = x.llenado;
+  const llenado = l && Number.isInteger(l.indice) && l.indice >= 0 && Number.isInteger(l.sats) && l.sats > 0
+    ? { indice: l.indice, sats: l.sats }
+    : undefined;
+  return llenado ? { en, llenado } : { en };
 }
 
 export type BovedaLeida = { estado: 'hay'; boveda: BovedaGuardada } | { estado: 'no-hay' } | { estado: 'error' };
@@ -89,6 +107,21 @@ export async function guardarBoveda(userId: string, b: BovedaGuardada): Promise<
   const ya = await conAlmacen(a => a.getItem(llaveDe(userId)));
   if (typeof ya === 'string' && ya) throw new Error('esta cuenta ya tiene una boveda de herencia');
   await conAlmacen(a => a.setItem(llaveDe(userId), aTexto(b)));
+}
+
+/**
+ * Anota lo que se esta por mover. Se llama ANTES de mandar: si la respuesta del
+ * envio se pierde, la marca ya esta y la boveda no se puede quitar a ciegas.
+ */
+export async function anotarMovimiento(
+  userId: string,
+  nuevo: (previo: MovimientoReciente | undefined) => MovimientoReciente,
+): Promise<void> {
+  if (!Capacitor.isNativePlatform()) throw new Error('la boveda de herencia solo existe en la app');
+  const texto = await conAlmacen(a => a.getItem(llaveDe(userId)));
+  if (typeof texto !== 'string' || !texto) throw new Error('no hay boveda que anotar');
+  const b = deTexto(texto);
+  await conAlmacen(a => a.setItem(llaveDe(userId), aTexto({ ...b, movimiento: nuevo(b.movimiento) })));
 }
 
 export async function borrarBovedaGuardada(userId: string): Promise<void> {

@@ -2396,6 +2396,8 @@ const zhCn: TranslationKeys = {
   hb_err_no_alcanza: '现有金额不足以支付网络手续费。',
   hb_err_comision: '手续费会超过一半。请等手续费降低后再试。',
   hb_err_rechazada: '网络拒绝了这笔交易。没有移动任何资金。',
+  hb_llenar_en_camino: '你上一次转入保险库的金额（{sats} sats）还没有出现在网络上。在出现之前，它计入上限。',
+  hb_err_quitar_reciente: '这个保险库在 24 小时内有过变动。为了不丢失尚未出现在网络上的转账，请在这段时间过后再移除。',
   bp_tab: '我的钱包',
   bp_web_titulo: '你的自有钱包只在应用里',
   bp_web_cuerpo: '密钥保存在手机的安全存储中，浏览器没有这种存储。请在手机上打开 KiramoPay 来创建。',

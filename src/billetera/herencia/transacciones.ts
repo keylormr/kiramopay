@@ -56,6 +56,14 @@ export const MINIMO_A_MOVER_SATS = 1000;
 
 const TXID = /^[0-9a-f]{64}$/;
 
+/**
+ * nSequence de las entradas del titular: senala que se puede reemplazar con
+ * mas comision (BIP-125) y, con el bit 31 encendido, no impone plazo relativo
+ * (BIP-68): el camino del titular no lo necesita. Una renovacion que se queda
+ * atascada en la mempool se puede rehacer mientras corre el plazo.
+ */
+export const SECUENCIA_DEL_TITULAR = 0xfffffffd;
+
 function construir(
   datos: DatosDeLaBoveda,
   llaves: Uint8Array[],
@@ -69,6 +77,7 @@ function construir(
     tx.addInput({
       txid: m.txid,
       index: m.vout,
+      sequence: SECUENCIA_DEL_TITULAR,
       witnessUtxo: { script: salida.script, amount: BigInt(m.sats) },
       tapInternalKey: salida.taproot.tapInternalKey,
       tapMerkleRoot: salida.taproot.tapMerkleRoot,

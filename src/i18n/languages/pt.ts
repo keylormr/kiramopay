@@ -2405,6 +2405,8 @@ const pt: TranslationKeys = {
   hb_err_no_alcanza: 'O que há não basta para pagar a taxa da rede.',
   hb_err_comision: 'A taxa levaria mais da metade. Espere ela baixar.',
   hb_err_rechazada: 'A rede rejeitou a transação. Nada foi movido.',
+  hb_llenar_en_camino: 'Seu último envio ao cofre ({sats} sats) ainda não aparece na rede. Ele conta para o limite até aparecer.',
+  hb_err_quitar_reciente: 'Este cofre foi movido há menos de 24 horas. Para não perder um envio que ainda não aparece na rede, você poderá removê-lo quando esse tempo passar.',
   bp_tab: 'Minha carteira',
   bp_web_titulo: 'Sua carteira própria vive no app',
   bp_web_cuerpo: 'As chaves ficam no armazenamento seguro do celular, que um navegador não tem. Abra o KiramoPay no celular para criá-la.',

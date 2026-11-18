@@ -2489,6 +2489,8 @@ export type TranslationKeys = {
   hb_err_no_alcanza: string;
   hb_err_comision: string;
   hb_err_rechazada: string;
+  hb_llenar_en_camino: string;
+  hb_err_quitar_reciente: string;
   bp_tab: string;
   bp_web_titulo: string;
   bp_web_cuerpo: string;

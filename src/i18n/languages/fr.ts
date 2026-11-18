@@ -2405,6 +2405,8 @@ const fr: TranslationKeys = {
   hb_err_no_alcanza: 'Le montant disponible ne suffit pas à payer les frais de réseau.',
   hb_err_comision: 'Les frais prendraient plus de la moitié. Attendez qu’ils baissent.',
   hb_err_rechazada: 'Le réseau a rejeté la transaction. Rien n\'a été déplacé.',
+  hb_llenar_en_camino: 'Votre dernier envoi vers le coffre ({sats} sats) n\'apparaît pas encore sur le réseau. Il compte dans la limite jusqu\'à ce qu\'il apparaisse.',
+  hb_err_quitar_reciente: 'Ce coffre a été déplacé il y a moins de 24 heures. Pour ne pas perdre un envoi qui n\'apparaît pas encore sur le réseau, vous pourrez le supprimer une fois ce délai passé.',
   bp_tab: 'Mon portefeuille',
   bp_web_titulo: 'Votre portefeuille personnel vit dans l\'application',
   bp_web_cuerpo: 'Les clés sont gardées dans le stockage sécurisé du téléphone, qu\'un navigateur n\'a pas. Ouvrez KiramoPay sur votre téléphone pour le créer.',

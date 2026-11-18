@@ -4,7 +4,11 @@
 // titular la mueve cuando quiera; el heredero solo puede gastarla si las
 // monedas pasan el plazo sin moverse (ver src/billetera/herencia/). Todo vive en
 // el telefono: el servidor solo dice si la seccion se ofrece.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+//
+// La bandera cierra crear y llenar, nunca lo que ya existe: quien tiene una
+// boveda guardada en este telefono la sigue viendo para renovar, sacar o
+// entregar el kit. Si no, cerrar la bandera dejaria correr el plazo.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getApiLayer } from '@/api';
 import { useLanguage } from '@/i18n/LanguageContext';
 import { Icons } from '@/components/Icons';
@@ -16,7 +20,7 @@ import { leerBovedaGuardada, type BovedaGuardada, type BovedaLeida } from '@/bil
 import { esplora } from '@/billetera/herencia/esplora';
 import { diasAproximados, leerEstado, type EstadoDeLaBoveda, type NivelDelPlazo } from '@/billetera/herencia/estado';
 import { llaveDeLaCuenta, mismaLlave } from '@/billetera/herencia/llaves';
-import { TOPE_POR_BOVEDA_SATS } from '@/billetera/herencia/reglas';
+import { sePuedeQuitar, TOPE_POR_BOVEDA_SATS } from '@/billetera/herencia/reglas';
 import {
   HojaCrearHerencia,
   HojaKitHerencia,
@@ -25,6 +29,7 @@ import {
   HojaQuitarHerencia,
   HojaSerHeredero,
 } from './HojasHerencia';
+import type { IntentosDeEnvio } from '../billetera/HojasBilletera';
 
 const BOTON_PRINCIPAL =
   'kp-toque kp-foco h-12 w-full rounded-[16px] bg-[var(--color-primary-fill)] px-4 font-semibold text-white hover:bg-[var(--color-primary-hover)] disabled:opacity-50';
@@ -45,18 +50,27 @@ interface Props {
   semilla: string;
   btc: BilleteraBitcoin | null;
   userId: string;
+  /** Los de HojaEnviar: un llenado en marcha no se corta al pasar a segundo plano. */
+  onEnviando?: (enviando: boolean) => void;
+  intentos?: IntentosDeEnvio;
 }
 
-export function SeccionHerencia({ semilla, btc, userId }: Props) {
+export function SeccionHerencia({ semilla, btc, userId, onEnviando, intentos }: Props) {
   const { t, language } = useLanguage();
   const [ofrecida, setOfrecida] = useState(false);
   const [guardada, setGuardada] = useState<BovedaLeida | null>(null);
   const [estado, setEstado] = useState<EstadoDeLaBoveda | null>(null);
   const [errorDeRed, setErrorDeRed] = useState(false);
   const [leyendo, setLeyendo] = useState(false);
+  const [ahora, setAhora] = useState(() => Date.now());
   const [hoja, setHoja] = useState<Hoja | null>(null);
+  // Lo que ve una hoja de llenar, renovar o sacar: lo leido al abrirla.
+  const [estadoDeLaHoja, setEstadoDeLaHoja] = useState<EstadoDeLaBoveda | null>(null);
+  const lectura = useRef(0);
   const red = useMemo(() => esplora(), []);
-  const miLlave = useMemo(() => llaveDeLaCuenta(semilla, 'bitcoin'), [semilla]);
+  const mostrar = ofrecida || guardada?.estado === 'hay';
+  // Derivar la llave cuesta (PBKDF2 de las palabras): solo si la seccion se ve.
+  const miLlave = useMemo(() => (mostrar ? llaveDeLaCuenta(semilla, 'bitcoin') : null), [mostrar, semilla]);
   const numero = (n: number) => n.toLocaleString(localeDe(language));
 
   // Sin respuesta del servidor no se ofrece: es una funcion en espera.
@@ -72,24 +86,29 @@ export function SeccionHerencia({ semilla, btc, userId }: Props) {
     setGuardada(await leerBovedaGuardada(userId));
   }, [userId]);
 
+  // Lo guardado se lee siempre (es local): una boveda que ya existe se ve aunque
+  // la bandera este cerrada.
   useEffect(() => {
-    if (ofrecida) void cargar();
-  }, [ofrecida, cargar]);
+    void cargar();
+  }, [cargar]);
 
   const boveda: BovedaGuardada | null = guardada?.estado === 'hay' ? guardada.boveda : null;
-  const esMia = boveda ? mismaLlave(boveda.titular, miLlave) : false;
+  const esMia = boveda && miLlave ? mismaLlave(boveda.titular, miLlave) : false;
 
+  // Solo la lectura mas reciente se pinta: una vieja que termina tarde no pisa a la nueva.
   const leer = useCallback(async (b: BovedaGuardada, vigente: () => boolean = () => true) => {
+    const esta = ++lectura.current;
+    const sigue = () => vigente() && esta === lectura.current;
     setLeyendo(true);
     setErrorDeRed(false);
     try {
       const nuevo = await leerEstado(b, red);
-      if (vigente()) setEstado(nuevo);
+      if (sigue()) { setEstado(nuevo); setAhora(Date.now()); }
     } catch {
       // Una lectura fallida no se pinta como una boveda vacia.
-      if (vigente()) { setEstado(null); setErrorDeRed(true); }
+      if (sigue()) { setEstado(null); setErrorDeRed(true); }
     } finally {
-      if (vigente()) setLeyendo(false);
+      if (sigue()) setLeyendo(false);
     }
   }, [red]);
 
@@ -100,10 +119,12 @@ export function SeccionHerencia({ semilla, btc, userId }: Props) {
     return () => { vigente = false; };
   }, [boveda, leer]);
 
-  if (!ofrecida || guardada === null) return null;
+  if (!mostrar || guardada === null) return null;
 
   const cerrar = () => setHoja(null);
+  const abrir = (h: Hoja) => { setEstadoDeLaHoja(estado); setHoja(h); };
   const refrescar = () => { if (boveda) void leer(boveda); };
+  const releer = () => { void cargar(); };
 
   const cuerpo = () => {
     if (guardada.estado === 'error') {
@@ -120,8 +141,8 @@ export function SeccionHerencia({ semilla, btc, userId }: Props) {
         <div className="space-y-4">
           <p className="text-sm uv-text-secondary">{t('hb_intro')}</p>
           <div className="space-y-2">
-            <button type="button" className={BOTON_PRINCIPAL} onClick={() => setHoja('crear')}>{t('hb_crear')}</button>
-            <button type="button" className={BOTON_SECUNDARIO} onClick={() => setHoja('heredero')}>{t('hb_soy_heredero')}</button>
+            <button type="button" className={BOTON_PRINCIPAL} onClick={() => abrir('crear')}>{t('hb_crear')}</button>
+            <button type="button" className={BOTON_SECUNDARIO} onClick={() => abrir('heredero')}>{t('hb_soy_heredero')}</button>
           </div>
         </div>
       );
@@ -131,7 +152,7 @@ export function SeccionHerencia({ semilla, btc, userId }: Props) {
       return (
         <div className="space-y-3">
           <p className="uv-chip-warning rounded-xl p-3 text-sm">{t('hb_otras_palabras')}</p>
-          <button type="button" className={BOTON_SECUNDARIO} onClick={() => setHoja('kit')}>{t('hb_kit')}</button>
+          <button type="button" className={BOTON_SECUNDARIO} onClick={() => abrir('kit')}>{t('hb_kit')}</button>
         </div>
       );
     }
@@ -185,24 +206,26 @@ export function SeccionHerencia({ semilla, btc, userId }: Props) {
         {estado && total === 0 && <p className="text-sm uv-text-secondary">{t('hb_vacia')}</p>}
 
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={BOTON_PRINCIPAL} disabled={!estado || !btc} onClick={() => setHoja('llenar')}>
-            <span className="inline-flex items-center gap-2"><Icons.Receive size={18} aria-hidden /> {t('hb_llenar')}</span>
-          </button>
-          <button type="button" className={BOTON_SECUNDARIO} disabled={!estado || estado.confirmadoSats === 0} onClick={() => setHoja('renovar')}>
+          {ofrecida && (
+            <button type="button" className={BOTON_PRINCIPAL} disabled={!estado || !btc} onClick={() => abrir('llenar')}>
+              <span className="inline-flex items-center gap-2"><Icons.Receive size={18} aria-hidden /> {t('hb_llenar')}</span>
+            </button>
+          )}
+          <button type="button" className={`${BOTON_SECUNDARIO} ${ofrecida ? '' : 'col-span-2'}`} disabled={!estado || estado.confirmadoSats === 0} onClick={() => abrir('renovar')}>
             <span className="inline-flex items-center gap-2"><Icons.RefreshCw size={18} aria-hidden /> {t('hb_renovar')}</span>
           </button>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={BOTON_SECUNDARIO} onClick={() => setHoja('kit')}>
+          <button type="button" className={BOTON_SECUNDARIO} onClick={() => abrir('kit')}>
             <span className="inline-flex items-center gap-2"><Icons.FileText size={18} aria-hidden /> {t('hb_kit')}</span>
           </button>
-          <button type="button" className={BOTON_SECUNDARIO} disabled={!estado || estado.confirmadoSats === 0 || !btc} onClick={() => setHoja('sacar')}>
+          <button type="button" className={BOTON_SECUNDARIO} disabled={!estado || estado.confirmadoSats === 0 || !btc} onClick={() => abrir('sacar')}>
             <span className="inline-flex items-center gap-2"><Icons.Send size={18} aria-hidden /> {t('hb_sacar')}</span>
           </button>
         </div>
-        <p className="text-xs uv-text-muted">{rellenar(t('hb_tope'), { btc: satsABtc(TOPE_POR_BOVEDA_SATS) })}</p>
-        {estado && total === 0 && (
-          <button type="button" className="kp-foco w-full py-2 text-sm font-semibold text-[var(--color-danger)]" onClick={() => setHoja('quitar')}>
+        {ofrecida && <p className="text-xs uv-text-muted">{rellenar(t('hb_tope'), { btc: satsABtc(TOPE_POR_BOVEDA_SATS) })}</p>}
+        {estado && sePuedeQuitar(total, boveda.movimiento, ahora) && (
+          <button type="button" className="kp-foco w-full py-2 text-sm font-semibold text-[var(--color-danger)]" onClick={() => abrir('quitar')}>
             {t('hb_quitar')}
           </button>
         )}
@@ -220,37 +243,54 @@ export function SeccionHerencia({ semilla, btc, userId }: Props) {
       </div>
       {cuerpo()}
 
-      <HojaCrearHerencia
-        abierta={hoja === 'crear'}
-        onClose={cerrar}
-        userId={userId}
-        miLlave={miLlave}
-        onCreada={async () => { await cargar(); setHoja('kit'); }}
-      />
-      <HojaSerHeredero abierta={hoja === 'heredero'} onClose={cerrar} miLlave={miLlave} />
+      {miLlave && ofrecida && (
+        <HojaCrearHerencia
+          abierta={hoja === 'crear'}
+          onClose={cerrar}
+          userId={userId}
+          miLlave={miLlave}
+          onCreada={async () => { await cargar(); setHoja('kit'); }}
+        />
+      )}
+      {miLlave && <HojaSerHeredero abierta={hoja === 'heredero'} onClose={cerrar} miLlave={miLlave} />}
       {boveda && <HojaKitHerencia abierta={hoja === 'kit'} onClose={cerrar} boveda={boveda} />}
-      {boveda && estado && (
+      {boveda && estadoDeLaHoja && (
         <>
-          <HojaLlenarHerencia abierta={hoja === 'llenar'} onClose={cerrar} boveda={boveda} estado={estado} btc={btc} onHecho={refrescar} />
+          {ofrecida && (
+            <HojaLlenarHerencia
+              abierta={hoja === 'llenar'}
+              onClose={cerrar}
+              userId={userId}
+              boveda={boveda}
+              estado={estadoDeLaHoja}
+              btc={btc}
+              onCambio={releer}
+              onEnviando={onEnviando}
+              intentos={intentos}
+            />
+          )}
           <HojaMoverHerencia
             modo={hoja === 'sacar' ? 'sacar' : 'renovar'}
             abierta={hoja === 'renovar' || hoja === 'sacar'}
             onClose={cerrar}
+            userId={userId}
             boveda={boveda}
-            estado={estado}
+            estado={estadoDeLaHoja}
             semilla={semilla}
             btc={btc}
             red={red}
-            onHecho={refrescar}
-          />
-          <HojaQuitarHerencia
-            abierta={hoja === 'quitar'}
-            onClose={cerrar}
-            userId={userId}
-            vacia={estado.confirmadoSats + estado.pendienteSats === 0}
-            onQuitada={async () => { setHoja(null); setEstado(null); await cargar(); }}
+            onCambio={releer}
           />
         </>
+      )}
+      {boveda && (
+        <HojaQuitarHerencia
+          abierta={hoja === 'quitar'}
+          onClose={cerrar}
+          userId={userId}
+          vacia={estado ? sePuedeQuitar(estado.confirmadoSats + estado.pendienteSats, boveda.movimiento, ahora) : false}
+          onQuitada={async () => { setHoja(null); setEstado(null); await cargar(); }}
+        />
       )}
     </section>
   );
