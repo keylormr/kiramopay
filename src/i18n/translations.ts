@@ -2478,6 +2478,11 @@ export type TranslationKeys = {
   bp_deposito_comision: string;
   bp_deposito_sumar: string;
   bp_deposito_chico: string;
+  bp_disponibilidad_error: string;
+  bp_resumen_comision_estimada: string;
+  bp_comision_estimada_aviso: string;
+  bp_pantalla_titulo: string;
+  bp_pantalla_cuerpo: string;
 };
 
 import es from './languages/es';

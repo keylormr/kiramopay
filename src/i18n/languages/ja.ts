@@ -2304,7 +2304,7 @@ const ja: TranslationKeys = {
   bp_intro_redes: 'ライトニングまたはビットコインネットワークでのビットコイン、さらに ETH、LINK、UNI、POL、AVAX。',
   bp_intro_riesgo: '12 個の単語がウォレットそのものです。電話をなくしたとき、お金を取り戻せるのはこの単語だけで、誰も代わりに取り戻せません。',
   bp_crear: 'ウォレットを作成',
-  bp_restaurar: '12 個の単語を持っています',
+  bp_restaurar: '12 個または 24 個の単語を持っています',
   bp_palabras_titulo: 'あなたの 12 個の単語',
   bp_palabras_aviso: '順番どおりに紙に書き、誰にも見られない場所に保管してください。スクリーンショットやメッセージでの送信はしないでください。',
   bp_palabras_anotadas: '紙に書きました',
@@ -2313,7 +2313,7 @@ const ja: TranslationKeys = {
   bp_verificar_error: '一致しない単語があります。紙を確認してください。',
   bp_guardar: 'ウォレットを保存',
   bp_guardar_error: 'この電話に保存できませんでした。もう一度お試しください。',
-  bp_restaurar_titulo: '12 個の単語で復元',
+  bp_restaurar_titulo: '12 個または 24 個の単語で復元',
   bp_restaurar_ayuda: '順番どおりに、スペースで区切って入力してください。',
   bp_restaurar_desconocidas: '次の単語はリストにありません: {palabras}',
   bp_restaurar_invalida: 'これらの単語ではウォレットになりません。順番と抜けがないか確認してください。',
@@ -2385,6 +2385,11 @@ const ja: TranslationKeys = {
   bp_deposito_comision: '反映するには {comision} sats のネットワーク手数料がかかり、ウォレットが確認なしで支払える上限を超えています。',
   bp_deposito_sumar: '{comision} sats を払って反映する',
   bp_deposito_chico: '金額が少なすぎて手数料ですべてなくなるため、反映できません。',
+  bp_disponibilidad_error: 'マイウォレットが利用できるか確認できませんでした。もう一度お試しください。',
+  bp_resumen_comision_estimada: 'ネットワーク手数料（概算）',
+  bp_comision_estimada_aviso: '手数料は概算です。ネットワークが実際に請求する額は異なる場合があります。',
+  bp_pantalla_titulo: 'この画面を保護できません',
+  bp_pantalla_cuerpo: '単語は、アプリがスクリーンショットを防止できる場合にのみここに表示・入力されます。このバージョンでは防止できません。KiramoPay を更新してもう一度お試しください。',
 };
 
 export default ja;

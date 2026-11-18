@@ -2312,7 +2312,7 @@ const en: TranslationKeys = {
   bp_intro_redes: 'Bitcoin over Lightning or the bitcoin network, plus ETH, LINK, UNI, POL and AVAX.',
   bp_intro_riesgo: 'Your 12 words are the wallet. If you lose the phone, only they bring the money back, and no one can do it for you.',
   bp_crear: 'Create my wallet',
-  bp_restaurar: 'I already have 12 words',
+  bp_restaurar: 'I already have 12 or 24 words',
   bp_palabras_titulo: 'Your 12 words',
   bp_palabras_aviso: 'Write them on paper, in order, and keep them where no one can see them. Don\'t screenshot them or send them in a message.',
   bp_palabras_anotadas: 'I wrote them on paper',
@@ -2321,7 +2321,7 @@ const en: TranslationKeys = {
   bp_verificar_error: 'A word doesn\'t match. Check your paper.',
   bp_guardar: 'Save my wallet',
   bp_guardar_error: 'It couldn\'t be saved on this phone. Try again.',
-  bp_restaurar_titulo: 'Restore with your 12 words',
+  bp_restaurar_titulo: 'Restore with your 12 or 24 words',
   bp_restaurar_ayuda: 'Type them in order, separated by spaces.',
   bp_restaurar_desconocidas: 'These words aren\'t on the list: {palabras}',
   bp_restaurar_invalida: 'Those words don\'t make a wallet. Check the order and that none is missing.',
@@ -2393,6 +2393,11 @@ const en: TranslationKeys = {
   bp_deposito_comision: 'Adding them costs {comision} sats in network fees, more than the wallet pays without asking you.',
   bp_deposito_sumar: 'Add them for {comision} sats',
   bp_deposito_chico: 'It\'s so little that the network fee would take all of it, so it can\'t be added.',
+  bp_disponibilidad_error: 'We couldn\'t check whether My wallet is available. Try again.',
+  bp_resumen_comision_estimada: 'Network fee, estimated',
+  bp_comision_estimada_aviso: 'The fee is an estimate. What the network charges may be different.',
+  bp_pantalla_titulo: 'We can\'t protect this screen',
+  bp_pantalla_cuerpo: 'Your words are only shown or typed here when the app can block screenshots, and this version can\'t. Update KiramoPay and try again.',
 };
 
 export default en;

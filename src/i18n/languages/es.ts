@@ -2316,7 +2316,7 @@ const es: TranslationKeys = {
   bp_intro_redes: 'Bitcoin por Lightning o por la red de bitcoin, y también ETH, LINK, UNI, POL y AVAX.',
   bp_intro_riesgo: 'Tus 12 palabras son la billetera. Si pierdes el teléfono, solo con ellas recuperas el dinero, y nadie puede hacerlo por ti.',
   bp_crear: 'Crear mi billetera',
-  bp_restaurar: 'Ya tengo 12 palabras',
+  bp_restaurar: 'Ya tengo 12 o 24 palabras',
   bp_palabras_titulo: 'Tus 12 palabras',
   bp_palabras_aviso: 'Anótalas en papel, en orden, y guárdalas donde nadie las vea. No les tomes captura ni las mandes por mensaje.',
   bp_palabras_anotadas: 'Ya las anoté en papel',
@@ -2325,7 +2325,7 @@ const es: TranslationKeys = {
   bp_verificar_error: 'Alguna palabra no coincide. Revisa tu papel.',
   bp_guardar: 'Guardar mi billetera',
   bp_guardar_error: 'No se pudo guardar en este teléfono. Inténtalo otra vez.',
-  bp_restaurar_titulo: 'Restaurar con tus 12 palabras',
+  bp_restaurar_titulo: 'Restaurar con tus 12 o 24 palabras',
   bp_restaurar_ayuda: 'Escríbelas en orden, separadas por espacios.',
   bp_restaurar_desconocidas: 'Estas palabras no están en la lista: {palabras}',
   bp_restaurar_invalida: 'Esas palabras no forman una billetera. Revisa el orden y que no falte ninguna.',
@@ -2397,6 +2397,11 @@ const es: TranslationKeys = {
   bp_deposito_comision: 'Para sumarlos hay que pagar {comision} sats de comisión de la red, más de lo que la billetera paga sin preguntarte.',
   bp_deposito_sumar: 'Sumarlos pagando {comision} sats',
   bp_deposito_chico: 'Es tan poco que la comisión de la red se lo llevaría entero, así que no se puede sumar.',
+  bp_disponibilidad_error: 'No pudimos comprobar si Mi billetera está disponible. Inténtalo de nuevo.',
+  bp_resumen_comision_estimada: 'Comisión de la red, estimada',
+  bp_comision_estimada_aviso: 'La comisión es un estimado. La que cobre la red puede ser distinta.',
+  bp_pantalla_titulo: 'No podemos proteger esta pantalla',
+  bp_pantalla_cuerpo: 'Tus palabras solo se muestran o se escriben aquí cuando la app puede bloquear las capturas de pantalla, y esta versión no puede. Actualiza KiramoPay e inténtalo de nuevo.',
 };
 
 export default es;

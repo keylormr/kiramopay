@@ -65,6 +65,14 @@ describe('restaurar la billetera propia', () => {
     expect(onListo).not.toHaveBeenCalled();
   });
 
+  it('acepta una semilla de 24 palabras, como dicen los textos', async () => {
+    const de24 = `${Array(23).fill('abandon').join(' ')} art`;
+    const onListo = montar('restaurar');
+    await userEvent.type(screen.getByRole('textbox'), de24);
+    await userEvent.click(screen.getByRole('button', { name: es.bp_guardar }));
+    expect(onListo).toHaveBeenCalledWith(de24);
+  });
+
   it('acepta una semilla valida aunque venga con mayusculas', async () => {
     const onListo = montar('restaurar');
     await userEvent.type(screen.getByRole('textbox'), VECTOR_CERO.toUpperCase());

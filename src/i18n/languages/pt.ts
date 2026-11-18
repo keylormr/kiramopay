@@ -2313,7 +2313,7 @@ const pt: TranslationKeys = {
   bp_intro_redes: 'Bitcoin pela Lightning ou pela rede bitcoin, além de ETH, LINK, UNI, POL e AVAX.',
   bp_intro_riesgo: 'Suas 12 palavras são a carteira. Se perder o celular, só com elas você recupera o dinheiro, e ninguém pode fazer isso por você.',
   bp_crear: 'Criar minha carteira',
-  bp_restaurar: 'Já tenho 12 palavras',
+  bp_restaurar: 'Já tenho 12 ou 24 palavras',
   bp_palabras_titulo: 'Suas 12 palavras',
   bp_palabras_aviso: 'Anote-as no papel, em ordem, e guarde onde ninguém veja. Não tire print nem envie por mensagem.',
   bp_palabras_anotadas: 'Já anotei no papel',
@@ -2322,7 +2322,7 @@ const pt: TranslationKeys = {
   bp_verificar_error: 'Alguma palavra não confere. Verifique seu papel.',
   bp_guardar: 'Salvar minha carteira',
   bp_guardar_error: 'Não foi possível salvar neste celular. Tente de novo.',
-  bp_restaurar_titulo: 'Restaurar com suas 12 palavras',
+  bp_restaurar_titulo: 'Restaurar com suas 12 ou 24 palavras',
   bp_restaurar_ayuda: 'Escreva-as em ordem, separadas por espaços.',
   bp_restaurar_desconocidas: 'Estas palavras não estão na lista: {palabras}',
   bp_restaurar_invalida: 'Essas palavras não formam uma carteira. Confira a ordem e se não falta nenhuma.',
@@ -2394,6 +2394,11 @@ const pt: TranslationKeys = {
   bp_deposito_comision: 'Para somá-los é preciso pagar {comision} sats de taxa da rede, mais do que a carteira paga sem perguntar.',
   bp_deposito_sumar: 'Somar pagando {comision} sats',
   bp_deposito_chico: 'É tão pouco que a taxa da rede levaria tudo, então não dá para somar.',
+  bp_disponibilidad_error: 'Não foi possível verificar se Minha carteira está disponível. Tente de novo.',
+  bp_resumen_comision_estimada: 'Taxa da rede, estimada',
+  bp_comision_estimada_aviso: 'A taxa é uma estimativa. A que a rede cobrar pode ser diferente.',
+  bp_pantalla_titulo: 'Não conseguimos proteger esta tela',
+  bp_pantalla_cuerpo: 'Suas palavras só aparecem ou são digitadas aqui quando o app consegue bloquear capturas de tela, e esta versão não consegue. Atualize o KiramoPay e tente de novo.',
 };
 
 export default pt;

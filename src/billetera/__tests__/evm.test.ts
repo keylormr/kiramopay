@@ -23,6 +23,13 @@ describe('la billetera propia en redes EVM', () => {
     expect(direccionEvm(SEMILLA_DE_PRUEBA)).toBe(SU_DIRECCION);
   });
 
+  it('deriva una direccion tambien de una semilla de 24 palabras', () => {
+    const de24 = `${Array(23).fill('abandon').join(' ')} art`;
+    const direccion = direccionEvm(de24);
+    expect(direccion).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(direccion).not.toBe(SU_DIRECCION);
+  });
+
   it('lista las cinco monedas y las liga al catalogo de la app', () => {
     expect(ACTIVOS_EVM.map(a => a.simbolo)).toEqual(['ETH', 'LINK', 'UNI', 'POL', 'AVAX']);
     expect(ACTIVOS_EVM.find(a => a.simbolo === 'POL')?.simboloDelCatalogo).toBe('MATIC');

@@ -2304,7 +2304,7 @@ const zhCn: TranslationKeys = {
   bp_intro_redes: '通过闪电网络或比特币网络收发比特币，另外支持 ETH、LINK、UNI、POL 和 AVAX。',
   bp_intro_riesgo: '这 12 个单词就是钱包。手机丢了，只有靠它们才能找回资金，没有人能替你找回。',
   bp_crear: '创建我的钱包',
-  bp_restaurar: '我已有 12 个单词',
+  bp_restaurar: '我已有 12 或 24 个单词',
   bp_palabras_titulo: '你的 12 个单词',
   bp_palabras_aviso: '请按顺序抄在纸上，放在别人看不到的地方。不要截图，也不要通过消息发送。',
   bp_palabras_anotadas: '我已抄在纸上',
@@ -2313,7 +2313,7 @@ const zhCn: TranslationKeys = {
   bp_verificar_error: '有单词不一致，请核对你的纸条。',
   bp_guardar: '保存我的钱包',
   bp_guardar_error: '无法保存在这部手机上，请重试。',
-  bp_restaurar_titulo: '用 12 个单词恢复',
+  bp_restaurar_titulo: '用 12 或 24 个单词恢复',
   bp_restaurar_ayuda: '按顺序输入，用空格分隔。',
   bp_restaurar_desconocidas: '这些单词不在列表中：{palabras}',
   bp_restaurar_invalida: '这些单词组不成钱包。请检查顺序，看看有没有漏掉。',
@@ -2385,6 +2385,11 @@ const zhCn: TranslationKeys = {
   bp_deposito_comision: '计入余额需要支付 {comision} 聪的网络手续费，超过了钱包无需询问即可支付的上限。',
   bp_deposito_sumar: '支付 {comision} 聪计入余额',
   bp_deposito_chico: '金额太小，网络手续费会全部用掉，因此无法计入。',
+  bp_disponibilidad_error: '无法确认“我的钱包”是否可用。请重试。',
+  bp_resumen_comision_estimada: '网络手续费（预估）',
+  bp_comision_estimada_aviso: '手续费为预估值，网络实际收取的金额可能不同。',
+  bp_pantalla_titulo: '无法保护此屏幕',
+  bp_pantalla_cuerpo: '只有在应用能够阻止截屏时，才会在这里显示或输入你的单词，而当前版本做不到。请更新 KiramoPay 后重试。',
 };
 
 export default zhCn;
