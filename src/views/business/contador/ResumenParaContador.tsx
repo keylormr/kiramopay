@@ -283,7 +283,9 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose, merchantId }) =>
     );
 
   const compartir = async (como: Formato) => {
-    if (entregando.current || (delMes.length === 0 && lnDelMes.length === 0) || cargandoLn) return;
+    // Sin los cobros por Lightning el total saldria corto: el archivo espera a
+    // tenerlos, tanto mientras llegan como si no se pudieron traer.
+    if (entregando.current || (delMes.length === 0 && lnDelMes.length === 0) || cargandoLn || errorLn) return;
     entregando.current = true;
     setFormato(como);
     setEntrega('exportando');
@@ -605,7 +607,7 @@ export const ResumenParaContador: React.FC<Props> = ({ onClose, merchantId }) =>
                       fullWidth
                       onClick={() => void compartir(como)}
                       loading={entrega === 'exportando' && formato === como}
-                      disabled={(delMes.length === 0 && lnDelMes.length === 0) || cargandoLn || entrega === 'exportando'}
+                      disabled={(delMes.length === 0 && lnDelMes.length === 0) || cargandoLn || errorLn || entrega === 'exportando'}
                       aria-label={`${t('contador_compartir')}: ${como.toUpperCase()}`}
                       leftIcon={<Icons.Share size={18} aria-hidden="true" />}
                     >

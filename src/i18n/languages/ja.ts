@@ -2422,7 +2422,7 @@ const ja: TranslationKeys = {
   contador_ln_titulo: 'Lightning での集金',
   contador_ln_ayuda: '店舗自身のウォレットにビットコインで支払われた売上です。金額は販売価格、sats は実際に届いた量です。そのビットコインを売却して銀行に入金された場合は、二重計上を避けるためその入金の「売上」をオフにしてください。',
   contador_ln_total: 'Lightning: {monto}',
-  contador_ln_error: 'Lightning での集金を取得できなかったため、ファイルには含まれていません。',
+  contador_ln_error: 'Lightning での集金を取得できませんでした。完全なファイルを共有するには、もう一度お試しください。',
   contador_ln_detalle: '{sats} sats · 1 BTC = {precio}',
   contador_ln_sin_nota: 'Lightning での集金',
   contador_csv_medio: '方法',

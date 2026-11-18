@@ -33,14 +33,27 @@ describe('cobrosLightningDelMes', () => {
     expect(sumarLightning(lista)).toBe(123_466);
   });
 
+  it('redondea los centimos: 0,29 y 1,15 no pierden uno por la coma flotante', () => {
+    const lista = cobrosLightningDelMes([venta({ chargeId: 'a', monto: 0.29 }), venta({ chargeId: 'b', monto: 1.15 })], 'CRC', 'x');
+    expect(lista.map((x) => x.centimos)).toEqual([29, 115]);
+  });
+
   it('una venta sin nota dice que fue un cobro con Lightning', () => {
     const [x] = cobrosLightningDelMes([venta({ note: '  ' })], 'CRC', 'Cobro con Lightning');
     expect(x.descripcion).toBe('Cobro con Lightning');
   });
 
   it('la fecha es la del dia local, no la de UTC', () => {
-    const d = new Date(2026, 10, 7, 23, 30);
-    expect(fechaLocal(d.toISOString())).toBe('2026-11-07');
+    // Las 22:30 del 7 en Costa Rica ya son el 8 en UTC. Con la zona fija la
+    // prueba distingue el dia local del de toISOString() en cualquier maquina.
+    const antes = process.env.TZ;
+    process.env.TZ = 'America/Costa_Rica';
+    try {
+      expect(fechaLocal('2026-11-08T04:30:00Z')).toBe('2026-11-07');
+    } finally {
+      if (antes === undefined) delete process.env.TZ;
+      else process.env.TZ = antes;
+    }
     expect(fechaLocal('no es fecha')).toBe('');
   });
 });

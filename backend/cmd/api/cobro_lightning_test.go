@@ -14,12 +14,24 @@ import (
 	"github.com/kiramopay/backend/internal/qrpayment"
 )
 
+// Los dobles solo contestan lo que se les debe preguntar: el precio del BTC y
+// el cambio de dolares a colones. Un par invertido daria el precio al reves.
 func precioFijo(usd float64, err error) precioDelBitcoin {
-	return func(context.Context, string) (float64, error) { return usd, err }
+	return func(_ context.Context, simbolo string) (float64, error) {
+		if simbolo != "BTC" {
+			return 0, fmt.Errorf("precio de %q", simbolo)
+		}
+		return usd, err
+	}
 }
 
 func cambioFijo(tasa float64, err error) tipoDeCambio {
-	return func(context.Context, string, string) (float64, error) { return tasa, err }
+	return func(_ context.Context, de, a string) (float64, error) {
+		if de != "USD" || a != "CRC" {
+			return 0, fmt.Errorf("cambio de %s a %s", de, a)
+		}
+		return tasa, err
+	}
 }
 
 func TestCotizadorLightning_ColonesYDolares(t *testing.T) {

@@ -94,6 +94,10 @@ var Clasificacion = map[string]Tratamiento{
 	"notification_history":     Suprimir, // copias de avisos; las operaciones se conservan aparte
 	"plan_interest":            Suprimir,
 	"user_partner_connections": Suprimir,
+	// Como cobra el comercio fuera del libro: su direccion Lightning y su
+	// celular de SINPE Movil. Es configuracion, no una operacion: ninguna ley
+	// obliga a guardarla, y el comercio ya quedo cerrado.
+	"merchant_payment_methods": Suprimir,
 
 	// ── Texto o lugares que la persona escribio, en filas que se quedan ─────
 	"savings_goals":    Depurar, // el nombre de la meta es texto libre
@@ -130,7 +134,10 @@ var Clasificacion = map[string]Tratamiento{
 	"payouts":                Conservar, // destino del retiro (cuenta bancaria)
 	"qr_payments":            Conservar, // la nota que escribio quien pago
 	"qr_charges":             Conservar, // la nota del cobro
-	"qr_merchants":           Conservar, // identidad legal del comercio; queda cerrado
+	// La factura Lightning de una venta: con que se cobro y si se pago. La
+	// direccion Lightning del comercio se desasocia al vencer el plazo.
+	"qr_charge_lightning": Conservar,
+	"qr_merchants":        Conservar, // identidad legal del comercio; queda cerrado
 
 	// ── Cumplimiento y seguridad (Ley 7786) ─────────────────────────────────
 	"kyc_verifications":      Conservar,

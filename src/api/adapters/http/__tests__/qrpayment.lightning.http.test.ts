@@ -80,8 +80,12 @@ describe('HttpQRPaymentRepository: cobro con Lightning', () => {
       success: true,
       data: [{ charge_id: 'ch1', note: 'Casado', fiat_amount: 250_050, currency: 'CRC', sats: 6_000, btc_price: '40000000', payment_hash: 'ab', paid_at: '2026-11-05T18:00:00Z', charge_status: 'paid' }],
     });
+    // Costa Rica: 360 minutos al oeste de UTC. Con el offset fijo el signo se ve
+    // (en una maquina en UTC seria 0 y un -0 pasaria igual).
+    const offset = vi.spyOn(Date.prototype, 'getTimezoneOffset').mockReturnValue(360);
     const res = await new HttpQRPaymentRepository(fakeClient({ get })).getLightningSales('m1', '2026-11');
-    expect(get).toHaveBeenCalledWith(`/api/v1/qr/merchants/m1/lightning-sales?month=2026-11&tz=${new Date().getTimezoneOffset()}`);
+    offset.mockRestore();
+    expect(get).toHaveBeenCalledWith('/api/v1/qr/merchants/m1/lightning-sales?month=2026-11&tz=360');
     expect(res.data).toEqual([
       { chargeId: 'ch1', note: 'Casado', monto: 2500.5, currency: 'CRC', sats: 6_000, precioBtc: '40000000', paymentHash: 'ab', paidAt: '2026-11-05T18:00:00Z', chargeStatus: 'paid' },
     ]);

@@ -2422,7 +2422,7 @@ const zhCn: TranslationKeys = {
   contador_ln_titulo: 'Lightning 收款',
   contador_ln_ayuda: '以比特币支付到商户自己钱包的销售。金额为销售价格；sats 为实际到账数量。如果您卖出了这些比特币且款项已进入银行，请关闭该笔收入的“是销售”，以免重复计算。',
   contador_ln_total: '通过 Lightning：{monto}',
-  contador_ln_error: '无法获取 Lightning 收款，因此未包含在文件中。',
+  contador_ln_error: '无法获取 Lightning 收款。请重试，以便分享完整的文件。',
   contador_ln_detalle: '{sats} sats · 1 BTC = {precio}',
   contador_ln_sin_nota: 'Lightning 收款',
   contador_csv_medio: '方式',

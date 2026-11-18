@@ -2431,7 +2431,7 @@ const fr: TranslationKeys = {
   contador_ln_titulo: 'Encaissements par Lightning',
   contador_ln_ayuda: 'Ventes payées en bitcoin au portefeuille propre du commerce. Le montant est le prix de la vente ; les sats, ce qui est arrivé. Si vous avez vendu ce bitcoin et que l\'argent est arrivé à la banque, désactivez « C’est une vente » sur ce revenu pour ne pas le compter deux fois.',
   contador_ln_total: 'Par Lightning : {monto}',
-  contador_ln_error: 'Impossible de récupérer les encaissements Lightning, ils ne sont donc pas dans le fichier.',
+  contador_ln_error: 'Impossible de récupérer les encaissements Lightning. Réessayez pour partager le fichier complet.',
   contador_ln_detalle: '{sats} sats · 1 BTC = {precio}',
   contador_ln_sin_nota: 'Encaissement Lightning',
   contador_csv_medio: 'Moyen',

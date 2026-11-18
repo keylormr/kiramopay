@@ -302,6 +302,7 @@ export const BusinessHomeView: React.FC<Props> = ({ merchant, payments, payments
     const res = await api.cancelCharge(cobro.id);
     if (res.success) {
       setCobro(null);
+      setMedio('kiramopay');
       return;
     }
     setError(mensajeDelRechazoDelCobro(t, res.error, 'merchant_qr_error'));

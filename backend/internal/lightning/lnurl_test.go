@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -142,6 +143,9 @@ func TestCliente_Rechazos(t *testing.T) {
 		{"monto bajo el minimo", func(s *lnprueba.Servidor) { s.MinMsat = 50_000 }, 10_000, lightning.ErrFueraDeRango},
 		{"monto sobre el maximo", func(s *lnprueba.Servidor) { s.MaxMsat = 5_000 }, 10_000, lightning.ErrFueraDeRango},
 		{"factura por otro monto", func(s *lnprueba.Servidor) { s.MontoCambiado = true }, 10_000, lightning.ErrFacturaNoCorresponde},
+		{"factura por menos", func(s *lnprueba.Servidor) { s.MontoMenor = true }, 10_000, lightning.ErrFacturaNoCorresponde},
+		{"factura sin monto", func(s *lnprueba.Servidor) { s.SinMonto = true }, 10_000, lightning.ErrFacturaNoCorresponde},
+		{"verificacion en otro dominio", func(s *lnprueba.Servidor) { s.VerificarEn = "169.254.169.254" }, 10_000, lightning.ErrDominioNoPermitido},
 		{"factura de otra red", func(s *lnprueba.Servidor) { s.Red = "tb" }, 10_000, lightning.ErrFacturaNoCorresponde},
 		{"sin URL de verificacion", func(s *lnprueba.Servidor) { s.SinVerificacion = true }, 10_000, lightning.ErrSinVerificacion},
 	}
@@ -189,16 +193,72 @@ func TestCliente_NoSaleDeLaLista(t *testing.T) {
 	}
 }
 
-// Una redireccion no se sigue: podria llevar a cualquier lado.
+// Una redireccion no se sigue: podria llevar a cualquier lado. El destino es
+// del mismo servidor y responde bien, asi que solo la defensa distingue: si se
+// siguiera, la direccion se resolveria.
 func TestCliente_NoSigueRedirecciones(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "https://169.254.169.254/", http.StatusFound)
-	}))
+	var alDestino atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/lnurlp/soda", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/destino", http.StatusFound)
+	})
+	mux.HandleFunc("/destino", func(w http.ResponseWriter, r *http.Request) {
+		alDestino.Add(1)
+		_, _ = w.Write([]byte(`{"tag":"payRequest","callback":"https://` + r.Host + `/cb","minSendable":1000,"maxSendable":100000000,"metadata":"[]"}`))
+	})
+	srv := httptest.NewTLSServer(mux)
 	defer srv.Close()
 	host := strings.TrimPrefix(srv.URL, "https://")
 	c := lightning.NuevoCliente([]string{host}, "bc", srv.Client())
 	if _, err := c.ResolverDireccion(context.Background(), "soda@"+host); !errors.Is(err, lightning.ErrProveedor) {
 		t.Fatalf("error %v", err)
+	}
+	if n := alDestino.Load(); n != 0 {
+		t.Fatalf("siguio la redireccion (%d veces)", n)
+	}
+}
+
+// Un proveedor que manda la factura con "lightning:" delante: se guarda sin el
+// prefijo, y la verificacion, que tambien lo trae, habla de la misma factura.
+func TestCliente_QuitaElPrefijoDeLaFactura(t *testing.T) {
+	ctx := context.Background()
+	srv := lnprueba.Nuevo(t)
+	srv.ConPrefijo = true
+	c := srv.Cliente()
+	p, err := c.ResolverDireccion(ctx, srv.Direccion("soda"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pedida, err := c.PedirFactura(ctx, p, 10_000, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(pedida.Texto, "lnbc") {
+		t.Fatalf("la factura se guarda como %q", pedida.Texto)
+	}
+	srv.PagarTodas()
+	v, err := c.Verificar(ctx, pedida.Verificar)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Factura != pedida.Texto {
+		t.Fatalf("la verificacion habla de %q y la factura es %q", v.Factura, pedida.Texto)
+	}
+}
+
+// El campo x llega hasta 60 bits: uno enorme no puede dar cualquier fecha.
+func TestDecodificarFactura_VencimientoFueraDeRango(t *testing.T) {
+	_, hash := lnprueba.Preimage()
+	ahora := time.Now()
+	if _, err := lightning.DecodificarFactura(lnprueba.Factura("bc", 10_000, hash, ahora, 1<<40)); !errors.Is(err, lightning.ErrFacturaInvalida) {
+		t.Fatalf("vencimiento de 2^40 segundos: %v", err)
+	}
+	f, err := lightning.DecodificarFactura(lnprueba.Factura("bc", 10_000, hash, ahora, 365*24*3600))
+	if err != nil {
+		t.Fatalf("un ano: %v", err)
+	}
+	if got := f.Vence.Sub(f.Fecha); got != 365*24*time.Hour {
+		t.Fatalf("vence a los %v", got)
 	}
 }
 

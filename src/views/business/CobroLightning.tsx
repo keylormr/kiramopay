@@ -90,6 +90,11 @@ export const PanelLightning: React.FC<PanelProps> = ({ cobro, onCobroDesactualiz
   useEffect(() => {
     avisar.current = onCobroDesactualizado;
   }, [onCobroDesactualizado]);
+  // El idioma se lee al responder: cambiarlo no es motivo para pedir otra factura.
+  const traducir = useRef(t);
+  useEffect(() => {
+    traducir.current = t;
+  }, [t]);
 
   const pedir = useCallback(async () => {
     const api = getApiLayer().qrPayments;
@@ -113,13 +118,14 @@ export const PanelLightning: React.FC<PanelProps> = ({ cobro, onCobroDesactualiz
     }
     setFactura(null);
     const codigo = res.error?.code ?? '';
+    const tr = traducir.current;
     setError(
       Object.prototype.hasOwnProperty.call(CLAVES_DEL_RECHAZO_LIGHTNING, codigo)
-        ? t(CLAVES_DEL_RECHAZO_LIGHTNING[codigo] as Parameters<typeof t>[0])
-        : mensajeDelRechazoDelCobro(t, res.error, 'ln_err_generico'),
+        ? tr(CLAVES_DEL_RECHAZO_LIGHTNING[codigo] as Parameters<typeof tr>[0])
+        : mensajeDelRechazoDelCobro(tr, res.error, 'ln_err_generico'),
     );
     if (RECHAZOS_DEL_COBRO.has(codigo)) avisar.current();
-  }, [cobro.id, t]);
+  }, [cobro.id]);
 
   useEffect(() => {
     // Fuera del cuerpo del efecto: el primer render ya dice "cargando". Si el

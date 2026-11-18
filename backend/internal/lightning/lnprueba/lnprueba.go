@@ -168,6 +168,11 @@ type Servidor struct {
 	ComentarioMax    int
 	SinVerificacion  bool
 	MontoCambiado    bool   // la factura sale por 1 msat mas de lo pedido
+	MontoMenor       bool   // la factura sale por 1 msat menos de lo pedido
+	SinMonto         bool   // la factura sale sin monto
+	VerificarEn      string // host de la URL de verificacion; vacio = este servidor
+	ConPrefijo       bool   // la factura llega como "lightning:lnbc..."
+	FacturaAjena     bool   // la verificacion habla de otra factura
 	Red              string // "bc" si se deja vacio
 	Error            string // responde {"status":"ERROR"} con este motivo
 	PreimageFalso    bool   // la verificacion dice pagada con otro preimage
@@ -258,6 +263,12 @@ func (s *Servidor) atender(w http.ResponseWriter, r *http.Request) {
 		if s.MontoCambiado {
 			msat++
 		}
+		if s.MontoMenor {
+			msat--
+		}
+		if s.SinMonto {
+			msat = 0
+		}
 		red := s.Red
 		if red == "" {
 			red = "bc"
@@ -266,9 +277,13 @@ func (s *Servidor) atender(w http.ResponseWriter, r *http.Request) {
 		texto := Factura(red, msat, hash, time.Now(), s.Plazo)
 		h := hex.EncodeToString(hash[:])
 		s.facturas[h] = &facturaEmitida{texto: texto, preimage: pre}
-		respuesta := map[string]any{"pr": texto, "routes": []any{}}
+		respuesta := map[string]any{"pr": s.conPrefijo(texto), "routes": []any{}}
 		if !s.SinVerificacion {
-			respuesta["verify"] = "https://" + s.Host + "/lnurlp/" + partes[1] + "/verify/" + h
+			host := s.Host
+			if s.VerificarEn != "" {
+				host = s.VerificarEn
+			}
+			respuesta["verify"] = "https://" + host + "/lnurlp/" + partes[1] + "/verify/" + h
 		}
 		s.responder(w, respuesta)
 	case len(partes) == 4 && partes[0] == "lnurlp" && partes[2] == "verify":
@@ -278,7 +293,12 @@ func (s *Servidor) atender(w http.ResponseWriter, r *http.Request) {
 			s.responder(w, map[string]string{"status": "ERROR", "reason": "Not found"})
 			return
 		}
-		respuesta := map[string]any{"status": "OK", "settled": f.pagada, "preimage": nil, "pr": f.texto}
+		pr := f.texto
+		if s.FacturaAjena {
+			_, otro := Preimage()
+			pr = Factura("bc", 1000, otro, time.Now(), 3600)
+		}
+		respuesta := map[string]any{"status": "OK", "settled": f.pagada, "preimage": nil, "pr": s.conPrefijo(pr)}
 		if f.pagada {
 			pre := f.preimage
 			if s.PreimageFalso {
@@ -290,6 +310,13 @@ func (s *Servidor) atender(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (s *Servidor) conPrefijo(factura string) string {
+	if s.ConPrefijo {
+		return "lightning:" + factura
+	}
+	return factura
 }
 
 // Describe, para mensajes de pruebas.

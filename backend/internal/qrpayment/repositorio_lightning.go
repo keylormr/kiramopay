@@ -3,9 +3,14 @@ package qrpayment
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/kiramopay/backend/internal/audit"
+	"github.com/kiramopay/backend/internal/lightning"
 )
 
 // Lo que se guarda del cobro con Lightning (migracion 090). Ver lightning.go.
@@ -37,18 +42,45 @@ func (r *Repository) LeerMediosDeCobro(ctx context.Context, merchantID string) (
 	return &m, nil
 }
 
-// GuardarMediosDeCobro deja exactamente esos dos valores; "" es ninguno.
-func (r *Repository) GuardarMediosDeCobro(ctx context.Context, merchantID, userID, direccion, sinpe string) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO merchant_payment_methods (merchant_id, lightning_address, sinpe_movil, updated_by, updated_at)
-		 VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), $4, NOW())
-		 ON CONFLICT (merchant_id) DO UPDATE
-		    SET lightning_address = EXCLUDED.lightning_address,
-		        sinpe_movil       = EXCLUDED.sinpe_movil,
-		        updated_by        = EXCLUDED.updated_by,
-		        updated_at        = NOW()`,
-		merchantID, direccion, sinpe, userID)
-	return err
+// GuardarMediosDeCobro deja exactamente esos dos valores; "" es ninguno. Si
+// algo cambio, el rastro queda en audit_logs en la misma transaccion, con los
+// nombres de los campos y no sus valores: la direccion vieja y la nueva siguen
+// en las facturas que se cobraron con cada una. Un comercio cerrado ya no se
+// configura.
+func (r *Repository) GuardarMediosDeCobro(ctx context.Context, merchantID, userID, direccion, sinpe string,
+	cambios []string, actor ActorContext) error {
+	return r.enComercioAbierto(ctx, merchantID, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO merchant_payment_methods (merchant_id, lightning_address, sinpe_movil, updated_by, updated_at)
+			 VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), $4, NOW())
+			 ON CONFLICT (merchant_id) DO UPDATE
+			    SET lightning_address = EXCLUDED.lightning_address,
+			        sinpe_movil       = EXCLUDED.sinpe_movil,
+			        updated_by        = EXCLUDED.updated_by,
+			        updated_at        = NOW()`,
+			merchantID, direccion, sinpe, userID); err != nil {
+			return err
+		}
+		if len(cambios) == 0 {
+			return nil
+		}
+		riesgo := "medium"
+		for _, c := range cambios {
+			if c == "lightning_address" {
+				riesgo = "high"
+			}
+		}
+		return audit.EscribirEnTx(ctx, tx, &audit.Event{
+			UserID:       userID,
+			Action:       AccionMediosDeCobro,
+			ResourceType: "merchant",
+			ResourceID:   merchantID,
+			IPAddress:    actor.IPAddress,
+			UserAgent:    actor.UserAgent,
+			RiskLevel:    riesgo,
+			Details:      map[string]interface{}{"changed": cambios},
+		})
+	})
 }
 
 const facturaLightningCols = `id, charge_id, merchant_id, created_by, lightning_address, invoice,
@@ -83,7 +115,7 @@ func listarFacturasLightning(rows pgx.Rows, err error) ([]CobroLightning, error)
 
 // GuardarFacturaLightning inserta la factura y le llena id y fecha.
 func (r *Repository) GuardarFacturaLightning(ctx context.Context, f *CobroLightning) error {
-	return r.db.QueryRow(ctx,
+	err := r.db.QueryRow(ctx,
 		`INSERT INTO qr_charge_lightning (charge_id, merchant_id, created_by, lightning_address, invoice,
 		        payment_hash, amount_msat, sats, fiat_amount, currency, btc_price, btc_usd, usd_rate,
 		        verify_url, quote_expires_at, invoice_expires_at, status)
@@ -92,6 +124,13 @@ func (r *Repository) GuardarFacturaLightning(ctx context.Context, f *CobroLightn
 		f.ChargeID, f.MerchantID, f.CreatedBy, f.LightningAddress, f.Invoice,
 		f.PaymentHash, f.AmountMsat, f.Sats, f.FiatAmount, f.Currency, f.BTCPrice, f.BTCUSD, f.TasaUSD,
 		f.VerifyURL, f.QuoteExpiresAt, f.InvoiceExpiresAt).Scan(&f.ID, &f.CreatedAt)
+	// El payment_hash es unico: un proveedor que repite una factura que ya se
+	// le pidio para otro cobro no la entrega dos veces. Es una falla suya.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return fmt.Errorf("%w: el proveedor repitio una factura", lightning.ErrFacturaNoCorresponde)
+	}
+	return err
 }
 
 // FacturaLightningVigente es la factura pendiente del cobro cuya cotizacion

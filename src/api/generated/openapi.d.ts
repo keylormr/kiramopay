@@ -5906,6 +5906,15 @@ export interface paths {
                         "application/json": components["schemas"]["ErrorResponse"];
                     };
                 };
+                /** @description MERCHANT_CLOSED — the merchant was closed and the caller is not its owner (the owner can still read its sales). */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
                 /** @description LIGHTNING_SALES_FAILED */
                 500: {
                     headers: {

@@ -441,3 +441,167 @@ func TestLightning_GuardarLosMediosDeCobro(t *testing.T) {
 		t.Fatalf("quitar el SINPE: %+v %v", medios, err)
 	}
 }
+
+// La cotizacion no dura mas que el cobro: uno al que le quedan 5 minutos no
+// se ofrece por 10.
+func TestLightning_LaCotizacionNoPasaDelCobro(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	_, cobro := e.comercioConLightning(t)
+	e.reloj.avanzar(cobro.ExpiresAt.Sub(e.reloj.ahora()) - 5*time.Minute)
+	f, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.QuoteExpiresAt.After(cobro.ExpiresAt) {
+		t.Fatalf("la cotizacion vence %v y el cobro %v", f.QuoteExpiresAt, cobro.ExpiresAt)
+	}
+	if got := f.QuoteExpiresAt.Sub(e.reloj.ahora()); got > 5*time.Minute+time.Second {
+		t.Fatalf("la cotizacion dura %v", got)
+	}
+}
+
+// Una factura que vence enseguida no se muestra ni se guarda: no daria tiempo
+// de pagarla.
+func TestLightning_UnaFacturaQueVenceEnseguidaNoSeMuestra(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	_, cobro := e.comercioConLightning(t)
+	e.srv.Plazo = 60
+	if _, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID); !errors.Is(err, lightning.ErrFacturaNoCorresponde) {
+		t.Fatalf("error %v", err)
+	}
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT COUNT(*) FROM qr_charge_lightning WHERE charge_id = $1`, cobro.ID).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("guardo %d facturas (%v)", n, err)
+	}
+}
+
+// "Pagada" con el preimage correcto, pero hablando de otra factura: no paga.
+func TestLightning_LaVerificacionDeOtraFacturaNoPaga(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	_, cobro := e.comercioConLightning(t)
+	if _, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.srv.FacturaAjena = true
+	e.srv.PagarTodas()
+	c := e.consultar(t, e.owner, cobro.ID)
+	if e.srv.Verificaciones == 0 {
+		t.Fatal("no se consulto la verificacion")
+	}
+	if c.Status != qrpayment.EstadoCobroPendiente || c.Lightning == nil || c.Lightning.Status != qrpayment.EstadoLightningPendiente {
+		t.Fatalf("se dio por pagado: %+v", c)
+	}
+}
+
+// Pasados los 10 minutos, la cotizacion vieja no se reusa: se pide otra.
+func TestLightning_LaCotizacionVencidaNoSeReusa(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	_, cobro := e.comercioConLightning(t)
+	primera, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.reloj.avanzar(qrpayment.VigenciaCotizacionLightning)
+	segunda, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID)
+	if err != nil || segunda.ID == primera.ID || e.srv.Pedidos != 2 {
+		t.Fatalf("segunda: %+v %v (pedidos %d)", segunda, err, e.srv.Pedidos)
+	}
+}
+
+// Una factura vencida que se pago dentro de la gracia si paga el cobro: el
+// pago pudo salir justo antes de vencer.
+func TestLightning_PagadaDentroDeLaGracia(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	_, cobro := e.comercioConLightning(t)
+	f, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.reloj.avanzar(f.InvoiceExpiresAt.Sub(e.reloj.ahora()) + 5*time.Minute)
+	e.srv.Pagar(f.PaymentHash)
+	if _, _, err := e.svc.RevisarLightningPendientes(ctx, 25); err != nil {
+		t.Fatal(err)
+	}
+	var estado, via string
+	if err := e.pool.QueryRow(ctx,
+		`SELECT l.status, COALESCE(c.paid_via, '') FROM qr_charge_lightning l
+		   JOIN qr_charges c ON c.id = l.charge_id WHERE l.id = $1`, f.ID).Scan(&estado, &via); err != nil {
+		t.Fatal(err)
+	}
+	if estado != qrpayment.EstadoLightningPagada || via != "lightning" {
+		t.Fatalf("factura %s, cobro pagado por %q", estado, via)
+	}
+}
+
+// Con dos facturas del cobro, se muestra la que se pago aunque haya otra mas
+// nueva sin pagar.
+func TestLightning_SeMuestraLaFacturaPagada(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	m, cobro := e.comercioConLightning(t)
+	primera, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nueva := e.srv.Direccion("soda2")
+	if _, err := e.svc.GuardarMediosDeCobro(ctx, e.owner, m.ID, &qrpayment.GuardarMediosRequest{LightningAddress: &nueva}); err != nil {
+		t.Fatal(err)
+	}
+	segunda, err := e.svc.CrearFacturaLightning(ctx, e.owner, cobro.ID)
+	if err != nil || segunda.ID == primera.ID {
+		t.Fatalf("segunda: %+v %v", segunda, err)
+	}
+	e.srv.Pagar(primera.PaymentHash)
+	c := e.consultar(t, e.owner, cobro.ID)
+	if c.Status != qrpayment.EstadoCobroPagado || c.Lightning == nil || c.Lightning.ID != primera.ID ||
+		c.Lightning.Status != qrpayment.EstadoLightningPagada {
+		t.Fatalf("se muestra %+v", c.Lightning)
+	}
+}
+
+// Cambiar a donde va el dinero deja rastro: quien, desde donde y que campo.
+// Guardar lo mismo otra vez no deja otro.
+func TestLightning_CambiarLosMediosDejaRastro(t *testing.T) {
+	e := setupLightning(t, false)
+	ctx := context.Background()
+	m := comercioVerificado(t, e.svc, e.owner)
+	direccion := e.srv.Direccion("soda")
+	actor := qrpayment.ActorContext{IPAddress: "203.0.113.7", UserAgent: "prueba"}
+	for i := 0; i < 2; i++ {
+		if _, err := e.svc.GuardarMediosDeCobro(ctx, e.owner, m.ID,
+			&qrpayment.GuardarMediosRequest{LightningAddress: &direccion, Actor: actor}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sinpe := "88887777"
+	if _, err := e.svc.GuardarMediosDeCobro(ctx, e.owner, m.ID,
+		&qrpayment.GuardarMediosRequest{SinpeMovil: &sinpe, Actor: actor}); err != nil {
+		t.Fatal(err)
+	}
+	contar := func(filtro string) int {
+		t.Helper()
+		var n int
+		if err := e.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM audit_logs
+			  WHERE action = $1 AND resource_id = $2 AND user_id = $3::uuid
+			    AND host(ip_address) = '203.0.113.7' AND user_agent = 'prueba' AND `+filtro,
+			qrpayment.AccionMediosDeCobro, m.ID, e.owner).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := contar(`TRUE`); n != 2 {
+		t.Fatalf("%d rastros, quiero 2 (la direccion y el SINPE)", n)
+	}
+	if n := contar(`risk_level = 'high' AND details->'changed' @> '["lightning_address"]'`); n != 1 {
+		t.Fatalf("el cambio de direccion: %d", n)
+	}
+	if n := contar(`risk_level = 'medium' AND details->'changed' @> '["sinpe_movil"]'`); n != 1 {
+		t.Fatalf("el cambio de SINPE: %d", n)
+	}
+}

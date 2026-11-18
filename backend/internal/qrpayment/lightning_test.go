@@ -74,6 +74,21 @@ func TestErrorDelEstado(t *testing.T) {
 }
 
 // Cada rechazo con su codigo: la pantalla decide que decir por el codigo.
+// El rol que no alcanza y el comercio que no existe son un 404; el cierre se
+// dice; y una base que no contesta no se disfraza de comercio inexistente.
+func TestNoEncontradoSiNoEsCierre(t *testing.T) {
+	if err := noEncontradoSiNoEsCierre(fmt.Errorf("merchant not found")); !errors.Is(err, ErrComercioNoEncontrado) {
+		t.Fatalf("sin rol: %v", err)
+	}
+	if err := noEncontradoSiNoEsCierre(ErrComercioCerrado); !errors.Is(err, ErrComercioCerrado) {
+		t.Fatalf("cerrado: %v", err)
+	}
+	caida := errors.New("conn refused")
+	if err := noEncontradoSiNoEsCierre(caida); errors.Is(err, ErrComercioNoEncontrado) || !errors.Is(err, caida) {
+		t.Fatalf("la base caida salio como %v", err)
+	}
+}
+
 func TestResponderErrorLightning(t *testing.T) {
 	envuelto := func(e error) error { return fmt.Errorf("algo: %w", e) }
 	casos := []struct {

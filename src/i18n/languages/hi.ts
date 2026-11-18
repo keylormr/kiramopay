@@ -2422,7 +2422,7 @@ const hi: TranslationKeys = {
   contador_ln_titulo: 'Lightning से वसूली',
   contador_ln_ayuda: 'व्यापार के अपने वॉलेट में बिटकॉइन से चुकाई गई बिक्री। राशि बिक्री की कीमत है; sats वह है जो पहुँचा। अगर आपने वह बिटकॉइन बेचा और पैसा बैंक में आया, तो उस आय पर "बिक्री है" बंद करें ताकि वह दो बार न गिनी जाए।',
   contador_ln_total: 'Lightning से: {monto}',
-  contador_ln_error: 'Lightning वसूली नहीं लाई जा सकी, इसलिए वे फ़ाइल में नहीं हैं।',
+  contador_ln_error: 'Lightning वसूली नहीं लाई जा सकी। पूरी फ़ाइल साझा करने के लिए फिर से कोशिश करें।',
   contador_ln_detalle: '{sats} sats · 1 BTC = {precio}',
   contador_ln_sin_nota: 'Lightning वसूली',
   contador_csv_medio: 'तरीका',

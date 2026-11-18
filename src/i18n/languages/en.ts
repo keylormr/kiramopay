@@ -2430,7 +2430,7 @@ const en: TranslationKeys = {
   contador_ln_titulo: 'Lightning payments',
   contador_ln_ayuda: 'Sales paid in bitcoin to the business\'s own wallet. The amount is the sale price; the sats are what arrived. If you sold that bitcoin and the money reached your bank, turn off "Is a sale" on that income so it isn\'t counted twice.',
   contador_ln_total: 'By Lightning: {monto}',
-  contador_ln_error: 'Couldn\'t get the Lightning payments, so they aren\'t in the file.',
+  contador_ln_error: 'Couldn\'t get the Lightning payments. Retry to share the complete file.',
   contador_ln_detalle: '{sats} sats · 1 BTC = {precio}',
   contador_ln_sin_nota: 'Lightning payment',
   contador_csv_medio: 'Method',

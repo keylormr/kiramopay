@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getPaymentMethods: vi.fn(),
   getCharge: vi.fn(),
   createCharge: vi.fn(),
+  cancelCharge: vi.fn(),
 }));
 
 vi.mock('@/api', () => ({
@@ -29,6 +30,7 @@ vi.mock('@/api', () => ({
       }),
       createCharge: mocks.createCharge,
       getCharge: mocks.getCharge,
+      cancelCharge: mocks.cancelCharge,
       createChargeLightning: mocks.createChargeLightning,
       getPaymentMethods: mocks.getPaymentMethods,
     },
@@ -170,6 +172,13 @@ describe('PanelLightning', () => {
   });
 });
 
+// Cuantos codigos QR hay en pantalla: los de qrcode.react son un svg con
+// role="img" y un fondo cuadrado de bordes nitidos.
+const codigosQR = () =>
+  new Set(
+    Array.from(document.querySelectorAll('svg[role="img"] path[shape-rendering="crispEdges"]')).map((p) => p.closest('svg')),
+  ).size;
+
 describe('la hoja de cobro con Lightning', () => {
   const pintarHoja = async (medios: Record<string, unknown> | null) => {
     mocks.getPaymentMethods.mockResolvedValue(
@@ -208,7 +217,7 @@ describe('la hoja de cobro con Lightning', () => {
     expect(await screen.findByText('12,500 sats')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Lightning' })).toHaveAttribute('aria-pressed', 'true');
     // Un solo QR en pantalla: el de KiramoPay se fue, y con el, compartirlo.
-    expect(document.querySelectorAll('svg path').length).toBeGreaterThan(0);
+    expect(codigosQR()).toBe(1);
     expect(screen.getAllByTestId('qr-lightning')).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Compartir como imagen' })).not.toBeInTheDocument();
     // Con Lightning manda el plazo del precio; ni el del cobro ni SINPE compiten con el.
@@ -219,6 +228,7 @@ describe('la hoja de cobro con Lightning', () => {
     // De vuelta a KiramoPay vuelven el QR de siempre, el plazo y SINPE.
     await user.click(screen.getByRole('button', { name: 'KiramoPay' }));
     expect(screen.queryByTestId('qr-lightning')).not.toBeInTheDocument();
+    expect(codigosQR()).toBe(1);
     expect(screen.getByText(/Vence en/)).toBeInTheDocument();
     expect(screen.getByText(/También por SINPE Móvil/)).toBeInTheDocument();
   });
@@ -267,6 +277,30 @@ describe('la hoja de cobro con Lightning', () => {
     ).toBeInTheDocument();
     await cobrar(user);
     expect(await screen.findByText(/También por SINPE Móvil al 8888-7777/)).toBeInTheDocument();
-    expect(screen.queryByText('Pagado')).not.toBeInTheDocument();
+  });
+
+  it('un cobro pagado por KiramoPay dice "Pagado", no "con Lightning"', async () => {
+    const user = await pintarHoja({ lightningAddress: 'soda@breez.tips' });
+    mocks.createCharge.mockResolvedValueOnce({
+      success: true,
+      data: cobro({ status: 'paid', paidAt: new Date().toISOString() }),
+    });
+    await cobrar(user);
+    expect(await screen.findByText('Pagado')).toBeInTheDocument();
+    expect(screen.queryByText('Pagado con Lightning')).not.toBeInTheDocument();
+  });
+
+  it('cancelar el cobro deja el siguiente en KiramoPay', async () => {
+    const user = await pintarHoja({ lightningAddress: 'soda@breez.tips' });
+    mocks.cancelCharge.mockResolvedValue({ success: true });
+    await cobrar(user);
+    await user.click(await screen.findByRole('button', { name: 'Lightning' }));
+    await screen.findByText('12,500 sats');
+    await user.click(screen.getByRole('button', { name: 'Cancelar cobro' }));
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Cómo paga el cliente' })).not.toBeInTheDocument());
+    await cobrar(user);
+    expect(await screen.findByRole('button', { name: 'KiramoPay' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('qr-lightning')).not.toBeInTheDocument();
+    expect(mocks.createChargeLightning).toHaveBeenCalledTimes(1);
   });
 });

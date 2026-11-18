@@ -129,7 +129,16 @@ type MediosDeCobro struct {
 type GuardarMediosRequest struct {
 	LightningAddress *string `json:"lightning_address"`
 	SinpeMovil       *string `json:"sinpe_movil"`
+	// Actor es desde donde se pidio el cambio, para el rastro. No viene en el
+	// cuerpo: lo pone el handler.
+	Actor ActorContext `json:"-"`
 }
+
+// AccionMediosDeCobro es el rastro de un cambio en como cobra el comercio
+// fuera del libro. La direccion Lightning es a donde va el dinero: cambiarla
+// con una sesion robada desviaria cada cobro siguiente, y tiene que quedar
+// quien lo hizo y desde donde.
+const AccionMediosDeCobro = "merchant_payment_methods_changed"
 
 // CobroLightning es una factura Lightning de un cobro, como la ve el cajero.
 type CobroLightning struct {
@@ -269,7 +278,14 @@ func (s *Service) GuardarMediosDeCobro(ctx context.Context, userID, merchantID s
 			}
 		}
 	}
-	if err := s.repo.GuardarMediosDeCobro(ctx, merchantID, userID, direccion, sinpe); err != nil {
+	var cambios []string
+	if direccion != actuales.LightningAddress {
+		cambios = append(cambios, "lightning_address")
+	}
+	if sinpe != actuales.SinpeMovil {
+		cambios = append(cambios, "sinpe_movil")
+	}
+	if err := s.repo.GuardarMediosDeCobro(ctx, merchantID, userID, direccion, sinpe, cambios, req.Actor); err != nil {
 		return nil, err
 	}
 	return s.MediosDelComercio(ctx, userID, m.ID)
@@ -277,11 +293,19 @@ func (s *Service) GuardarMediosDeCobro(ctx context.Context, userID, merchantID s
 
 // noEncontradoSiNoEsCierre: el rol que no alcanza y el comercio que no existe
 // se responden igual, para no decir que comercios existen. El cierre si se dice.
+//
+// requireRole dice "merchant not found" sin un error centinela, y con ese mismo
+// texto que ErrComercioNoEncontrado. Cualquier otro error (la base que no
+// contesta al leer el rol) sigue como es, y sale como un 500: no es un comercio
+// que no existe.
 func noEncontradoSiNoEsCierre(err error) error {
-	if errors.Is(err, ErrComercioCerrado) {
+	if errors.Is(err, ErrComercioCerrado) || errors.Is(err, ErrComercioNoEncontrado) {
 		return err
 	}
-	return fmt.Errorf("%w: %v", ErrComercioNoEncontrado, err)
+	if err.Error() == ErrComercioNoEncontrado.Error() {
+		return ErrComercioNoEncontrado
+	}
+	return err
 }
 
 // ── Factura de un cobro ─────────────────────────────────────────────────────
@@ -351,9 +375,14 @@ func (s *Service) CrearFacturaLightning(ctx context.Context, userID, chargeID st
 		return nil, fmt.Errorf("%w: la factura vence enseguida", lightning.ErrFacturaNoCorresponde)
 	}
 
+	// La cotizacion dura lo que dure lo primero que venza: sus 10 minutos, la
+	// factura o el cobro. Un cobro que vence antes no se ofrece por mas tiempo.
 	venceCotizacion := ahora.Add(VigenciaCotizacionLightning)
 	if pedida.Factura.Vence.Before(venceCotizacion) {
 		venceCotizacion = pedida.Factura.Vence
+	}
+	if cobro.ExpiresAt.Before(venceCotizacion) {
+		venceCotizacion = cobro.ExpiresAt
 	}
 	f := &CobroLightning{
 		ChargeID:         cobro.ID,
@@ -418,9 +447,7 @@ func (s *Service) revisarLightningDelCobro(ctx context.Context, chargeID string)
 		return
 	}
 	for i := range pendientes {
-		cctx, cancelar := context.WithTimeout(ctx, limiteDeConsulta)
-		s.verificarFactura(cctx, &pendientes[i])
-		cancelar()
+		s.verificarFactura(ctx, &pendientes[i], limiteDeConsulta)
 	}
 }
 
@@ -438,9 +465,7 @@ func (s *Service) RevisarLightningPendientes(ctx context.Context, lote int) (rev
 		return 0, 0, err
 	}
 	for i := range pendientes {
-		cctx, cancelar := context.WithTimeout(ctx, 2*limiteDeConsulta)
-		s.verificarFactura(cctx, &pendientes[i])
-		cancelar()
+		s.verificarFactura(ctx, &pendientes[i], 2*limiteDeConsulta)
 	}
 	vencidas, err = s.repo.VencerFacturasLightning(ctx, ahora.Add(-graciaDespuesDeVencer))
 	return len(pendientes), vencidas, err
@@ -448,9 +473,15 @@ func (s *Service) RevisarLightningPendientes(ctx context.Context, lote int) (rev
 
 // verificarFactura consulta la URL de verificacion y, si la factura esta
 // pagada con un preimage que corresponde, la marca pagada junto con su cobro.
-func (s *Service) verificarFactura(ctx context.Context, f *CobroLightning) {
+//
+// La consulta al proveedor y el marcado tienen cada uno su plazo: un proveedor
+// lento no le deja la transaccion sin tiempo. Y el marcado no se corta si quien
+// pidio el cobro se fue: el pago ya se comprobo y hay que dejarlo escrito.
+func (s *Service) verificarFactura(ctx context.Context, f *CobroLightning, limite time.Duration) {
 	log := s.logLightning()
-	v, err := s.ln.Proveedor.Verificar(ctx, f.VerifyURL)
+	vctx, cancelarConsulta := context.WithTimeout(ctx, limite)
+	v, err := s.ln.Proveedor.Verificar(vctx, f.VerifyURL)
+	cancelarConsulta()
 	if err != nil {
 		log.Warn("lightning: no se pudo verificar la factura", "factura", f.ID, "error", err)
 		return
@@ -468,7 +499,9 @@ func (s *Service) verificarFactura(ctx context.Context, f *CobroLightning) {
 		log.Error("lightning: la verificacion habla de otra factura", "factura", f.ID)
 		return
 	}
-	cobroPagado, err := s.repo.MarcarFacturaLightningPagada(ctx, f.ID, v.Preimage)
+	mctx, cancelarMarcado := context.WithTimeout(context.WithoutCancel(ctx), limiteDeConsulta)
+	defer cancelarMarcado()
+	cobroPagado, err := s.repo.MarcarFacturaLightningPagada(mctx, f.ID, v.Preimage)
 	if err != nil {
 		log.Error("lightning: no se pudo marcar pagada", "factura", f.ID, "error", err)
 		return

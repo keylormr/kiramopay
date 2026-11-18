@@ -222,7 +222,15 @@ func (c *Cliente) PedirFactura(ctx context.Context, p *PedidoDePago, msat int64,
 	if _, err := c.urlPermitida(r.Verify); err != nil {
 		return nil, err
 	}
-	return &FacturaPedida{Texto: strings.ToLower(strings.TrimSpace(r.PR)), Factura: f, Verificar: r.Verify}, nil
+	return &FacturaPedida{Texto: textoDeLaFactura(r.PR), Factura: f, Verificar: r.Verify}, nil
+}
+
+// textoDeLaFactura es la factura como se guarda y se muestra: en minusculas y
+// sin el "lightning:" que algunos proveedores le ponen delante (la pantalla le
+// pone el suyo al armar el QR).
+func textoDeLaFactura(pr string) string {
+	t := strings.ToLower(strings.TrimSpace(pr))
+	return strings.TrimPrefix(t, "lightning:")
 }
 
 // Verificar consulta la URL de LUD-21.
@@ -242,7 +250,7 @@ func (c *Cliente) Verificar(ctx context.Context, urlVerificar string) (*Verifica
 	if err := r.comoError(); err != nil {
 		return nil, err
 	}
-	v := &Verificacion{Pagada: r.Settled, Factura: strings.ToLower(strings.TrimSpace(r.PR))}
+	v := &Verificacion{Pagada: r.Settled, Factura: textoDeLaFactura(r.PR)}
 	if r.Preimage != nil {
 		v.Preimage = strings.ToLower(strings.TrimSpace(*r.Preimage))
 	}

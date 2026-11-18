@@ -46,6 +46,7 @@ func (h *Handler) PutPaymentMethods(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 		return
 	}
+	req.Actor = ActorContext{IPAddress: middleware.RequestIP(r), UserAgent: r.UserAgent()}
 	medios, err := h.service.GuardarMediosDeCobro(r.Context(), middleware.GetUserID(r.Context()), merchantID, &req)
 	if err != nil {
 		responderErrorLightning(w, "PAYMENT_METHODS_FAILED", err, true)

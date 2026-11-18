@@ -27,6 +27,9 @@ var (
 // "Default is 3600 (1 hour) if not specified").
 const VencimientoPorDefecto = 3600 * time.Second
 
+// vencimientoMaximo es el tope que se acepta en el campo x: un ano.
+const vencimientoMaximo = 365 * 24 * time.Hour
+
 // Factura es lo que el servidor necesita saber de una factura BOLT 11.
 //
 // La firma NO se verifica: la factura llega por TLS desde el servidor LNURL de
@@ -143,7 +146,13 @@ func DecodificarFactura(texto string) (*Factura, error) {
 			if largo == 0 || largo > 12 {
 				return nil, fmt.Errorf("%w: vencimiento ilegible", ErrFacturaInvalida)
 			}
-			vencimiento = time.Duration(aEntero(valor)) * time.Second
+			// Hasta 60 bits: multiplicado por un segundo desborda int64 y
+			// daria cualquier fecha. Mas de un ano no es una factura de cobro.
+			segundos := aEntero(valor)
+			if segundos > uint64(vencimientoMaximo/time.Second) {
+				return nil, fmt.Errorf("%w: vencimiento fuera de rango", ErrFacturaInvalida)
+			}
+			vencimiento = time.Duration(segundos) * time.Second
 		}
 	}
 	if f.PaymentHash == "" {

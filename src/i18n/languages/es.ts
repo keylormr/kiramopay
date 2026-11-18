@@ -2434,7 +2434,7 @@ const es: TranslationKeys = {
   contador_ln_titulo: 'Cobros por Lightning',
   contador_ln_ayuda: 'Ventas pagadas en bitcoin a la billetera propia del comercio. El monto es el precio de la venta; los sats, lo que llegó. Si vendiste ese bitcoin y la plata entró al banco, apaga «Es venta» en ese ingreso para no contarlo dos veces.',
   contador_ln_total: 'Por Lightning: {monto}',
-  contador_ln_error: 'No se pudieron traer los cobros por Lightning, así que no entran en el archivo.',
+  contador_ln_error: 'No se pudieron traer los cobros por Lightning. Reintenta para compartir el archivo completo.',
   contador_ln_detalle: '{sats} sats · 1 BTC = {precio}',
   contador_ln_sin_nota: 'Cobro con Lightning',
   contador_csv_medio: 'Medio',

@@ -110,7 +110,7 @@ describe('Resumen para el contador con cobros por Lightning', () => {
     expect(screen.queryByText(/Por Lightning:/)).not.toBeInTheDocument();
   });
 
-  it('si no se pudieron traer lo dice, deja reintentar y no pinta un cero', async () => {
+  it('si no se pudieron traer lo dice, no deja compartir un archivo corto y deja reintentar', async () => {
     mocks.getLightningSales
       .mockResolvedValueOnce({ success: false, error: { code: 'LIGHTNING_SALES_FAILED', message: '' } })
       .mockResolvedValueOnce({ success: true, data: [venta()] });
@@ -118,11 +118,14 @@ describe('Resumen para el contador con cobros por Lightning', () => {
     pintar('m1');
     subir();
     expect(
-      await screen.findByText('No se pudieron traer los cobros por Lightning, así que no entran en el archivo.'),
+      await screen.findByText('No se pudieron traer los cobros por Lightning. Reintenta para compartir el archivo completo.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Por Lightning:/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Compartir con mi contador: CSV' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Compartir con mi contador: PDF' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findByText('2x Casado')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Compartir con mi contador: CSV' })).toBeEnabled();
   });
 
   it('mientras llegan, el archivo espera para no salir sin ellas', async () => {
