@@ -7,7 +7,7 @@
 // localStorage. Si el telefono se pierde, la boveda se rehace con el kit del
 // heredero (el descriptor) y las 12 palabras del titular.
 import { Capacitor } from '@capacitor/core';
-import type { SecureStoragePlugin } from '@aparajita/capacitor-secure-storage';
+import { conAlmacen } from '@/services/almacenSeguro';
 import { plazoValido, type DatosDeLaBoveda } from './descriptor';
 import { leerLlave, textoDeLaLlave, type LlaveConOrigen } from './llaves';
 
@@ -23,13 +23,6 @@ export interface BovedaGuardada extends DatosDeLaBoveda {
 function llaveDe(userId: string): string {
   if (!userId) throw new Error('boveda de herencia sin cuenta');
   return PREFIJO + userId;
-}
-
-// El plugin es un Proxy de Capacitor que responde a cualquier propiedad, "then"
-// incluida: nunca se devuelve ni se espera el plugin mismo (ver ../boveda.ts).
-async function conAlmacen<T>(uso: (almacen: SecureStoragePlugin) => Promise<T>): Promise<T> {
-  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-  return uso(SecureStorage);
 }
 
 interface Guardado {
