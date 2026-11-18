@@ -33,7 +33,11 @@ const alfabeto = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 func Factura(red string, msat int64, paymentHash [32]byte, fecha time.Time, plazo int) string {
 	hrp := "ln" + red + monto(msat)
 	var datos []byte
-	datos = append(datos, entero(uint64(fecha.Unix()), 7)...)
+	segundos := fecha.Unix()
+	if segundos < 0 {
+		segundos = 0
+	}
+	datos = append(datos, entero(uint64(segundos), 7)...)
 	datos = append(datos, campo(1, aPalabras(paymentHash[:]))...)
 	secreto := sha256.Sum256(paymentHash[:])
 	datos = append(datos, campo(16, aPalabras(secreto[:]))...)
@@ -64,7 +68,8 @@ func monto(msat int64) string {
 }
 
 func campo(tipo byte, valor []byte) []byte {
-	return append([]byte{tipo, byte(len(valor) >> 5), byte(len(valor) & 31)}, valor...)
+	// El largo va en dos palabras de 5 bits: hasta 1023.
+	return append([]byte{tipo, byte((len(valor) >> 5) & 31), byte(len(valor) & 31)}, valor...)
 }
 
 func entero(n uint64, palabras int) []byte {
@@ -93,11 +98,11 @@ func aPalabras(b []byte) []byte {
 		bits += 8
 		for bits >= 5 {
 			bits -= 5
-			salida = append(salida, byte(acumulado>>bits)&31)
+			salida = append(salida, byte((acumulado>>bits)&31))
 		}
 	}
 	if bits > 0 {
-		salida = append(salida, byte(acumulado<<(5-bits))&31)
+		salida = append(salida, byte((acumulado<<(5-bits))&31))
 	}
 	return salida
 }

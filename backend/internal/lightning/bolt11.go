@@ -82,7 +82,9 @@ func DecodificarFactura(texto string) (*Factura, error) {
 	if len(datos) < 7+palabrasDeFirma {
 		return nil, fmt.Errorf("%w: demasiado corta", ErrFacturaInvalida)
 	}
-	f.Fecha = time.Unix(int64(aEntero(datos[:7])), 0).UTC()
+	// 7 palabras de 5 bits son 35 bits: la mascara no cambia nada y deja ver
+	// que cabe en un int64.
+	f.Fecha = time.Unix(int64(aEntero(datos[:7])&(1<<35-1)), 0).UTC()
 	campos := datos[7 : len(datos)-palabrasDeFirma]
 
 	var vencimiento = VencimientoPorDefecto
@@ -260,7 +262,7 @@ func aBytes(palabras []byte) ([]byte, error) {
 		bits += 5
 		for bits >= 8 {
 			bits -= 8
-			salida = append(salida, byte(acumulado>>bits))
+			salida = append(salida, byte((acumulado>>bits)&0xff))
 		}
 		acumulado &= (1 << bits) - 1
 	}
