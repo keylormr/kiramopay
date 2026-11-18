@@ -101,6 +101,10 @@ export default defineConfig(({ mode }) => {
               if (/node_modules\/(ox|abitype)\//.test(id)) return 'billetera-ox';
               if (/node_modules\/viem\/_esm\/actions\//.test(id)) return 'billetera-evm-acciones';
               if (/node_modules\/viem\//.test(id)) return 'billetera-evm';
+              // La boveda de herencia firma bitcoin con btc-signer, que trae su
+              // propia copia de las curvas (2.x; viem usa la 1.9): va en su
+              // propio bloque, antes de la regla general de @noble/@scure.
+              if (/node_modules\/(@scure\/btc-signer|micro-packed)\//.test(id)) return 'billetera-herencia';
               if (/node_modules\/@(noble|scure)\//.test(id)) return 'billetera-llaves';
               // three (la intro de Ergane de la web) es UN solo archivo de 688 KB
               // minificado: no se puede partir en bloques bajo el tope de 200 KB

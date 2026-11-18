@@ -82,7 +82,7 @@ function saveCryptoState(crypto: Record<string, unknown>) {
 
 export class MockCryptoRepository implements ICryptoRepository {
   async getAvailability(): Promise<ApiResponse<DisponibilidadCripto>> {
-    return apiSuccess({ purchasesActive: true, selfCustodyActive: true });
+    return apiSuccess({ purchasesActive: true, selfCustodyActive: true, inheritanceVaultActive: true });
   }
 
   async getAssets(): Promise<ApiResponse<CryptoAsset[]>> {

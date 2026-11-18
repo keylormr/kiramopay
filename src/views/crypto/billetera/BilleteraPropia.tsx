@@ -19,6 +19,7 @@ import { ACTIVOS_EVM, direccionEvm as derivarDireccionEvm, enlaceDeDireccion, sa
 import { recortarDecimales, satsABtc, valorEnUsd } from '@/billetera/formato';
 import { CrearBilletera } from './CrearBilletera';
 import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera, type IntentosDeEnvio } from './HojasBilletera';
+import { SeccionHerencia } from '../herencia/SeccionHerencia';
 
 // 'error': el almacen seguro no contesto. No es 'sin-billetera': ofrecer crear
 // una ahi podria tapar la que ya existe.
@@ -371,6 +372,9 @@ export function BilleteraPropia() {
           </>
         )}
       </section>
+
+      {/* La boveda de herencia: solo si el servidor la ofrece (ver SeccionHerencia). */}
+      <SeccionHerencia semilla={semilla} btc={btc} userId={userId} />
 
       <section className="space-y-3" aria-labelledby="bp-otras">
         <div className="flex items-center justify-between">

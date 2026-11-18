@@ -110,6 +110,11 @@ type Opciones struct {
 	// son de demostracion (ver billetera_propia.go). Lo enciende cmd/api en
 	// produccion mientras BILLETERA_PROPIA no diga "abierta".
 	BilleteraPropiaEnEspera bool
+
+	// HerenciaEnEspera esconde la boveda de herencia bitcoin a las cuentas que
+	// no son de demostracion (ver herencia.go). Lo enciende cmd/api en
+	// produccion mientras HERENCIA_BITCOIN no diga "abierta".
+	HerenciaEnEspera bool
 }
 
 // comisionDe calcula lo que cobra KiramoPay por enviar `cantidad`.

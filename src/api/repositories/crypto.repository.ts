@@ -13,6 +13,8 @@ export interface DisponibilidadCripto {
   purchasesActive: boolean;
   /** La billetera propia (en produccion, espera el criterio del abogado). */
   selfCustodyActive: boolean;
+  /** La boveda de herencia bitcoin, dentro de la billetera propia (en produccion, en espera). */
+  inheritanceVaultActive: boolean;
 }
 
 export interface BuyCryptoRequest {

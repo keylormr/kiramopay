@@ -19,11 +19,12 @@ import (
 // dejar a nadie sin salida de lo que ya tiene.
 
 // Disponibilidad le dice a la pantalla, antes de ofrecer nada, si esta cuenta
-// puede comprar, convertir y apartar, y si ve la billetera propia
-// (billetera_propia.go).
+// puede comprar, convertir y apartar, si ve la billetera propia
+// (billetera_propia.go) y si ve la boveda de herencia (herencia.go).
 type Disponibilidad struct {
-	PurchasesActive   bool `json:"purchases_active"`
-	SelfCustodyActive bool `json:"self_custody_active"`
+	PurchasesActive        bool `json:"purchases_active"`
+	SelfCustodyActive      bool `json:"self_custody_active"`
+	InheritanceVaultActive bool `json:"inheritance_vault_active"`
 }
 
 // ComprasAbiertas dice si esta cuenta puede comprar, convertir y apartar. Las
