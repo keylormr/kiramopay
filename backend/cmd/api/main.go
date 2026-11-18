@@ -542,6 +542,11 @@ func main() {
 			// sin publicar otra version; las cuentas de demostracion la ven siempre.
 			BilleteraPropiaEnEspera: cfg.Server.Environment == "production" &&
 				os.Getenv("BILLETERA_PROPIA") != "abierta",
+			// La boveda de herencia (dentro de la billetera propia) espera la
+			// prueba en un telefono real y el criterio del abogado. Se abre con
+			// HERENCIA_BITCOIN=abierta; las cuentas de demostracion la ven siempre.
+			HerenciaEnEspera: cfg.Server.Environment == "production" &&
+				os.Getenv("HERENCIA_BITCOIN") != "abierta",
 		})
 
 	// El tipo de cambio oficial, traido cada hora. Sin esto la tasa de arriba

@@ -2955,8 +2955,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Whether this account can buy, convert and stake, and sees the self-custody wallet
-         * @description `purchases_active` is false while buying, converting and staking are paused for the caller: they answer 503 `CRYPTO_PAUSED`. Selling and withdrawing from staking are never paused. `self_custody_active` says whether the app offers the self-custody wallet, whose keys live only on the phone and never reach the server; in production it waits for BILLETERA_PROPIA=abierta. Demo accounts see both.
+         * Whether this account can buy, convert and stake, and sees the self-custody wallet and the inheritance vault
+         * @description `purchases_active` is false while buying, converting and staking are paused for the caller: they answer 503 `CRYPTO_PAUSED`. Selling and withdrawing from staking are never paused. `self_custody_active` says whether the app offers the self-custody wallet, whose keys live only on the phone and never reach the server; in production it waits for BILLETERA_PROPIA=abierta. `inheritance_vault_active` says whether that wallet offers the bitcoin inheritance vault (a taproot output the owner can spend at any time and the heir only after N blocks without movement); it is also built and kept only on the phone, and in production it waits for HERENCIA_BITCOIN=abierta. Demo accounts see all three.
          */
         get: {
             parameters: {
@@ -2978,6 +2978,7 @@ export interface paths {
                             data: {
                                 purchases_active: boolean;
                                 self_custody_active: boolean;
+                                inheritance_vault_active: boolean;
                             };
                         };
                     };
