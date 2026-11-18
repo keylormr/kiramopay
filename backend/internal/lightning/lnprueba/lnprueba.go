@@ -189,15 +189,15 @@ func Nuevo(t testing.TB) *Servidor {
 	t.Helper()
 	s := &Servidor{facturas: map[string]*facturaEmitida{}, MinMsat: 1000, MaxMsat: 100_000_000_000, ComentarioMax: 120, Plazo: 3600}
 	s.Server = httptest.NewTLSServer(http.HandlerFunc(s.atender))
-	u, _ := url.Parse(s.Server.URL)
+	u, _ := url.Parse(s.URL)
 	s.Host = u.Host
-	t.Cleanup(s.Server.Close)
+	t.Cleanup(s.Close)
 	return s
 }
 
 // Cliente devuelve un cliente LNURL que confia en este servidor y solo en el.
 func (s *Servidor) Cliente() *lightning.Cliente {
-	return lightning.NuevoCliente([]string{s.Host}, "bc", s.Server.Client())
+	return lightning.NuevoCliente([]string{s.Host}, "bc", s.Client())
 }
 
 // Direccion es la direccion Lightning de un usuario de este servidor.
