@@ -2313,7 +2313,7 @@ const fr: TranslationKeys = {
   bp_intro_redes: 'Bitcoin par Lightning ou par le réseau bitcoin, ainsi que ETH, LINK, UNI, POL et AVAX.',
   bp_intro_riesgo: 'Vos 12 mots sont le portefeuille. Si vous perdez le téléphone, eux seuls permettent de récupérer l\'argent, et personne ne peut le faire à votre place.',
   bp_crear: 'Créer mon portefeuille',
-  bp_restaurar: 'J\'ai déjà 12 mots',
+  bp_restaurar: 'J\'ai déjà 12 ou 24 mots',
   bp_palabras_titulo: 'Vos 12 mots',
   bp_palabras_aviso: 'Notez-les sur papier, dans l\'ordre, et gardez-les à l\'abri des regards. Ne faites pas de capture d\'écran et ne les envoyez pas par message.',
   bp_palabras_anotadas: 'Je les ai notés sur papier',
@@ -2322,7 +2322,7 @@ const fr: TranslationKeys = {
   bp_verificar_error: 'Un mot ne correspond pas. Vérifiez votre papier.',
   bp_guardar: 'Enregistrer mon portefeuille',
   bp_guardar_error: 'L\'enregistrement sur ce téléphone a échoué. Réessayez.',
-  bp_restaurar_titulo: 'Restaurer avec vos 12 mots',
+  bp_restaurar_titulo: 'Restaurer avec vos 12 ou 24 mots',
   bp_restaurar_ayuda: 'Écrivez-les dans l\'ordre, séparés par des espaces.',
   bp_restaurar_desconocidas: 'Ces mots ne sont pas dans la liste : {palabras}',
   bp_restaurar_invalida: 'Ces mots ne forment pas un portefeuille. Vérifiez l\'ordre et qu\'il n\'en manque aucun.',
@@ -2440,6 +2440,11 @@ const fr: TranslationKeys = {
   contador_csv_precio_btc: 'Prix de 1 BTC',
   contador_csv_total_ln: 'Total par Lightning',
   contador_csv_cantidad_ln: 'Nombre par Lightning',
+  bp_disponibilidad_error: 'Impossible de vérifier si Mon portefeuille est disponible. Réessayez.',
+  bp_resumen_comision_estimada: 'Frais du réseau, estimés',
+  bp_comision_estimada_aviso: 'Les frais sont une estimation. Ceux que facture le réseau peuvent être différents.',
+  bp_pantalla_titulo: 'Nous ne pouvons pas protéger cet écran',
+  bp_pantalla_cuerpo: 'Vos mots ne s\'affichent ou ne se saisissent ici que si l\'app peut bloquer les captures d\'écran, et cette version ne le peut pas. Mettez à jour KiramoPay et réessayez.',
 };
 
 export default fr;

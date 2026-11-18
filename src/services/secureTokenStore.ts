@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { conAlmacen } from './almacenSeguro';
 
 // On native (Capacitor) the WebView calls the API cross-origin, so the HttpOnly
 // session cookie used on the web does not apply (RFC 8252 — native apps use the
@@ -6,17 +7,14 @@ import { Capacitor } from '@capacitor/core';
 // iOS Keychain (AES-GCM) via @aparajita/capacitor-secure-storage. On the web
 // every method is a no-op: the cookie is the transport and JS must never hold
 // the refresh token.
+//
+// The plugin is only ever used inside conAlmacen() and never returned: it is a
+// Capacitor Proxy that answers to "then", so awaiting it hangs (see
+// almacenSeguro.ts).
 const REFRESH_KEY = 'kp_refresh';
 
 function isNative(): boolean {
   return Capacitor.isNativePlatform();
-}
-
-// The plugin is imported dynamically and only on native, so the web bundle never
-// loads it and a missing/!synced native module can't break the web build.
-async function plugin() {
-  const mod = await import('@aparajita/capacitor-secure-storage');
-  return mod.SecureStorage;
 }
 
 export const secureTokenStore = {
@@ -24,7 +22,7 @@ export const secureTokenStore = {
   async getRefreshToken(): Promise<string | null> {
     if (!isNative()) return null;
     try {
-      return await (await plugin()).getItem(REFRESH_KEY);
+      return await conAlmacen(almacen => almacen.getItem(REFRESH_KEY));
     } catch {
       return null;
     }
@@ -34,12 +32,13 @@ export const secureTokenStore = {
   async setRefreshToken(token: string | null): Promise<void> {
     if (!isNative()) return;
     try {
-      const store = await plugin();
-      if (token) {
-        await store.setItem(REFRESH_KEY, token);
-      } else {
-        await store.removeItem(REFRESH_KEY);
-      }
+      await conAlmacen(async almacen => {
+        if (token) {
+          await almacen.setItem(REFRESH_KEY, token);
+        } else {
+          await almacen.removeItem(REFRESH_KEY);
+        }
+      });
     } catch {
       // Best-effort: a secure-storage failure must never break the auth flow.
     }

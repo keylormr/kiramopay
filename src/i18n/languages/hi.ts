@@ -2304,7 +2304,7 @@ const hi: TranslationKeys = {
   bp_intro_redes: 'Lightning या बिटकॉइन नेटवर्क पर बिटकॉइन, और साथ में ETH, LINK, UNI, POL और AVAX।',
   bp_intro_riesgo: 'आपके 12 शब्द ही वॉलेट हैं। फ़ोन खो जाए तो सिर्फ़ इन्हीं से पैसा वापस मिलता है, और कोई और आपके लिए यह नहीं कर सकता।',
   bp_crear: 'मेरा वॉलेट बनाएँ',
-  bp_restaurar: 'मेरे पास पहले से 12 शब्द हैं',
+  bp_restaurar: 'मेरे पास पहले से 12 या 24 शब्द हैं',
   bp_palabras_titulo: 'आपके 12 शब्द',
   bp_palabras_aviso: 'इन्हें क्रम से काग़ज़ पर लिखें और ऐसी जगह रखें जहाँ कोई न देखे। स्क्रीनशॉट न लें और मैसेज में न भेजें।',
   bp_palabras_anotadas: 'मैंने इन्हें काग़ज़ पर लिख लिया है',
@@ -2313,7 +2313,7 @@ const hi: TranslationKeys = {
   bp_verificar_error: 'कोई शब्द मेल नहीं खाता। अपना काग़ज़ देखें।',
   bp_guardar: 'मेरा वॉलेट सहेजें',
   bp_guardar_error: 'इस फ़ोन पर सहेजा नहीं जा सका। फिर से कोशिश करें।',
-  bp_restaurar_titulo: 'अपने 12 शब्दों से वापस लाएँ',
+  bp_restaurar_titulo: 'अपने 12 या 24 शब्दों से वापस लाएँ',
   bp_restaurar_ayuda: 'इन्हें क्रम से, स्पेस से अलग करके लिखें।',
   bp_restaurar_desconocidas: 'ये शब्द सूची में नहीं हैं: {palabras}',
   bp_restaurar_invalida: 'ये शब्द वॉलेट नहीं बनाते। क्रम जाँचें और देखें कि कोई छूटा तो नहीं।',
@@ -2431,6 +2431,11 @@ const hi: TranslationKeys = {
   contador_csv_precio_btc: '1 BTC की कीमत',
   contador_csv_total_ln: 'Lightning कुल',
   contador_csv_cantidad_ln: 'Lightning संख्या',
+  bp_disponibilidad_error: 'हम यह जाँच नहीं पाए कि मेरा वॉलेट उपलब्ध है या नहीं। फिर से कोशिश करें।',
+  bp_resumen_comision_estimada: 'नेटवर्क शुल्क, अनुमानित',
+  bp_comision_estimada_aviso: 'यह शुल्क एक अनुमान है। नेटवर्क जो वास्तव में लेगा वह अलग हो सकता है।',
+  bp_pantalla_titulo: 'हम इस स्क्रीन को सुरक्षित नहीं कर सकते',
+  bp_pantalla_cuerpo: 'आपके शब्द यहाँ तभी दिखाए या लिखे जाते हैं जब ऐप स्क्रीनशॉट रोक सके, और यह संस्करण ऐसा नहीं कर सकता। KiramoPay अपडेट करें और फिर कोशिश करें।',
 };
 
 export default hi;

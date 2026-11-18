@@ -13,7 +13,7 @@
 //   barrera de la app, no del cifrado: el almacen ya esta cifrado por el
 //   sistema y abre con el telefono desbloqueado.
 import { Capacitor } from '@capacitor/core';
-import type { SecureStoragePlugin } from '@aparajita/capacitor-secure-storage';
+import { conAlmacen } from '@/services/almacenSeguro';
 import { biometricService } from '@/services/biometric';
 import { normalizarSemilla, semillaValida } from './semilla';
 
@@ -27,15 +27,6 @@ export function bovedaDisponible(): boolean {
 function llaveDe(userId: string): string {
   if (!userId) throw new Error('billetera propia sin cuenta');
   return PREFIJO + userId;
-}
-
-// El plugin es un Proxy de Capacitor que responde a CUALQUIER propiedad, "then"
-// incluida: devolverlo desde una funcion async (o hacerle await) lo trata como
-// promesa, llama a SecureStorage.then() y la operacion queda colgada. Por eso
-// nunca se devuelve el plugin: se usa adentro y se devuelve lo que contesta.
-async function conAlmacen<T>(uso: (almacen: SecureStoragePlugin) => Promise<T>): Promise<T> {
-  const { SecureStorage } = await import('@aparajita/capacitor-secure-storage');
-  return uso(SecureStorage);
 }
 
 export type EstadoDeLaBilletera = 'hay' | 'no-hay' | 'error';

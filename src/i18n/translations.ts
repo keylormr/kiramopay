@@ -2524,6 +2524,11 @@ export type TranslationKeys = {
   contador_csv_precio_btc: string;
   contador_csv_total_ln: string;
   contador_csv_cantidad_ln: string;
+  bp_disponibilidad_error: string;
+  bp_resumen_comision_estimada: string;
+  bp_comision_estimada_aviso: string;
+  bp_pantalla_titulo: string;
+  bp_pantalla_cuerpo: string;
 };
 
 import es from './languages/es';

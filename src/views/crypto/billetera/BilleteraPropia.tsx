@@ -2,8 +2,8 @@
 //
 // Al reves del portafolio (filas en la base de KiramoPay), aqui el dinero vive
 // en las redes y solo este telefono puede moverlo. La semilla se abre con la
-// huella al entrar y se suelta al salir de la pestana: no queda en memoria
-// mientras la persona hace otra cosa.
+// huella al entrar y se suelta al salir de la pestana o al pasar la app a
+// segundo plano: no queda en memoria mientras la persona hace otra cosa.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/hooks/useApp';
 import { useLanguage } from '@/i18n/LanguageContext';
@@ -13,15 +13,23 @@ import { formatMoney } from '@/utils/money';
 import { localeDe } from '@/utils/periodos';
 import { abrirSemilla, borrarSemilla, bovedaDisponible, confirmarConHuella, estadoDeLaBilletera, guardarSemilla } from '@/billetera/boveda';
 import { abrirBitcoin, bitcoinConfigurado, type BilleteraBitcoin, type DepositoSinSumar, type MovimientoBitcoin } from '@/billetera/bitcoin';
+import { alPasarASegundoPlano } from '@/billetera/segundoPlano';
 import { rellenar } from '@/utils/planes';
 import { ACTIVOS_EVM, direccionEvm as derivarDireccionEvm, enlaceDeDireccion, saldoEvm, saldoLegible } from '@/billetera/evm';
 import { recortarDecimales, satsABtc, valorEnUsd } from '@/billetera/formato';
 import { CrearBilletera } from './CrearBilletera';
-import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera } from './HojasBilletera';
+import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera, type IntentosDeEnvio } from './HojasBilletera';
 
 // 'error': el almacen seguro no contesto. No es 'sin-billetera': ofrecer crear
 // una ahi podria tapar la que ya existe.
 type Fase = 'cargando' | 'web' | 'error' | 'sin-billetera' | 'crear' | 'restaurar' | 'cerrada' | 'abierta';
+
+/**
+ * Cuanto espera el cierre por segundo plano a que termine un envio en marcha. Pasado
+ * ese tiempo se cierra igual: un envio que no termina no puede dejar la semilla en
+ * memoria con la app fuera de pantalla.
+ */
+const ESPERA_MAXIMA_DEL_ENVIO_MS = 60_000;
 
 /** Lo que falta sumar: el catalogo de la app las lista, la billetera propia todavia no. */
 const PROXIMAMENTE = ['SOL', 'ADA', 'DOT', 'ATOM'] as const;
@@ -69,6 +77,16 @@ export function BilleteraPropia() {
   // cierra en vez de quedar abierta sin dueno).
   const sesionRef = useRef(0);
   const abriendoRef = useRef(false);
+  // Un envio en marcha (HojaEnviar) no se corta por pasar a segundo plano: el
+  // cierre espera a que termine (o a ESPERA_MAXIMA_DEL_ENVIO_MS). Ver
+  // alPasarAlSegundoPlano.
+  const enviandoRef = useRef(false);
+  const cierrePendienteRef = useRef(false);
+  const cierreForzadoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Los intentos de envio (llave de idempotencia y nonce) duran mas que la hoja
+  // de enviar y que el cierre de la billetera: un envio dudoso se reintenta como
+  // el mismo pago aunque la billetera se haya cerrado en el medio.
+  const intentosRef = useRef<IntentosDeEnvio>(new Map());
 
   const direccionEvm = useMemo(() => (semilla ? derivarDireccionEvm(semilla) : null), [semilla]);
 
@@ -77,7 +95,59 @@ export function BilleteraPropia() {
     sesionRef.current += 1;
     void btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
+    if (cierreForzadoRef.current) clearTimeout(cierreForzadoRef.current);
   }, []);
+
+  // Al pasar la app a segundo plano la billetera vuelve a estar cerrada: la
+  // semilla sale de la memoria y para verla otra vez hace falta la huella. Se
+  // descarta lo que esta cargando (sesionRef) y se cierra la conexion de bitcoin.
+  const cerrarPorSegundoPlano = useCallback(() => {
+    cierrePendienteRef.current = false;
+    if (cierreForzadoRef.current) {
+      clearTimeout(cierreForzadoRef.current);
+      cierreForzadoRef.current = null;
+    }
+    sesionRef.current += 1;
+    void btcRef.current?.desconectar().catch(() => undefined);
+    btcRef.current = null;
+    setBtc(null);
+    setBtcEstado('conectando');
+    setSemilla(null);
+    setSaldos({});
+    setMovimientos([]);
+    setDepositos([]);
+    setDireccionDeCobro(null);
+    setRecibir(null);
+    setEnviar(null);
+    setPalabrasVisibles(null);
+    setQuitando(false);
+    setFase('cerrada');
+  }, []);
+
+  // Si hay un envio en marcha, cerrar a mitad de camino lo cortaria: el cierre
+  // queda pendiente y se hace apenas el envio termina (alEnviando), o pasado
+  // ESPERA_MAXIMA_DEL_ENVIO_MS si no termina. Si el envio queda dudoso, su
+  // intento sobrevive al cierre (intentosRef) y se reintenta como el mismo pago.
+  const alPasarAlSegundoPlano = useCallback(() => {
+    if (enviandoRef.current) {
+      cierrePendienteRef.current = true;
+      if (!cierreForzadoRef.current) {
+        cierreForzadoRef.current = setTimeout(cerrarPorSegundoPlano, ESPERA_MAXIMA_DEL_ENVIO_MS);
+      }
+      return;
+    }
+    cerrarPorSegundoPlano();
+  }, [cerrarPorSegundoPlano]);
+
+  const alEnviando = useCallback((enviando: boolean) => {
+    enviandoRef.current = enviando;
+    if (!enviando && cierrePendienteRef.current) cerrarPorSegundoPlano();
+  }, [cerrarPorSegundoPlano]);
+
+  useEffect(() => {
+    if (fase !== 'abierta') return;
+    return alPasarASegundoPlano(alPasarAlSegundoPlano);
+  }, [fase, alPasarAlSegundoPlano]);
 
   const comprobar = useCallback(async () => {
     if (!bovedaDisponible() || !userId) return;
@@ -190,6 +260,8 @@ export function BilleteraPropia() {
 
   const quitar = async () => {
     sesionRef.current += 1;
+    // Otra semilla no hereda los intentos de la anterior (otro nonce, otra cuenta).
+    intentosRef.current.clear();
     await btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
     await borrarSemilla(userId);
@@ -364,7 +436,7 @@ export function BilleteraPropia() {
       </section>
 
       <HojaRecibir activo={recibir} onClose={() => setRecibir(null)} direccionEvm={direccionEvm} btc={btc} />
-      <HojaEnviar activo={enviar} onClose={() => setEnviar(null)} semilla={semilla} btc={btc} onEnviado={() => void leerSaldos(semilla, btc)} />
+      <HojaEnviar activo={enviar} onClose={() => setEnviar(null)} semilla={semilla} btc={btc} onEnviado={() => void leerSaldos(semilla, btc)} onEnviando={alEnviando} intentos={intentosRef.current} />
       <HojaPalabras semilla={palabrasVisibles} onClose={() => setPalabrasVisibles(null)} />
       <HojaQuitar abierta={quitando} onClose={() => setQuitando(false)} onQuitar={quitar} />
     </div>
