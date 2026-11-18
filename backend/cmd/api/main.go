@@ -497,6 +497,11 @@ func main() {
 		TOTP:                mfaSvc,
 		Lockout:             lockoutStore,
 		MaxIntentosDeCierre: 5,
+		// Cobrar con Lightning en la billetera propia del comercio: el servidor
+		// pide la factura a la direccion del comercio y verifica el pago con el
+		// preimage, sin recibir ni mover bitcoin (cobro_lightning.go).
+		Lightning: opcionesLightning(cfg.Server.Environment == "production",
+			priceService.GetPrice, countryRepo.TipoDeCambioParaCobrar),
 	})
 	// El precio de cripto lo pone el servidor, y para cotizar en colones usa el
 	// MISMO tipo de cambio que sirve el resto de la aplicacion, no una constante
@@ -1259,6 +1264,11 @@ func main() {
 			r.Get("/qr/charges", qrHandler.ListCharges)
 			r.Get("/qr/charges/{id}", qrHandler.GetChargeStatus)
 			r.Delete("/qr/charges/{id}", qrHandler.CancelCharge)
+			// Cobro con Lightning en la billetera propia del comercio.
+			r.Post("/qr/charges/{id}/lightning", qrHandler.CreateChargeLightning)
+			r.Get("/qr/merchants/{id}/payment-methods", qrHandler.GetPaymentMethods)
+			r.Put("/qr/merchants/{id}/payment-methods", qrHandler.PutPaymentMethods)
+			r.Get("/qr/merchants/{id}/lightning-sales", qrHandler.GetLightningSales)
 
 			// Splits
 			r.Post("/splits", splitHandler.CreateSplit)

@@ -177,6 +177,13 @@ type QRCharge struct {
 	PaidAt       *time.Time `json:"paid_at,omitempty"`
 	SupersededBy string     `json:"superseded_by,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
+
+	// PaidVia dice por donde se pago, cuando no fue un pagador de KiramoPay:
+	// "lightning" (migracion 090). Vacio es el pago de siempre, con su asiento.
+	PaidVia string `json:"paid_via,omitempty"`
+	// Lightning es la factura Lightning mas reciente del cobro, si se pidio una.
+	// Solo la llena la consulta del cobro (GetCharge).
+	Lightning *CobroLightning `json:"lightning,omitempty"`
 }
 
 // Retiro es lo que contesta el retiro del saldo del negocio: que retiro fue y,
