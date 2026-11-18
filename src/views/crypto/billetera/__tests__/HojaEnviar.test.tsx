@@ -250,6 +250,24 @@ describe('el intento de un envio sobrevive al cierre de la hoja', () => {
     expect(enviar.mock.calls[1][1]).not.toBe(enviar.mock.calls[0][1]);
   });
 
+  it('bitcoin: dos direcciones que solo difieren en mayusculas son pagos distintos', async () => {
+    // Las direcciones base58 distinguen mayusculas: juntarlas en una sola llave haria
+    // que el SDK diera el segundo pago por ya hecho y no lo mandara.
+    const intentos: IntentosDeEnvio = new Map();
+    const enviar = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(undefined);
+    const btc = { prepararEnvio: vi.fn().mockResolvedValue(preparadoBtc), enviar } as unknown as BilleteraBitcoin;
+
+    const primera = montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar('1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2', '1000'));
+    expect(await screen.findByText(es.bp_err_envio)).toBeInTheDocument();
+    primera.unmount();
+
+    montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar('1bvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2', '1000'));
+    expect(await screen.findByText(es.bp_enviado)).toBeInTheDocument();
+    expect(enviar.mock.calls[1][1]).not.toBe(enviar.mock.calls[0][1]);
+  });
+
   it('EVM: la hoja nueva reintenta con el mismo nonce', async () => {
     const intentos: IntentosDeEnvio = new Map();
     evm.enviarEvm.mockRejectedValueOnce(new Error('se corto la conexion'));
