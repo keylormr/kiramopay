@@ -51,6 +51,23 @@ describe('los avisos de cripto nombran la lista como la pantalla', () => {
   });
 });
 
+// Restaurar la billetera propia acepta 12 y 24 palabras: los dos textos de esa
+// pantalla lo dicen en cada idioma. Crear sigue generando y mostrando 12, y sus
+// textos no se tocan.
+describe('los textos de restaurar la billetera propia dicen 12 o 24 palabras', () => {
+  const idiomas: Array<[string, TranslationKeys]> = [
+    ['es', es], ['en', en], ['fr', fr], ['pt', pt], ['zh-cn', zh], ['ja', ja], ['hi', hi],
+  ];
+  it.each(idiomas)('%s', (_idioma, d) => {
+    for (const texto of [d.bp_restaurar, d.bp_restaurar_titulo]) {
+      expect(texto).toContain('12');
+      expect(texto).toContain('24');
+    }
+    expect(d.bp_palabras_titulo).toContain('12');
+    expect(d.bp_palabras_titulo).not.toContain('24');
+  });
+});
+
 // Anglicismos con equivalente corriente. "BALANCE TOTAL" y "Mi Portfolio" se
 // leian como texto traducido a medias; el resto de la app ya decia "saldo" y
 // "cripto". Los rotulos que son de contabilidad ("Balance del período", "Balance
