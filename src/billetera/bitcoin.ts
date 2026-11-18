@@ -202,7 +202,8 @@ function viaDe(p: Payment): MovimientoBitcoin['via'] {
   }
 }
 
-function envolver(sdk: BreezSdk): BilleteraBitcoin {
+/** Exportada para las pruebas, que le dan un SDK falso: abrirBitcoin necesita la llave de Breez y la red. */
+export function envolver(sdk: BreezSdk): BilleteraBitcoin {
   return {
     // ensureSynced: recien abierta, la billetera todavia no tiene el saldo de
     // los operadores. Sin esperar, un saldo real se veria como cero.

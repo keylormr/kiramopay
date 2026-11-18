@@ -27,7 +27,7 @@ vi.mock('@/components/QrScannerPanel', () => ({
 }));
 
 import { ACTIVOS_EVM } from '@/billetera/evm';
-import { HojaEnviar, type ActivoDeLaBilletera } from '../HojasBilletera';
+import { HojaEnviar, type ActivoDeLaBilletera, type IntentosDeEnvio } from '../HojasBilletera';
 
 const SEMILLA = 'test test test test test test test test test test test junk';
 const DESDE = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
@@ -178,5 +178,103 @@ describe('confirmar un envio de la billetera propia', () => {
     await userEvent.click(screen.getByRole('button', { name: es.scan_qr }));
     await userEvent.click(screen.getByRole('button', { name: 'leer' }));
     expect(screen.getAllByRole('textbox')[0]).toHaveValue(OTRA);
+  });
+});
+
+// Un envio dudoso (la red lo recibio pero la respuesta no llego) se reintenta con
+// la misma llave y el mismo nonce aunque la hoja se cierre en el medio: por
+// ejemplo, la billetera se cierra al pasar la app a segundo plano.
+describe('el intento de un envio sobrevive al cierre de la hoja', () => {
+  const DIRECCION = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+  const preparadoBtc: EnvioBitcoinPreparado = {
+    destino: { tipo: 'direccion-bitcoin' }, montoSats: 1000, comisionSats: 120, comisionEstimada: false,
+    interno: { via: 'pago', respuesta: {} as never },
+  };
+
+  /** Monta la hoja con un almacen de intentos que dura mas que ella, como el de BilleteraPropia. */
+  function montarConIntentos(activo: ActivoDeLaBilletera, btc: BilleteraBitcoin | null, intentos: IntentosDeEnvio) {
+    return render(
+      <LanguageProvider>
+        <HojaEnviar activo={activo} onClose={vi.fn()} semilla={SEMILLA} btc={btc} onEnviado={vi.fn()} intentos={intentos} />
+      </LanguageProvider>,
+    );
+  }
+
+  it('bitcoin: la hoja nueva, con el mismo destino y monto, usa la misma llave', async () => {
+    const intentos: IntentosDeEnvio = new Map();
+    const enviar = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(undefined);
+    const btc = { prepararEnvio: vi.fn().mockResolvedValue(preparadoBtc), enviar } as unknown as BilleteraBitcoin;
+
+    const primera = montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar(DIRECCION, '1000'));
+    expect(await screen.findByText(es.bp_err_envio)).toBeInTheDocument();
+    primera.unmount();
+
+    montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar(DIRECCION, '1000'));
+    expect(await screen.findByText(es.bp_enviado)).toBeInTheDocument();
+
+    expect(enviar).toHaveBeenCalledTimes(2);
+    expect(enviar.mock.calls[1][1]).toBe(enviar.mock.calls[0][1]);
+  });
+
+  it('bitcoin: otro monto es otro pago y lleva otra llave', async () => {
+    const intentos: IntentosDeEnvio = new Map();
+    const enviar = vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(undefined);
+    const btc = { prepararEnvio: vi.fn().mockResolvedValue(preparadoBtc), enviar } as unknown as BilleteraBitcoin;
+
+    const primera = montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar(DIRECCION, '1000'));
+    expect(await screen.findByText(es.bp_err_envio)).toBeInTheDocument();
+    primera.unmount();
+
+    montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar(DIRECCION, '2000'));
+    expect(await screen.findByText(es.bp_enviado)).toBeInTheDocument();
+    expect(enviar.mock.calls[1][1]).not.toBe(enviar.mock.calls[0][1]);
+  });
+
+  it('bitcoin: un envio hecho cierra el intento: repetir el mismo pago despues lleva llave nueva', async () => {
+    const intentos: IntentosDeEnvio = new Map();
+    const enviar = vi.fn().mockResolvedValue(undefined);
+    const btc = { prepararEnvio: vi.fn().mockResolvedValue(preparadoBtc), enviar } as unknown as BilleteraBitcoin;
+
+    const primera = montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar(DIRECCION, '1000'));
+    expect(await screen.findByText(es.bp_enviado)).toBeInTheDocument();
+    primera.unmount();
+
+    montarConIntentos(ACTIVO_BTC, btc, intentos);
+    await userEvent.click(await llenarYRevisar(DIRECCION, '1000'));
+    expect(await screen.findByText(es.bp_enviado)).toBeInTheDocument();
+    expect(enviar.mock.calls[1][1]).not.toBe(enviar.mock.calls[0][1]);
+  });
+
+  it('EVM: la hoja nueva reintenta con el mismo nonce', async () => {
+    const intentos: IntentosDeEnvio = new Map();
+    evm.enviarEvm.mockRejectedValueOnce(new Error('se corto la conexion'));
+
+    const primera = montarConIntentos(ACTIVO_ETH, null, intentos);
+    await userEvent.click(await llenarYRevisar(OTRA, '0.1'));
+    expect(await screen.findByText(es.bp_err_envio)).toBeInTheDocument();
+    primera.unmount();
+
+    montarConIntentos(ACTIVO_ETH, null, intentos);
+    await llenarYRevisar(OTRA, '0.1');
+    expect(evm.prepararEnvioEvm).toHaveBeenLastCalledWith(SEMILLA, ETH, OTRA, '0.1', { nonce: 7 });
+  });
+
+  it('EVM: la misma direccion escrita en minusculas es el mismo envio', async () => {
+    const intentos: IntentosDeEnvio = new Map();
+    evm.enviarEvm.mockRejectedValueOnce(new Error('se corto la conexion'));
+
+    const primera = montarConIntentos(ACTIVO_ETH, null, intentos);
+    await userEvent.click(await llenarYRevisar(OTRA, '0.1'));
+    expect(await screen.findByText(es.bp_err_envio)).toBeInTheDocument();
+    primera.unmount();
+
+    montarConIntentos(ACTIVO_ETH, null, intentos);
+    await llenarYRevisar(OTRA.toLowerCase(), '0.1');
+    expect(evm.prepararEnvioEvm).toHaveBeenLastCalledWith(SEMILLA, ETH, OTRA.toLowerCase(), '0.1', { nonce: 7 });
   });
 });

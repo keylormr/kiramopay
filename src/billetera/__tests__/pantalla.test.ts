@@ -99,6 +99,36 @@ describe('usePantallaSegura', () => {
     await waitFor(() => expect(nativo.metodos.desactivar).toHaveBeenCalledTimes(1));
   });
 
+  it('si se desmonta antes de que el plugin conteste, suelta la proteccion cuando contesta', async () => {
+    let contestar: () => void = () => undefined;
+    nativo.metodos.activar.mockReturnValue(new Promise<void>(r => { contestar = r; }));
+    const { unmount } = renderHook(() => usePantallaSegura(true));
+    unmount();
+    expect(nativo.metodos.desactivar).not.toHaveBeenCalled();
+
+    await act(async () => { contestar(); });
+    // Sin esto la proteccion quedaria prendida para siempre (FLAG_SECURE de por vida).
+    await waitFor(() => expect(nativo.metodos.desactivar).toHaveBeenCalledTimes(1));
+  });
+
+  it('si se vuelve a pedir mientras se apaga, no se apaga debajo de quien la pide', async () => {
+    const primera = await conLimite(protegerPantalla());
+    let apagado: () => void = () => undefined;
+    nativo.metodos.desactivar.mockReturnValueOnce(new Promise<void>(r => { apagado = r; }));
+    primera(); // empieza a apagarse y todavia no termina
+    await waitFor(() => expect(nativo.metodos.desactivar).toHaveBeenCalledTimes(1));
+
+    const segunda = protegerPantalla();
+    apagado();
+    const soltar = await conLimite(segunda);
+    // Se apago y se volvio a prender, en ese orden: la ultima palabra es 'prendida'.
+    expect(nativo.metodos.activar).toHaveBeenCalledTimes(2);
+    expect(nativo.metodos.desactivar).toHaveBeenCalledTimes(1);
+
+    soltar();
+    await waitFor(() => expect(nativo.metodos.desactivar).toHaveBeenCalledTimes(2));
+  });
+
   it('un telefono sin el plugin queda en sin-proteccion', async () => {
     nativo.metodos.activar.mockRejectedValue(new Error('not implemented'));
     const { result, unmount } = renderHook(() => usePantallaSegura(true));

@@ -48,13 +48,17 @@ export function GrillaDePalabras({ palabras }: { palabras: string[] }) {
  * Si el telefono no puede bloquear las capturas (un binario viejo sin el plugin),
  * las palabras no se muestran ni se piden: se pide actualizar la app.
  */
-export function PantallaSinProteccion({ estado, etiqueta, onCerrar }: { estado: EstadoDeLaProteccion; etiqueta: string; onCerrar: () => void }) {
+export function PantallaSinProteccion({ estado, etiqueta, onCerrar, enHoja = false }: { estado: EstadoDeLaProteccion; etiqueta: string; onCerrar: () => void; enHoja?: boolean }) {
   const { t } = useLanguage();
   if (estado !== 'sin-proteccion') {
     return <p className="p-4 text-sm uv-text-muted">{t('loading')}</p>;
   }
   return (
-    <section role="alert" className="space-y-4 uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5">
+    // Dentro de una hoja no lleva marco propio: la hoja ya es la tarjeta.
+    <section
+      role="alert"
+      className={enHoja ? 'space-y-4' : 'space-y-4 uv-surface-1 rounded-[20px] border border-[var(--color-border)] dark:border-[var(--color-border-dark)] p-5'}
+    >
       <Icons.AlertTriangle size={24} className="text-[var(--color-danger)]" aria-hidden />
       <h3 className="text-lg font-bold uv-text-primary">{t('bp_pantalla_titulo')}</h3>
       <p className="text-sm uv-text-secondary">{t('bp_pantalla_cuerpo')}</p>

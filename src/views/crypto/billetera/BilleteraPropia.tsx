@@ -18,11 +18,18 @@ import { rellenar } from '@/utils/planes';
 import { ACTIVOS_EVM, direccionEvm as derivarDireccionEvm, enlaceDeDireccion, saldoEvm, saldoLegible } from '@/billetera/evm';
 import { recortarDecimales, satsABtc, valorEnUsd } from '@/billetera/formato';
 import { CrearBilletera } from './CrearBilletera';
-import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera } from './HojasBilletera';
+import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera, type IntentosDeEnvio } from './HojasBilletera';
 
 // 'error': el almacen seguro no contesto. No es 'sin-billetera': ofrecer crear
 // una ahi podria tapar la que ya existe.
 type Fase = 'cargando' | 'web' | 'error' | 'sin-billetera' | 'crear' | 'restaurar' | 'cerrada' | 'abierta';
+
+/**
+ * Cuanto espera el cierre por segundo plano a que termine un envio en marcha. Pasado
+ * ese tiempo se cierra igual: un envio que no termina no puede dejar la semilla en
+ * memoria con la app fuera de pantalla.
+ */
+const ESPERA_MAXIMA_DEL_ENVIO_MS = 60_000;
 
 /** Lo que falta sumar: el catalogo de la app las lista, la billetera propia todavia no. */
 const PROXIMAMENTE = ['SOL', 'ADA', 'DOT', 'ATOM'] as const;
@@ -71,9 +78,15 @@ export function BilleteraPropia() {
   const sesionRef = useRef(0);
   const abriendoRef = useRef(false);
   // Un envio en marcha (HojaEnviar) no se corta por pasar a segundo plano: el
-  // cierre espera a que termine. Ver cerrarPorSegundoPlano.
+  // cierre espera a que termine (o a ESPERA_MAXIMA_DEL_ENVIO_MS). Ver
+  // alPasarAlSegundoPlano.
   const enviandoRef = useRef(false);
   const cierrePendienteRef = useRef(false);
+  const cierreForzadoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Los intentos de envio (llave de idempotencia y nonce) duran mas que la hoja
+  // de enviar y que el cierre de la billetera: un envio dudoso se reintenta como
+  // el mismo pago aunque la billetera se haya cerrado en el medio.
+  const intentosRef = useRef<IntentosDeEnvio>(new Map());
 
   const direccionEvm = useMemo(() => (semilla ? derivarDireccionEvm(semilla) : null), [semilla]);
 
@@ -82,6 +95,7 @@ export function BilleteraPropia() {
     sesionRef.current += 1;
     void btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
+    if (cierreForzadoRef.current) clearTimeout(cierreForzadoRef.current);
   }, []);
 
   // Al pasar la app a segundo plano la billetera vuelve a estar cerrada: la
@@ -89,6 +103,10 @@ export function BilleteraPropia() {
   // descarta lo que esta cargando (sesionRef) y se cierra la conexion de bitcoin.
   const cerrarPorSegundoPlano = useCallback(() => {
     cierrePendienteRef.current = false;
+    if (cierreForzadoRef.current) {
+      clearTimeout(cierreForzadoRef.current);
+      cierreForzadoRef.current = null;
+    }
     sesionRef.current += 1;
     void btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
@@ -106,12 +124,16 @@ export function BilleteraPropia() {
     setFase('cerrada');
   }, []);
 
-  // Si hay un envio en marcha, cerrar a mitad de camino descartaria la llave de
-  // idempotencia de ese intento y un reintento podria cobrar dos veces: el cierre
-  // queda pendiente y se hace apenas el envio termina (alEnviando).
+  // Si hay un envio en marcha, cerrar a mitad de camino lo cortaria: el cierre
+  // queda pendiente y se hace apenas el envio termina (alEnviando), o pasado
+  // ESPERA_MAXIMA_DEL_ENVIO_MS si no termina. Si el envio queda dudoso, su
+  // intento sobrevive al cierre (intentosRef) y se reintenta como el mismo pago.
   const alPasarAlSegundoPlano = useCallback(() => {
     if (enviandoRef.current) {
       cierrePendienteRef.current = true;
+      if (!cierreForzadoRef.current) {
+        cierreForzadoRef.current = setTimeout(cerrarPorSegundoPlano, ESPERA_MAXIMA_DEL_ENVIO_MS);
+      }
       return;
     }
     cerrarPorSegundoPlano();
@@ -238,6 +260,8 @@ export function BilleteraPropia() {
 
   const quitar = async () => {
     sesionRef.current += 1;
+    // Otra semilla no hereda los intentos de la anterior (otro nonce, otra cuenta).
+    intentosRef.current.clear();
     await btcRef.current?.desconectar().catch(() => undefined);
     btcRef.current = null;
     await borrarSemilla(userId);
@@ -412,7 +436,7 @@ export function BilleteraPropia() {
       </section>
 
       <HojaRecibir activo={recibir} onClose={() => setRecibir(null)} direccionEvm={direccionEvm} btc={btc} />
-      <HojaEnviar activo={enviar} onClose={() => setEnviar(null)} semilla={semilla} btc={btc} onEnviado={() => void leerSaldos(semilla, btc)} onEnviando={alEnviando} />
+      <HojaEnviar activo={enviar} onClose={() => setEnviar(null)} semilla={semilla} btc={btc} onEnviado={() => void leerSaldos(semilla, btc)} onEnviando={alEnviando} intentos={intentosRef.current} />
       <HojaPalabras semilla={palabrasVisibles} onClose={() => setPalabrasVisibles(null)} />
       <HojaQuitar abierta={quitando} onClose={() => setQuitando(false)} onQuitar={quitar} />
     </div>

@@ -199,12 +199,18 @@ interface HojaEnviarProps {
   /**
    * Avisa cuando un envio esta en marcha (desde que se toca Confirmar hasta que
    * termina o falla). Mientras dure, la billetera no se cierra por pasar a
-   * segundo plano: cerrarla descartaria la llave de idempotencia del intento.
+   * segundo plano: cerrarla a mitad de camino cortaria el envio.
    */
   onEnviando?: (enviando: boolean) => void;
+  /**
+   * Donde viven los intentos de envio. Quien monta la hoja lo guarda para que
+   * duren mas que ella: cerrar la hoja, o la billetera al pasar a segundo plano,
+   * no puede soltar la llave de un envio dudoso. Sin esto, cada hoja lleva el suyo.
+   */
+  intentos?: IntentosDeEnvio;
 }
 
-type Preparado = { en: number } & (
+type Preparado = { en: number; clave: string } & (
   | { tipo: 'evm'; envio: EnvioEvmPreparado }
   | { tipo: 'btc'; envio: EnvioBitcoinPreparado; destino: string }
 );
@@ -224,15 +230,28 @@ const VIGENCIA_MS = 90_000;
  *   que ya existe;
  * - redes EVM: el nonce es el mismo, y la red acepta una sola transaccion con
  *   ese numero.
- * Cambiar el destino o el monto es otro pago y empieza otro intento.
+ * Cambiar el destino o el monto es otro pago y empieza otro intento. Un envio
+ * hecho cierra su intento: repetir despues el mismo pago es un pago nuevo.
  */
-interface Intento {
+export interface Intento {
   llave: string;
   nonceIntentado?: number;
 }
+export type IntentosDeEnvio = Map<string, Intento>;
 const nuevoIntento = (): Intento => ({ llave: crypto.randomUUID() });
 
-export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviando }: HojaEnviarProps) {
+/**
+ * Que es "el mismo pago": el mismo activo, el mismo destino y el mismo monto,
+ * tal como los escribio la persona. Las direcciones EVM no distinguen
+ * mayusculas; las de bitcoin si (base58), y no se tocan: juntar dos direcciones
+ * distintas en una llave haria que el SDK diera el segundo pago por ya hecho.
+ */
+function claveDelPago(activo: ActivoDeLaBilletera, destino: string, monto: string): string {
+  const d = destino.trim();
+  return `${activo.simbolo}|${activo.tipo === 'evm' ? d.toLowerCase() : d}|${monto.trim()}`;
+}
+
+export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviando, intentos: intentosDeFuera }: HojaEnviarProps) {
   const { t, language } = useLanguage();
   const [destino, setDestino] = useState('');
   const [monto, setMonto] = useState('');
@@ -245,7 +264,16 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviand
   // Se marca en el mismo toque, antes de cualquier espera: dos toques seguidos
   // en Confirmar no alcanzan a mandar dos veces.
   const enviando = useRef(false);
-  const intento = useRef<Intento>(nuevoIntento());
+  const intentosPropios = useRef<IntentosDeEnvio>(new Map());
+  const intentos = intentosDeFuera ?? intentosPropios.current;
+  const intentoDe = (clave: string): Intento => {
+    let intento = intentos.get(clave);
+    if (!intento) {
+      intento = nuevoIntento();
+      intentos.set(clave, intento);
+    }
+    return intento;
+  };
 
   useEffect(() => {
     setDestino('');
@@ -256,18 +284,15 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviand
     setAviso('');
     setOcupado(false);
     setHecho(null);
-    intento.current = nuevoIntento();
   }, [activo]);
 
   const cambiarDestino = (valor: string) => {
     setError('');
     setDestino(valor);
-    intento.current = nuevoIntento();
   };
   const cambiarMonto = (valor: string) => {
     setError('');
     setMonto(valor);
-    intento.current = nuevoIntento();
   };
 
   const mensajeEvm = (e: RechazoEvm, a: ActivoEvm) => {
@@ -294,13 +319,14 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviand
   const preparar = async (): Promise<Preparado | null> => {
     if (!activo) return null;
     try {
+      const clave = claveDelPago(activo, destino, monto);
       if (activo.tipo === 'evm') {
-        const envio = await prepararEnvioEvm(semilla, activo.evm, destino, monto, { nonce: intento.current.nonceIntentado });
-        return { tipo: 'evm', envio, en: Date.now() };
+        const envio = await prepararEnvioEvm(semilla, activo.evm, destino, monto, { nonce: intentoDe(clave).nonceIntentado });
+        return { tipo: 'evm', envio, clave, en: Date.now() };
       }
       if (!btc) return null;
       const sats = monto.trim() ? Number(monto.trim()) : undefined;
-      return { tipo: 'btc', envio: await btc.prepararEnvio(destino, sats), destino: destino.trim(), en: Date.now() };
+      return { tipo: 'btc', envio: await btc.prepararEnvio(destino, sats), destino: destino.trim(), clave, en: Date.now() };
     } catch (e) {
       if (e instanceof RechazoEvm && activo.tipo === 'evm') setError(mensajeEvm(e, activo.evm));
       else if (e instanceof RechazoBitcoin) setError(mensajeBtc(e));
@@ -338,14 +364,17 @@ export function HojaEnviar({ activo, onClose, semilla, btc, onEnviado, onEnviand
         return;
       }
       if (!(await confirmarConHuella(t('bp_confirmar_razon')))) return;
+      const intento = intentoDe(preparado.clave);
       if (preparado.tipo === 'evm') {
-        intento.current.nonceIntentado = preparado.envio.nonce;
+        intento.nonceIntentado = preparado.envio.nonce;
         const hash = await enviarEvm(semilla, preparado.envio);
         setHecho({ enlace: enlaceDeTransaccion(preparado.envio.activo.red, hash) });
       } else if (btc) {
-        await btc.enviar(preparado.envio, intento.current.llave);
+        await btc.enviar(preparado.envio, intento.llave);
         setHecho({});
       }
+      // Hecho: este intento se cierra. Repetir el mismo pago despues es otro pago.
+      intentos.delete(preparado.clave);
       onEnviado();
     } catch {
       setError(t('bp_err_envio'));
@@ -508,7 +537,7 @@ export function HojaPalabras({ semilla, onClose }: { semilla: string | null; onC
   return (
     <BottomSheet isOpen={semilla !== null} onClose={onClose} title={t('bp_palabras_titulo')}>
       {semilla && proteccion !== 'protegida' && (
-        <PantallaSinProteccion estado={proteccion} etiqueta={t('close')} onCerrar={onClose} />
+        <PantallaSinProteccion estado={proteccion} etiqueta={t('close')} onCerrar={onClose} enHoja />
       )}
       {semilla && proteccion === 'protegida' && (
         <div className="space-y-4">

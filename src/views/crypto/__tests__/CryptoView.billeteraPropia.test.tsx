@@ -82,6 +82,23 @@ describe('la pestana de la billetera propia', () => {
     expect(screen.queryByRole('button', { name: es.bp_tab })).toBeNull();
   });
 
+  it('si el reintento vuelve a fallar, el aviso sigue y se puede reintentar otra vez', async () => {
+    mocks.api.crypto.getAvailability
+      .mockRejectedValueOnce(new Error('sin red'))
+      .mockResolvedValueOnce({ success: false, error: { code: 'FETCH_FAILED', message: 'HTTP 500' } })
+      .mockResolvedValue(respuesta(true));
+    montar();
+    await userEvent.click(await screen.findByRole('button', { name: es.error_retry }, ESPERA));
+    await waitFor(() => expect(mocks.api.crypto.getAvailability).toHaveBeenCalledTimes(2));
+    // Sigue el aviso y el boton vuelve a estar disponible (no se queda trabado).
+    expect(screen.getByText(es.bp_disponibilidad_error)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: es.error_retry })).toBeEnabled());
+
+    await userEvent.click(screen.getByRole('button', { name: es.error_retry }));
+    expect(await screen.findByRole('button', { name: es.bp_tab }, ESPERA)).toBeInTheDocument();
+    expect(screen.queryByText(es.bp_disponibilidad_error)).toBeNull();
+  });
+
   it('al reintentar y contestar el servidor, se va el aviso y aparece la pestana', async () => {
     mocks.api.crypto.getAvailability
       .mockResolvedValueOnce({ success: false, error: { code: 'FETCH_FAILED', message: 'HTTP 500' } })

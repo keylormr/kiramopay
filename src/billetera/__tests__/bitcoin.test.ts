@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { PrepareSendPaymentResponse } from '@breeztech/breez-sdk-spark/web';
-import { bitcoinConfigurado, carpetaDeDatos, comisionDe, comisionEsEstimada, depositoSinSumar, opcionesDeEnvio } from '../bitcoin';
+import { describe, expect, it, vi } from 'vitest';
+import type { BreezSdk, PrepareSendPaymentResponse } from '@breeztech/breez-sdk-spark/web';
+import { bitcoinConfigurado, carpetaDeDatos, comisionDe, comisionEsEstimada, depositoSinSumar, envolver, opcionesDeEnvio } from '../bitcoin';
 
 function preparado(paymentMethod: unknown): PrepareSendPaymentResponse {
   return { paymentMethod, amount: 1000n, feePolicy: 'feesExcluded' } as PrepareSendPaymentResponse;
@@ -64,5 +64,42 @@ describe('bitcoin en la billetera propia', () => {
       .toEqual({ txid: 't', vout: 1, sats: 5000, motivo: 'comision-alta', comisionSats: 700 });
     expect(depositoSinSumar({ ...base, claimError: { type: 'depositTooSmall', tx: 't', vout: 1 } }).motivo).toBe('muy-chico');
     expect(depositoSinSumar({ ...base, isMature: false }).motivo).toBe('esperando');
+  });
+});
+
+// Lo que llega a la pantalla: prepararEnvio es quien pasa la bandera de la
+// cotizacion (isEstimate) a la revision del envio.
+describe('preparar un envio con el SDK', () => {
+  const DIRECCION = 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq';
+
+  function sdkFalso(entrada: unknown, respuestaDelEnvio: unknown) {
+    return {
+      parse: vi.fn().mockResolvedValue(entrada),
+      getInfo: vi.fn().mockResolvedValue({ balanceSats: 1_000_000 }),
+      prepareSendPayment: vi.fn().mockResolvedValue(respuestaDelEnvio),
+      prepareLnurlPay: vi.fn().mockResolvedValue({ amountSats: 1000, feeSats: 3 }),
+    } as unknown as BreezSdk;
+  }
+
+  const porLaRed = (isEstimate: boolean) => preparado({ type: 'bitcoinAddress', address: {}, feeQuote: { ...cotizacion, isEstimate } });
+
+  it('por la red de bitcoin, una cotizacion estimada llega marcada como estimada', async () => {
+    const billetera = envolver(sdkFalso({ type: 'bitcoinAddress' }, porLaRed(true)));
+    const envio = await billetera.prepararEnvio(DIRECCION, 1000);
+    expect(envio.comisionEstimada).toBe(true);
+    expect(envio.comisionSats).toBe(560);
+  });
+
+  it('por la red de bitcoin, una cotizacion firme no se marca como estimada', async () => {
+    const billetera = envolver(sdkFalso({ type: 'bitcoinAddress' }, porLaRed(false)));
+    expect((await billetera.prepararEnvio(DIRECCION, 1000)).comisionEstimada).toBe(false);
+  });
+
+  it('por Lightning la comision es firme', async () => {
+    const entrada = { type: 'lightningAddress', address: 'ana@ejemplo.com', payRequest: { minSendable: 1000, maxSendable: 10_000_000 } };
+    const billetera = envolver(sdkFalso(entrada, undefined));
+    const envio = await billetera.prepararEnvio('ana@ejemplo.com', 1000);
+    expect(envio.comisionEstimada).toBe(false);
+    expect(envio.comisionSats).toBe(3);
   });
 });
