@@ -1,4 +1,30 @@
 {
+  "2.16.0": {
+    "en": [
+      "The app is now ready for new bitcoin features that will be turned on later; for now nothing you use changes",
+      "Internal stability fixes"
+    ],
+    "fr": [
+      "L'application est prête pour de nouvelles fonctions bitcoin qui seront activées plus tard ; pour l'instant, rien ne change dans ce que vous utilisez",
+      "Corrections internes de stabilité"
+    ],
+    "hi": [
+      "ऐप अब बिटकॉइन की नई सुविधाओं के लिए तैयार है, जो बाद में चालू की जाएंगी; अभी आप जो इस्तेमाल करते हैं उसमें कुछ नहीं बदलता",
+      "स्थिरता के लिए आंतरिक सुधार"
+    ],
+    "ja": [
+      "今後有効になるビットコインの新機能に向けて、アプリの準備が整いました。現時点では、お使いの機能に変更はありません",
+      "安定性に関する内部の修正"
+    ],
+    "pt": [
+      "O aplicativo fica pronto para novas funções de bitcoin que serão ativadas mais adiante; por enquanto, nada muda no que você usa",
+      "Correções internas de estabilidade"
+    ],
+    "zh-cn": [
+      "应用已为稍后启用的比特币新功能做好准备；目前您使用的功能没有任何变化",
+      "内部稳定性修复"
+    ]
+  },
   "2.15.2": {
     "en": [
       "For now you can't buy or convert crypto or stake it; you can sell what you already hold and withdraw what you have staked",
