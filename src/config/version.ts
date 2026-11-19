@@ -42,17 +42,26 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.15.2',
-    buildNumber: 27,
-    releaseDate: '2026-11-09',
+    version: '2.16.0',
+    buildNumber: 28,
+    releaseDate: '2026-11-19',
     changes: [
-      'Por ahora no se puede comprar cripto, convertirla ni hacer staking; puedes vender lo que ya tienes y retirar lo que está en staking',
-      'El staking ya no promete rendimiento: la pantalla y la ayuda dicen que solo aparta tu cripto',
-      'El resumen para tu contador también se descarga en PDF, para leer o imprimir; el CSV sigue disponible para abrirlo en Excel',
-      'Al abrir la aplicación en Android o iPhone, la K de KiramoPay aparece con una animación; hay tres que se turnan y un toque la salta',
+      'La aplicación queda lista para funciones nuevas de bitcoin que se activarán más adelante; por ahora no cambia nada de lo que usas',
+      'Correcciones internas de estabilidad',
     ],
   },
   history: [
+    {
+      version: '2.15.2',
+      buildNumber: 27,
+      releaseDate: '2026-11-12',
+      changes: [
+        'Por ahora no se puede comprar cripto, convertirla ni hacer staking; puedes vender lo que ya tienes y retirar lo que está en staking',
+        'El staking ya no promete rendimiento: la pantalla y la ayuda dicen que solo aparta tu cripto',
+        'El resumen para tu contador también se descarga en PDF, para leer o imprimir; el CSV sigue disponible para abrirlo en Excel',
+        'Al abrir la aplicación en Android o iPhone, la K de KiramoPay aparece con una animación; hay tres que se turnan y un toque la salta',
+      ],
+    },
     {
       version: '2.15.1',
       buildNumber: 26,
