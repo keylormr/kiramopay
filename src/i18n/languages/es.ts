@@ -1249,7 +1249,7 @@ const es: TranslationKeys = {
   onboard_title_1: 'Tu dinero, en un solo lugar',
   onboard_desc_1: 'Gestiona todas tus cuentas, tarjetas y criptomonedas desde una sola app.',
   onboard_title_2: 'Envíos y pagos al instante',
-  onboard_desc_2: 'SINPE Móvil, QR, servicios y recargas. Todo rápido, seguro y sin complicaciones.',
+  onboard_desc_2: 'Envía a otra cuenta de KiramoPay con su número de teléfono o un código QR. Rápido, seguro y sin complicaciones.',
   onboard_title_3: 'Seguridad de primera',
   onboard_desc_3: 'Autenticación biométrica, cifrado de datos y protección contra fraude para tu tranquilidad.',
   onboard_title_4: 'Organiza tu dinero',

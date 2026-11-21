@@ -30,15 +30,15 @@ const (
 	// tasaDeComision es la comision de KiramoPay por un envio entre personas:
 	// 0,25 % de lo que se envia. Decision del dueno.
 	tasaDeComision = "0.0025"
-	// porcentajeVisible es la misma comision como porcentaje, para que la
-	// pantalla lo muestre sin llevarlo escrito a mano y no pueda desincronizarse
-	// del numero con que de verdad se cobra.
-	porcentajeVisible = "0.25"
+	// PorcentajeComisionDeEnvio es la misma comision como porcentaje, para que
+	// la pantalla y /transparency/fees la muestren sin llevarla escrita a mano y
+	// no puedan desincronizarse del numero con que de verdad se cobra.
+	PorcentajeComisionDeEnvio = "0.25"
 )
 
 var (
 	comisionDeEnvio     = decimal.RequireFromString(tasaDeComision)
-	comisionEnPorciento = decimal.RequireFromString(porcentajeVisible)
+	comisionEnPorciento = decimal.RequireFromString(PorcentajeComisionDeEnvio)
 )
 
 var (

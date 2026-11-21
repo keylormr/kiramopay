@@ -518,6 +518,13 @@ func main() {
 	// escribe: se escanea, y quien sabe leer un codigo QR es qrService — por eso
 	// se construye antes que cripto. Sin el, enviar responde que no esta
 	// disponible en vez de adivinar a quien le llega.
+	//
+	// Comprar, convertir y apartar anotan cripto que no tiene nada detras (ver
+	// crypto/pausa.go). Misma politica que los convenios de recibos y los cobros
+	// del marketplace: fuera de produccion se permite para las demos. El mismo
+	// valor va a /transparency/fees, que no anuncia como gratis lo que esta en
+	// pausa.
+	comprasCriptoEnPausa := cfg.Server.Environment == "production"
 	cryptoService := crypto.NewService(cryptoRepo, priceService, txService,
 		func(ctx context.Context, from, to string) (float64, error) {
 			tasa, err := countryRepo.TipoDeCambioParaCobrar(ctx, from, to)
@@ -527,16 +534,12 @@ func main() {
 			return tasa, err
 		},
 		&crypto.Opciones{
-			Destinatarios: qrService,
-			MFA:           mfaSvc,
-			UIF:           uifService,
-			Avisos:        notifService,
-			Logger:        logger,
-			// Comprar, convertir y apartar anotan cripto que no tiene nada detras
-			// (ver crypto/pausa.go). Misma politica que los convenios de recibos y
-			// los cobros del marketplace: fuera de produccion se permite para las
-			// demos.
-			ComprasEnPausa: cfg.Server.Environment == "production",
+			Destinatarios:  qrService,
+			MFA:            mfaSvc,
+			UIF:            uifService,
+			Avisos:         notifService,
+			Logger:         logger,
+			ComprasEnPausa: comprasCriptoEnPausa,
 			// La billetera propia (las llaves en el telefono) espera el criterio
 			// del abogado sobre la Ley 10961. Se abre con BILLETERA_PROPIA=abierta
 			// sin publicar otra version; las cuentas de demostracion la ven siempre.
@@ -705,6 +708,7 @@ func main() {
 		}
 	}
 	transparencyHandler.SetPlanes(planesPublicados)
+	transparencyHandler.SetComprasCriptoEnPausa(comprasCriptoEnPausa)
 
 	marketplaceHandler := marketplace.NewHandler(marketplaceService)
 	loyaltyHandler := loyalty.NewHandler(loyaltyService)

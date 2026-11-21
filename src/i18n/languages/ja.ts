@@ -1241,7 +1241,7 @@ const ja: TranslationKeys = {
   onboard_title_1: 'あなたのお金を一元管理',
   onboard_desc_1: 'すべての口座、カード、暗号通貨を1つのアプリで管理できます。',
   onboard_title_2: '即時決済＆送金',
-  onboard_desc_2: 'SINPEモバイル、QR、サービス、チャージ。速くて安全、簡単。',
+  onboard_desc_2: '電話番号やQRコードで、ほかのKiramoPayアカウントに送金。速くて安全、簡単。',
   onboard_title_3: '最高レベルのセキュリティ',
   onboard_desc_3: '生体認証、データ暗号化、詐欺防止で安心をお届けします。',
   onboard_title_4: 'お金を整理しよう',
