@@ -105,10 +105,14 @@ var comprobaciones = []comprobacion{
 		SELECT EXISTS (SELECT 1 FROM cross_border_transfers
 		                WHERE (sender_id = $1::uuid OR receiver_id = $1::uuid)
 		                  AND status IN ('pending', 'processing'))`},
+	// Un viaje 'searching' no bloquea: todavia no se cobro nada, y sin socio
+	// (produccion) nunca se puede confirmar, asi que "espera a que termine" no
+	// terminaba nunca y la cuenta quedaba sin poder eliminarse. Solo bloquea un
+	// viaje ya cobrado que sigue en curso.
 	{BloqueoMarketplace, `
 		SELECT EXISTS (SELECT 1 FROM ride_requests
 		                WHERE user_id = $1::uuid
-		                  AND status IN ('searching', 'confirmed', 'arriving', 'in_progress'))
+		                  AND status IN ('confirmed', 'arriving', 'in_progress'))
 		    OR EXISTS (SELECT 1 FROM food_orders
 		                WHERE user_id = $1::uuid
 		                  AND status IN ('preparing', 'ready', 'on_the_way'))`},

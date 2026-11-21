@@ -3,6 +3,7 @@ import { Icons } from '../../components/Icons';
 import { EnlaceSoporte } from '../../components/EnlaceSoporte';
 import { TextoConCorreo } from '../../components/TextoConCorreo';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { useMercadoDisponible } from '@/hooks/useMercadoDisponible';
 
 interface FAQViewProps {
   onClose: () => void;
@@ -90,9 +91,16 @@ export const FAQView: React.FC<FAQViewProps> = ({ onClose }) => {
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // La ayuda no explica viajes y pedidos donde la aplicacion no los ofrece.
+  const mercadoDisponible = useMercadoDisponible();
   const entries = useMemo(
-    () => ENTRIES.map((e) => ({ ...e, title: t(e.titleKey), body: t(e.bodyKey) })),
-    [t],
+    () =>
+      ENTRIES.filter((e) => e.id !== 'topic-marketplace' || mercadoDisponible).map((e) => ({
+        ...e,
+        title: t(e.titleKey),
+        body: t(e.bodyKey),
+      })),
+    [t, mercadoDisponible],
   );
 
   const query = searchQuery.trim().toLowerCase();

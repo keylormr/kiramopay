@@ -4,6 +4,12 @@ import { LanguageProvider } from '@/i18n/LanguageContext';
 import { FAQView } from '../FAQView';
 import { precargarIdioma } from '@/test/idiomas';
 
+// Viajes y pedidos dependen de lo que diga el servidor; cada prueba lo fija.
+const mercado = vi.hoisted(() => ({ disponible: true }));
+vi.mock('@/hooks/useMercadoDisponible', () => ({
+  useMercadoDisponible: () => mercado.disponible,
+}));
+
 function setup() {
   return render(
     <LanguageProvider>
@@ -15,6 +21,7 @@ function setup() {
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('kiramopay_language', 'es');
+  mercado.disponible = true;
 });
 
 beforeAll(() => precargarIdioma('en'));
@@ -29,6 +36,16 @@ describe('Centro de ayuda', () => {
     expect(screen.getByText('Viajes y comida')).toBeInTheDocument();
     expect(screen.getByText('Retiros a cuentas externas')).toBeInTheDocument();
     expect(screen.getByText('¿Qué es KiramoPay?')).toBeInTheDocument();
+  });
+
+  // Donde no hay socio (produccion, hoy) la aplicacion no ofrece viajes y
+  // pedidos, y la ayuda no los explica.
+  it('sin socio no explica viajes y pedidos', () => {
+    mercado.disponible = false;
+    setup();
+
+    expect(screen.queryByText('Viajes y comida')).not.toBeInTheDocument();
+    expect(screen.getByText('Tarjetas')).toBeInTheDocument();
   });
 
   it('abre la explicación al tocar un tema', async () => {

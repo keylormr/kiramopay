@@ -3139,6 +3139,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/marketplace/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the app offers rides and food orders
+         * @description `active` is false while there is no real partner integration that quotes and delivers (production today). Then requesting a ride, confirming it, placing a food order and connecting a partner answer 503 `SIN_INTEGRACION`, and the app does not offer the module. Reading rides and orders that already exist stays open.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Availability */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            success: boolean;
+                            data: {
+                                active: boolean;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/marketplace/partners": {
         parameters: {
             query?: never;

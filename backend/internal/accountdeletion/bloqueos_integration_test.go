@@ -159,6 +159,10 @@ func TestEliminar_LoResueltoNoBloquea(t *testing.T) {
 		VALUES ($1::uuid, 'MOCK', 100, '{}', 'k2', 'completed')`, a.ID)
 	exec(t, pool, `INSERT INTO ride_requests (user_id, partner_code, pickup, destination, estimated_price, estimated_time, distance, status)
 		VALUES ($1::uuid, 'uber', 'a', 'b', 100, '5', '1', 'completed')`, a.ID)
+	// Un viaje que solo se pidio no se cobro, y sin socio nunca se confirma:
+	// antes dejaba la cuenta sin poder eliminarse para siempre.
+	exec(t, pool, `INSERT INTO ride_requests (user_id, partner_code, pickup, destination, estimated_price, estimated_time, distance, status)
+		VALUES ($1::uuid, 'uber', 'a', 'b', 100, '5', '1', 'searching')`, a.ID)
 
 	if _, err := nuevoServicio(pool, nil).iniciar(context.Background(), a.ID, opciones{canal: CanalApp}); err != nil {
 		t.Fatalf("lo resuelto no debia bloquear: %v", err)

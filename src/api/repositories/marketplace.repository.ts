@@ -18,7 +18,16 @@ export interface CreateFoodOrderRequest {
   items: { name: string; quantity: number; price: number }[];
 }
 
+/**
+ * Si la aplicacion ofrece viajes y pedidos. Es falso mientras no haya un socio
+ * real que cotice y entregue: en produccion, hoy.
+ */
+export interface DisponibilidadMercado {
+  active: boolean;
+}
+
 export interface IMarketplaceRepository {
+  getAvailability(): Promise<ApiResponse<DisponibilidadMercado>>;
   getPartners(): Promise<ApiResponse<MarketplacePartnersResponse>>;
   connectPartner(partnerCode: string): Promise<ApiResponse<void>>;
   disconnectPartner(partnerCode: string): Promise<ApiResponse<void>>;

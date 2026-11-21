@@ -44,6 +44,7 @@ import { esCodigoDeKiramoPay, parsearQrKiramo } from '@/utils/qrKiramo';
 import { avisoDeHomonimo, evaluarContactoEscaneado } from '@/utils/contactoEscaneado';
 import { coincideConElRegistrado } from '@/utils/nombreDelDestinatario';
 import { useDestinatarioRegistrado } from '@/hooks/useDestinatarioRegistrado';
+import { useMercadoDisponible } from '@/hooks/useMercadoDisponible';
 import { AvisoDelDestinatario, LineaDelDestinatario } from '@/components/DestinatarioRegistrado';
 import { BannerInicio } from '@/components/home/BannerInicio';
 import { ErrorALaVista } from '@/components/ErrorALaVista';
@@ -96,6 +97,7 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpenAnalytics, onOpenSavings, onOpenSplitPay, onOpenLoyalty, onOpenAssistant, onOpenMarketplace, onOpenCards, onOpenPlans, onOpenCrypto, onNavigateToSinpe }) => {
   const { state, dispatch } = useApp();
   const { t } = useLanguage();
+  const mercadoDisponible = useMercadoDisponible();
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
 
   // Los movimientos se refrescan solos cuando llega una notificación en vivo
@@ -629,13 +631,17 @@ export const HomeView: React.FC<HomeViewProps> = ({ onViewAllTransactions, onOpe
   // de la tarjeta, nunca adentro: la tarjeta ya es un <button> y anidar un boton
   // en otro es HTML invalido. Puesto aqui, se puede preguntar que es una funcion
   // ANTES de entrar a ella.
-  const atajos: { id: string; icono: NombreIcono3D; rotulo: string; titulo: string; texto: string; ayuda: string; onClick?: () => void }[] = [
+  //
+  // Viajes y pedidos solo aparecen si el servidor tiene un socio real (ver
+  // useMercadoDisponible): en produccion, hoy, no.
+  type Atajo = { id: string; icono: NombreIcono3D; rotulo: string; titulo: string; texto: string; ayuda: string; onClick?: () => void };
+  const atajos = ([
     { id: 'metas', icono: 'metas', rotulo: t('home_savings'), titulo: t('home_savings_view'), texto: t('home_savings_desc'), ayuda: 'savings', onClick: onOpenSavings },
     { id: 'dividir', icono: 'dividir', rotulo: t('home_split'), titulo: t('home_split_view'), texto: t('home_split_desc'), ayuda: 'splitpay', onClick: onOpenSplitPay },
     { id: 'puntos', icono: 'recompensas', rotulo: t('home_loyalty'), titulo: t('home_loyalty_view'), texto: t('home_loyalty_desc'), ayuda: 'loyalty', onClick: onOpenLoyalty },
     { id: 'mercado', icono: 'mercado', rotulo: t('home_marketplace'), titulo: t('home_marketplace_view'), texto: t('home_marketplace_desc'), ayuda: 'marketplace', onClick: onOpenMarketplace },
     { id: 'tarjetas', icono: 'tarjetas', rotulo: t('home_cards'), titulo: t('home_cards_view'), texto: t('home_cards_desc'), ayuda: 'cards', onClick: onOpenCards },
-  ];
+  ] satisfies Atajo[]).filter((a) => a.id !== 'mercado' || mercadoDisponible);
 
   // Movimientos recientes: el refresco llega solo con la notificacion en vivo
   // (efecto de arriba). En pantalla ancha caben mas.
