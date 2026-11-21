@@ -2218,6 +2218,36 @@ paths:
           description: Alert removed
 
   # ── Marketplace (Phase 5) ──────────────────────────────────────────────
+  /api/v1/marketplace/availability:
+    get:
+      tags: [Marketplace]
+      summary: Whether the app offers rides and food orders
+      description: >-
+        `active` is false while there is no real partner integration that
+        quotes and delivers (production today). Then requesting a ride,
+        confirming it, placing a food order and connecting a partner answer
+        503 `SIN_INTEGRACION`, and the app does not offer the module. Reading
+        rides and orders that already exist stays open.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Availability
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    required: [active]
+                    properties:
+                      active:
+                        type: boolean
+
   /api/v1/marketplace/partners:
     get:
       tags: [Marketplace]

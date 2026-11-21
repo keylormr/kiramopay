@@ -3,6 +3,7 @@ import type {
   MarketplacePartnersResponse,
   CreateRideRequest,
   CreateFoodOrderRequest,
+  DisponibilidadMercado,
 } from '../../repositories/marketplace.repository';
 import type { ApiResponse } from '../../types';
 import { apiSuccess, apiError } from '../../types';
@@ -125,6 +126,11 @@ const initialPartners: MarketplacePartner[] = [
 ];
 
 export class MockMarketplaceRepository implements IMarketplaceRepository {
+  // La demo sin servidor ensena el modulo completo.
+  async getAvailability(): Promise<ApiResponse<DisponibilidadMercado>> {
+    return apiSuccess({ active: true });
+  }
+
   async getPartners(): Promise<ApiResponse<MarketplacePartnersResponse>> {
     const state = getState();
     const connected: string[] = state?.connectedPartners ?? [];

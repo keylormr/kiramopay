@@ -18,6 +18,20 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// sinIntegracion responde el rechazo de lo que necesita un socio real: 503 con
+// codigo propio para que la pantalla lo explique. No es culpa del usuario ni de
+// su saldo.
+func sinIntegracion(w http.ResponseWriter) {
+	response.Error(w, http.StatusServiceUnavailable, "SIN_INTEGRACION",
+		"el cobro no se puede entregar todavia")
+}
+
+// Availability le dice a la pantalla, antes de ofrecer nada, si hay viajes y
+// pedidos. En produccion es falso hasta que exista un socio real.
+func (h *Handler) Availability(w http.ResponseWriter, _ *http.Request) {
+	response.JSON(w, http.StatusOK, map[string]bool{"active": h.service.Disponible()})
+}
+
 func (h *Handler) GetPartners(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	partners, connected, err := h.service.GetPartners(r.Context(), userID)
@@ -36,11 +50,8 @@ func (h *Handler) ConfirmRide(w http.ResponseWriter, r *http.Request) {
 	rideID := chi.URLParam(r, "id")
 	ride, err := h.service.ConfirmRide(r.Context(), userID, rideID)
 	if err != nil {
-		// Sin integracion con el socio: 503 con codigo propio para que la
-		// pantalla lo explique. No es culpa del usuario ni de su saldo.
 		if errors.Is(err, ErrSinIntegracion) {
-			response.Error(w, http.StatusServiceUnavailable, "SIN_INTEGRACION",
-				"el cobro no se puede entregar todavia")
+			sinIntegracion(w)
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "CONFIRM_FAILED", err.Error())
@@ -57,6 +68,10 @@ func (h *Handler) ConnectPartner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.ConnectPartner(r.Context(), userID, req.PartnerCode); err != nil {
+		if errors.Is(err, ErrSinIntegracion) {
+			sinIntegracion(w)
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "CONNECT_FAILED", err.Error())
 		return
 	}
@@ -84,6 +99,10 @@ func (h *Handler) CreateRideRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	ride, err := h.service.CreateRideRequest(r.Context(), userID, &req)
 	if err != nil {
+		if errors.Is(err, ErrSinIntegracion) {
+			sinIntegracion(w)
+			return
+		}
 		response.Error(w, http.StatusBadRequest, "RIDE_FAILED", err.Error())
 		return
 	}
@@ -154,11 +173,8 @@ func (h *Handler) CreateFoodOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	order, err := h.service.CreateFoodOrder(r.Context(), userID, &req)
 	if err != nil {
-		// Sin integracion con el socio: 503 con codigo propio para que la
-		// pantalla lo explique. No es culpa del usuario ni de su saldo.
 		if errors.Is(err, ErrSinIntegracion) {
-			response.Error(w, http.StatusServiceUnavailable, "SIN_INTEGRACION",
-				"el cobro no se puede entregar todavia")
+			sinIntegracion(w)
 			return
 		}
 		response.Error(w, http.StatusBadRequest, "ORDER_FAILED", err.Error())
