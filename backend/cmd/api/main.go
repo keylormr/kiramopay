@@ -572,7 +572,9 @@ func main() {
 
 	// Viajes y pedidos: el precio lo inventa el servicio (rand) y el socio es
 	// una lista fija, asi que cobrar debitaria la billetera real contra un monto
-	// que nadie cotizo. Misma politica que los rieles de payouts.
+	// que nadie cotizo. Misma politica que los rieles de payouts. Sin cobro, en
+	// produccion tampoco se piden viajes ni se conectan socios, y la pantalla
+	// no ofrece el modulo (GET /marketplace/availability).
 	marketplaceService := marketplace.NewService(marketplaceRepo, ledgerEngine, txService, &marketplace.Options{
 		CobrosActivos: cfg.Server.Environment != "production",
 	})
@@ -1199,6 +1201,7 @@ func main() {
 			r.Delete("/crypto/alerts/{id}", cryptoHandler.RemovePriceAlert)
 
 			// Marketplace
+			r.Get("/marketplace/availability", marketplaceHandler.Availability)
 			r.Get("/marketplace/partners", marketplaceHandler.GetPartners)
 			r.Post("/marketplace/connect", marketplaceHandler.ConnectPartner)
 			r.Delete("/marketplace/connect/{code}", marketplaceHandler.DisconnectPartner)

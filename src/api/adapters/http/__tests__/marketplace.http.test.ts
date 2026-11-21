@@ -19,6 +19,28 @@ const rawRide = {
 };
 
 describe('HttpMarketplaceRepository', () => {
+  it('lee si el modulo esta disponible', async () => {
+    const get = vi.fn().mockResolvedValue({ success: true, data: { active: true } });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getAvailability();
+    expect(res.data?.active).toBe(true);
+    expect(get).toHaveBeenCalledWith('/api/v1/marketplace/availability');
+  });
+
+  // Un servidor que no lo dice no tiene socio: lo que no se puede cobrar ni
+  // entregar no se ofrece.
+  it.each([{ active: false }, {}, undefined])('sin "active: true" no se ofrece (%o)', async (data) => {
+    const get = vi.fn().mockResolvedValue({ success: true, data });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getAvailability();
+    expect(res.success).toBe(true);
+    expect(res.data?.active).toBe(false);
+  });
+
+  it('una consulta fallida se devuelve como falla, no como disponible', async () => {
+    const get = vi.fn().mockResolvedValue({ success: false, error: { code: 'NETWORK', message: 'x' } });
+    const res = await new HttpMarketplaceRepository(fakeClient({ get })).getAvailability();
+    expect(res.success).toBe(false);
+  });
+
   it('creates a ride and maps the server price to colones', async () => {
     const post = vi.fn().mockResolvedValue({ success: true, data: { ...rawRide, status: 'searching' } });
     const res = await new HttpMarketplaceRepository(fakeClient({ post })).createRide({ partnerCode: 'uber', pickup: 'A', destination: 'B' });

@@ -3,6 +3,7 @@ import type {
   MarketplacePartnersResponse,
   CreateRideRequest,
   CreateFoodOrderRequest,
+  DisponibilidadMercado,
 } from '../../repositories/marketplace.repository';
 import type { ApiResponse } from '../../types';
 import type { MarketplacePartner, RideRequest, FoodOrder } from '@/types';
@@ -12,6 +13,16 @@ import { HttpClient } from './client';
 
 export class HttpMarketplaceRepository implements IMarketplaceRepository {
   constructor(private client: HttpClient) {}
+
+  async getAvailability(): Promise<ApiResponse<DisponibilidadMercado>> {
+    const res = await this.client.get<{ active?: boolean }>('/api/v1/marketplace/availability');
+    if (!res.success) {
+      return falla(res, 'FETCH_FAILED');
+    }
+    // Si el servidor no lo dice, no se ofrece: lo que no se puede cobrar ni
+    // entregar no se muestra.
+    return apiSuccess({ active: res.data?.active === true });
+  }
 
   async getPartners(): Promise<ApiResponse<MarketplacePartnersResponse>> {
     const res = await this.client.get<{

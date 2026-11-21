@@ -38,8 +38,14 @@ type HistoryRecorder interface {
 // que nadie cotizo, saca la plata de la reserva y no hay reverso. Es la
 // politica que el repositorio ya aplica en sinpe.Send (se niega a enviar a
 // quien no es usuario) y en el registro de rieles de payouts (no se registra
-// el de prueba en produccion porque debita y no desembolsa). Pedir el viaje y
-// verlo sigue funcionando: lo que se rechaza es el cobro.
+// el de prueba en produccion porque debita y no desembolsa).
+//
+// Hasta el 20-11-2026 pedir el viaje seguia funcionando y solo se rechazaba el
+// cobro: la persona veia un chofer y un precio inventados y se quedaba con un
+// viaje que nunca podia confirmar. Ahora, sin integracion, tampoco se pide el
+// viaje ni se conecta un socio, y la pantalla no ofrece el modulo (ver
+// Disponible). Ver lo que ya existe sigue abierto: quitar el acceso no borra
+// registros.
 var ErrSinIntegracion = errors.New("sin integracion con el socio: el cobro no se puede entregar")
 
 type Service struct {
@@ -64,6 +70,10 @@ func NewService(repo *Repository, eng *ledger.Engine, history HistoryRecorder, o
 	}
 	return s
 }
+
+// Disponible dice si la aplicacion ofrece viajes y pedidos. Es la misma
+// bandera que el cobro: lo que no se puede cobrar ni entregar no se ofrece.
+func (s *Service) Disponible() bool { return s.cobros }
 
 // chargeWallet debita la billetera por un pedido o un viaje, contra la reserva:
 // la plata sale del sistema hacia el socio, asi que el pasivo y la reserva
@@ -210,7 +220,13 @@ func (s *Service) GetPartners(ctx context.Context, userID string) ([]PartnerReco
 	return partners, connected, nil
 }
 
+// ConnectPartner no conecta nada real: no hay integracion con ningun socio.
+// Sin ella, conectar una cuenta seria anunciar un enlace que no existe.
+// Desconectar sigue abierto, para que nadie quede atado a uno.
 func (s *Service) ConnectPartner(ctx context.Context, userID, partnerCode string) error {
+	if !s.cobros {
+		return ErrSinIntegracion
+	}
 	return s.repo.ConnectPartner(ctx, userID, partnerCode)
 }
 
@@ -243,6 +259,11 @@ var driverPool = []driverProfile{
 }
 
 func (s *Service) CreateRideRequest(ctx context.Context, userID string, req *CreateRideRequest) (*RideRequestRecord, error) {
+	// El precio y el chofer de abajo son inventados. Sin integracion, el viaje
+	// nunca se podria confirmar: no se pide.
+	if !s.cobros {
+		return nil, ErrSinIntegracion
+	}
 	if req.Pickup == "" || req.Destination == "" {
 		return nil, fmt.Errorf("pickup and destination are required")
 	}

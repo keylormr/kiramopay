@@ -15,6 +15,12 @@ vi.mock('@/api', () => ({
   MFA_REQUIRED: 'MFA_REQUIRED',
 }));
 
+// Viajes y pedidos dependen de lo que diga el servidor; cada prueba lo fija.
+const mercado = vi.hoisted(() => ({ disponible: true }));
+vi.mock('@/hooks/useMercadoDisponible', () => ({
+  useMercadoDisponible: () => mercado.disponible,
+}));
+
 // Mock useApp with realistic state data
 const mockDispatch = vi.fn();
 
@@ -253,12 +259,23 @@ describe('HomeView — ayuda en las tarjetas', () => {
     localStorage.clear();
     localStorage.setItem('kiramopay_language', 'es');
     mockDispatch.mockReset();
+    mercado.disponible = true;
   });
 
   it('ofrece ayuda en cada tarjeta de funcion', () => {
     renderHomeView();
     // Asistente, ahorros, pagos divididos, lealtad, marketplace y tarjetas.
     expect(screen.getAllByLabelText('¿Qué es esto?')).toHaveLength(6);
+  });
+
+  // En produccion no hay socio: el precio y el chofer serian inventados y el
+  // cobro se rechaza. El Inicio no ofrece lo que no se puede completar.
+  it('sin socio no ofrece viajes y pedidos', () => {
+    mercado.disponible = false;
+    renderHomeView();
+    expect(screen.getAllByLabelText('¿Qué es esto?')).toHaveLength(5);
+    expect(screen.queryByText('Mercado')).toBeNull();
+    expect(screen.queryByLabelText('Abrir mercado')).toBeNull();
   });
 
   // El "?" se dibuja ENCIMA de una tarjeta que ya es un boton. Si abriera
