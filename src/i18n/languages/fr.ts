@@ -1250,7 +1250,7 @@ const fr: TranslationKeys = {
   onboard_title_1: 'Votre argent, au même endroit',
   onboard_desc_1: 'Gérez tous vos comptes, cartes et cryptos depuis une seule app.',
   onboard_title_2: 'Paiements et virements instantanés',
-  onboard_desc_2: 'SINPE Mobile, QR, services et recharges. Rapide, sûr et sans tracas.',
+  onboard_desc_2: 'Envoyez de l\'argent à un autre compte KiramoPay avec un numéro de téléphone ou un code QR. Rapide, sûr et sans tracas.',
   onboard_title_3: 'Sécurité de premier ordre',
   onboard_desc_3: "Authentification biométrique, chiffrement des données et protection contre la fraude pour votre tranquillité d'esprit.",
   onboard_title_4: 'Organisez votre argent',

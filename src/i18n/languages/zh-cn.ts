@@ -1242,7 +1242,7 @@ const zhCn: TranslationKeys = {
   onboard_title_1: '您的资金，集中管理',
   onboard_desc_1: '在一个应用中管理所有账户、卡片和加密货币。',
   onboard_title_2: '即时付款与转账',
-  onboard_desc_2: 'SINPE行动支付、QR码、服务和充值。快速、安全、简单。',
+  onboard_desc_2: '通过手机号或二维码向其他KiramoPay账户转账。快速、安全、简单。',
   onboard_title_3: '顶级安全',
   onboard_desc_3: '生物识别认证、数据加密和防诈保护，让您安心。',
   onboard_title_4: '管理你的钱',

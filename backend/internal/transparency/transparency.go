@@ -6,7 +6,9 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 
+	"github.com/kiramopay/backend/internal/crypto"
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 	"github.com/kiramopay/backend/pkg/response"
@@ -26,6 +28,11 @@ type PlanesPublicados struct {
 type Handler struct {
 	db     *pgxpool.Pool
 	planes PlanesPublicados
+	// comprasCriptoEnPausa es la MISMA bandera que crypto.Opciones.ComprasEnPausa:
+	// con ella encendida comprar, convertir y apartar cripto se rechazan, y lo
+	// que no se puede hacer no se anuncia como gratis. Cero es abierto, igual
+	// que en crypto.
+	comprasCriptoEnPausa bool
 }
 
 // NewHandler arranca con los topes de fabrica y sin asistente. main los
@@ -39,6 +46,10 @@ func NewHandler(db *pgxpool.Pool) *Handler {
 
 // SetPlanes fija los numeros de los planes que publica /fees.
 func (h *Handler) SetPlanes(p PlanesPublicados) { h.planes = p }
+
+// SetComprasCriptoEnPausa le dice a /fees si comprar cripto esta en pausa. main
+// le pasa el mismo valor que al servicio de cripto.
+func (h *Handler) SetComprasCriptoEnPausa(enPausa bool) { h.comprasCriptoEnPausa = enPausa }
 
 // ProofOfReserves returns the total of all user liabilities per currency
 // alongside the matching reserve account balance. Publishing this builds
@@ -159,13 +170,42 @@ func (h *Handler) ProofOfReserves(w http.ResponseWriter, r *http.Request) {
 // retiraron: los planes que se anuncian ahora son los personales, con los
 // topes que los servicios de verdad hacen cumplir.
 //
+// Hasta el 20-11-2026 callaba la comision de enviar cripto a otra persona
+// (0,25 %, se cobra desde que existe el envio) y anunciaba como gratis la
+// compra de cripto, que en produccion esta en pausa.
+//
 // Al cambiar una tarifa en el codigo hay que cambiarla aqui. Las pruebas de
 // este paquete atan los numeros a las constantes reales para que no se
 // separen en silencio.
 func (h *Handler) Fees(w http.ResponseWriter, _ *http.Request) {
+	comisionEnvioCripto := decimal.RequireFromString(crypto.PorcentajeComisionDeEnvio)
+
+	gratis := []string{
+		"Transferencias entre cuentas KiramoPay",
+		"Cobros y pagos con QR personal",
+		"Metas de ahorro: depositar y retirar",
+	}
+	noOfrecido := map[string]any{
+		"cross_bank_transfer": "Enviar a una cuenta de otro banco requiere " +
+			"licencia; hoy el envio se rechaza y no se cobra nada.",
+		"fx_conversion": "No hay conversion de moneda en la aplicacion, " +
+			"asi que no hay diferencial de cambio.",
+		"bill_payment_and_topup": "Sin convenio con las empresas ni con los " +
+			"operadores: el cobro se rechaza.",
+	}
+	if h.comprasCriptoEnPausa {
+		// Vender sigue abierto: nadie se queda sin salida de lo que ya tiene.
+		gratis = append(gratis, "Venta de cripto")
+		noOfrecido["crypto_purchase"] = "Comprar, convertir y apartar cripto " +
+			"estan en pausa: la operacion se rechaza y no se cobra nada."
+	} else {
+		gratis = append(gratis, "Compra y venta de cripto")
+	}
+	gratis = append(gratis, "Tarjeta virtual: emision y mantenimiento")
+
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"version":        "2.1.0",
-		"effective_from": "2026-09-13",
+		"version":        "2.2.0",
+		"effective_from": "2026-11-20",
 		"note": "Esta es la lista completa de lo que se cobra. Lo que no aparece aqui, " +
 			"no se cobra.",
 
@@ -197,24 +237,21 @@ func (h *Handler) Fees(w http.ResponseWriter, _ *http.Request) {
 			"existing_merchants": false,
 		},
 
-		// Todo esto se mueve sin cargo.
-		"free": []string{
-			"Transferencias entre cuentas KiramoPay",
-			"Cobros y pagos con QR personal",
-			"Metas de ahorro: depositar y retirar",
-			"Compra y venta de cripto",
-			"Tarjeta virtual: emision y mantenimiento",
+		// Enviar cripto a otra persona de KiramoPay: la constante con la que el
+		// envio cobra. Se cobra en el mismo activo y la paga quien envia.
+		"crypto_send": map[string]any{
+			"pct":     comisionEnvioCripto.InexactFloat64(),
+			"display": comisionEnvioCripto.String() + "% de lo que se envia, en el mismo activo",
+			"applies_to": "Enviar cripto a otra cuenta de KiramoPay. La paga quien " +
+				"envia; a quien recibe le llega la cantidad completa.",
+			"paid_by": "sender",
 		},
 
+		// Todo esto se mueve sin cargo.
+		"free": gratis,
+
 		// Lo que no se ofrece todavia no lleva tarifa porque no ocurre.
-		"not_offered": map[string]any{
-			"cross_bank_transfer": "Enviar a una cuenta de otro banco requiere " +
-				"licencia; hoy el envio se rechaza y no se cobra nada.",
-			"fx_conversion": "No hay conversion de moneda en la aplicacion, " +
-				"asi que no hay diferencial de cambio.",
-			"bill_payment_and_topup": "Sin convenio con las empresas ni con los " +
-				"operadores: el cobro se rechaza.",
-		},
+		"not_offered": noOfrecido,
 
 		// Los planes estan anunciados y su precio es publico, pero todavia no
 		// hay forma de cobrarlos: registrar interes no cobra ni otorga nada.

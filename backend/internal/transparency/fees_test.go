@@ -4,9 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/shopspring/decimal"
+
+	"github.com/kiramopay/backend/internal/crypto"
 	"github.com/kiramopay/backend/internal/plans"
 	"github.com/kiramopay/backend/internal/qrpayment"
 )
@@ -237,5 +241,72 @@ func TestFees_LaAnaliticaDelComercioSeAnunciaPeroNoSeCobra(t *testing.T) {
 	}
 	if codigo, _ := a["code"].(string); codigo != qrpayment.PlanComercioAnalitica {
 		t.Errorf("code = %q", codigo)
+	}
+}
+
+// La comision de enviar cripto se cobra desde que existe el envio y hasta el
+// 20-11-2026 no se publicaba, aunque esta ruta promete "lo que no aparece aqui,
+// no se cobra". Lo publicado tiene que ser la constante con la que se cobra.
+func TestFees_LaComisionDeEnviarCriptoSePublica(t *testing.T) {
+	envio, ok := leerFees(t)["crypto_send"].(map[string]any)
+	if !ok {
+		t.Fatal("falta crypto_send: enviar cripto cobra y la comision no se publica")
+	}
+	real := decimal.RequireFromString(crypto.PorcentajeComisionDeEnvio).InexactFloat64()
+	if pct, _ := envio["pct"].(float64); pct != real {
+		t.Errorf("pct publicado = %v, la comision real = %v", pct, real)
+	}
+	if quien, _ := envio["paid_by"].(string); quien != "sender" {
+		t.Errorf("paid_by = %q; la paga quien envia", quien)
+	}
+	if display, _ := envio["display"].(string); !strings.Contains(display, crypto.PorcentajeComisionDeEnvio+"%") {
+		t.Errorf("display = %q no dice %s%%", display, crypto.PorcentajeComisionDeEnvio)
+	}
+}
+
+func listaGratis(t *testing.T, datos map[string]any) []string {
+	t.Helper()
+	crudo, ok := datos["free"].([]any)
+	if !ok {
+		t.Fatal("falta la lista free")
+	}
+	out := make([]string, 0, len(crudo))
+	for _, x := range crudo {
+		s, _ := x.(string)
+		out = append(out, s)
+	}
+	return out
+}
+
+// En produccion comprar cripto esta en pausa (crypto/pausa.go). Anunciarlo como
+// gratis es anunciar algo que la cuenta no puede hacer.
+func TestFees_ConLaCompraEnPausaNoSeAnunciaComoGratis(t *testing.T) {
+	h := NewHandler(nil)
+	h.SetComprasCriptoEnPausa(true)
+	datos, _ := leerFeesDe(t, h)
+	gratis := listaGratis(t, datos)
+	for _, item := range gratis {
+		if strings.Contains(strings.ToLower(item), "compra") {
+			t.Errorf("con la compra en pausa se anuncia como gratis %q", item)
+		}
+	}
+	if !slices.Contains(gratis, "Venta de cripto") {
+		t.Errorf("vender sigue abierto y sin cargo, y no se anuncia: %v", gratis)
+	}
+	noOfrecido, _ := datos["not_offered"].(map[string]any)
+	if _, ok := noOfrecido["crypto_purchase"]; !ok {
+		t.Error("la pausa de compras no se declara en not_offered")
+	}
+}
+
+// Fuera de produccion (demos) comprar esta abierto y sin cargo.
+func TestFees_SinPausaLaCompraSeAnunciaComoGratis(t *testing.T) {
+	datos := leerFees(t)
+	if !slices.Contains(listaGratis(t, datos), "Compra y venta de cripto") {
+		t.Errorf("sin pausa, comprar y vender cripto son gratis y no se anuncian")
+	}
+	noOfrecido, _ := datos["not_offered"].(map[string]any)
+	if _, ok := noOfrecido["crypto_purchase"]; ok {
+		t.Error("sin pausa se declara la compra como no ofrecida")
 	}
 }
