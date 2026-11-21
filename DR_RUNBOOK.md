@@ -58,10 +58,46 @@ frontend en Vercel).
   en un Postgres efímero y verifica integridad: tablas críticas presentes,
   migraciones registradas, **invariante de doble partida** (todo posting
   balancea por moneda) y **cero drift** wallet↔journal.
+- **Diario 02:00 CR**: sello del registro de auditoría (ver abajo). Si no hay
+  un mes cerrado nuevo, no hace nada.
 - **Si cualquiera falla, se abre un issue automáticamente** en el repo
   (además del email de GitHub por workflow fallido). Un backup en rojo
   significa que NO hay respaldo reciente: tratarlo como incidente, no como
   ruido.
+
+## Registro de auditoría: conservación y sello mensual
+
+El registro de auditoría (`audit_logs`) se conserva **5 años** desde cada
+evento, y **10 años** para las cuentas con un reporte de operación sospechosa
+o un requerimiento de autoridad (Ley 7786 art. 16; Decreto 36948 art. 21).
+Pasado el plazo se borra (Ley 8968 art. 6). El respaldo diario se guarda solo
+30 días, así que no sirve para esto.
+
+- **Protección en la base (migración 091):** el registro no se edita ni se
+  borra fila por fila. La única edición aceptada es la desasociación de una
+  cuenta eliminada, que deja en blanco la IP, el navegador y los detalles.
+- **Sello mensual (`scripts/dr/sellar-auditoria.sh`):** cada mes cerrado se
+  exporta a CSV, se comprime, se cifra con `BACKUP_ENCRYPTION_KEY` y se sube a
+  `kiramopay/auditoria/AAAA-MM.csv.gz.enc` con su manifiesto
+  `AAAA-MM.json` (filas, huella SHA-256 del contenido y del archivo). Un mes
+  con manifiesto no se vuelve a exportar ni se sobrescribe. Se corre a mano
+  con la acción `auditoria` del workflow.
+- **Una regla de ciclo de vida del bucket NO puede abarcar
+  `kiramopay/auditoria/`.** Si se configura la poda de 30 días como regla del
+  bucket, tiene que limitarse a `kiramopay/db/`; si no, borraría los sellos.
+- **Bloqueo contra borrado:** si el proveedor del bucket lo ofrece (por ejemplo
+  Object Lock en S3 o los bloqueos de bucket de R2), activarlo sobre
+  `kiramopay/auditoria/` por 5 años. Con eso ni quien tenga las llaves del
+  bucket puede borrar o reescribir un mes antes de tiempo.
+- **Leer o verificar un mes:**
+  `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_ENCRYPTION_KEY -in AAAA-MM.csv.gz.enc | gunzip > AAAA-MM.csv`
+  y `sha256sum AAAA-MM.csv` tiene que dar el `sha256_csv` del manifiesto. Si
+  se exporta el mismo mes desde la base y difiere, las únicas diferencias
+  legítimas son desasociaciones posteriores al sello.
+- **Purga (todavía no construida; la primera vence en 2031):** confirmar que
+  el mes está sellado, apartar las filas de las cuentas que deben conservarse
+  10 años y quitar la partición del mes (`ALTER TABLE audit_logs DETACH
+  PARTITION ...` y `DROP TABLE ...`).
 
 ## Procedimiento de incidente (pérdida de la DB)
 
