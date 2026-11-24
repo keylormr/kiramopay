@@ -1583,6 +1583,39 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs (action, created_at DESC);
 
+	-- Migracion 091: no se edita ni se borra fila por fila. La unica edicion
+	-- aceptada es la desasociacion de una cuenta eliminada.
+	CREATE OR REPLACE FUNCTION fn_audit_logs_sin_cambios()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		IF TG_OP = 'DELETE' THEN
+			RAISE EXCEPTION 'audit_logs no se borra fila por fila: lo vencido se purga por particion'
+				USING ERRCODE = 'restrict_violation';
+		END IF;
+		IF NEW.id            IS DISTINCT FROM OLD.id
+		OR NEW.user_id       IS DISTINCT FROM OLD.user_id
+		OR NEW.action        IS DISTINCT FROM OLD.action
+		OR NEW.resource_type IS DISTINCT FROM OLD.resource_type
+		OR NEW.resource_id   IS DISTINCT FROM OLD.resource_id
+		OR NEW.risk_level    IS DISTINCT FROM OLD.risk_level
+		OR NEW.created_at    IS DISTINCT FROM OLD.created_at
+		OR NEW.created_date  IS DISTINCT FROM OLD.created_date
+		OR NEW.ip_address    IS NOT NULL
+		OR NEW.user_agent    IS NOT NULL
+		OR NEW.details       IS DISTINCT FROM '{}'::jsonb
+		THEN
+			RAISE EXCEPTION 'audit_logs solo admite la desasociacion de una cuenta eliminada (ip, navegador y detalles en blanco)'
+				USING ERRCODE = 'restrict_violation';
+		END IF;
+		RETURN NEW;
+	END;
+	$$ LANGUAGE plpgsql;
+
+	DROP TRIGGER IF EXISTS trg_audit_logs_sin_cambios ON audit_logs;
+	CREATE TRIGGER trg_audit_logs_sin_cambios
+		BEFORE UPDATE OR DELETE ON audit_logs
+		FOR EACH ROW EXECUTE FUNCTION fn_audit_logs_sin_cambios();
+
 	-- Tablas que la eliminacion de cuenta (migracion 077) toca y que este esquema
 	-- no declaraba. Mismas columnas y FK que las migraciones que las crean.
 	CREATE TABLE IF NOT EXISTS user_devices (
