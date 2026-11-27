@@ -1,8 +1,8 @@
 name: Android APK
 
+# Las versiones se compilan en la PC, no en GitHub. Empujar un tag v* ya no
+# dispara este flujo; queda solo manual y, ademas, desactivado en Actions.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
