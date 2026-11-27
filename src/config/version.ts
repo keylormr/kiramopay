@@ -42,15 +42,24 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.16.0',
-    buildNumber: 28,
-    releaseDate: '2026-11-19',
+    version: '2.16.1',
+    buildNumber: 29,
+    releaseDate: '2026-11-27',
     changes: [
-      'La aplicación queda lista para funciones nuevas de bitcoin que se activarán más adelante; por ahora no cambia nada de lo que usas',
-      'Correcciones internas de estabilidad',
+      'El Mercado de viajes y comida ya no aparece en el Inicio ni en el Centro de ayuda mientras no esté disponible',
+      'Las pantallas de bienvenida describen lo que la aplicación hace hoy: enviar a otra cuenta de KiramoPay con su número de teléfono o un código QR',
     ],
   },
   history: [
+    {
+      version: '2.16.0',
+      buildNumber: 28,
+      releaseDate: '2026-11-19',
+      changes: [
+        'La aplicación queda lista para funciones nuevas de bitcoin que se activarán más adelante; por ahora no cambia nada de lo que usas',
+        'Correcciones internas de estabilidad',
+      ],
+    },
     {
       version: '2.15.2',
       buildNumber: 27,

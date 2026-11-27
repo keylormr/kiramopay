@@ -1,4 +1,30 @@
 {
+  "2.16.1": {
+    "en": [
+      "The rides and food Marketplace no longer appears on Home or in the Help Center while it is not available",
+      "The welcome screens describe what the app does today: send to another KiramoPay account with its phone number or a QR code"
+    ],
+    "fr": [
+      "Le Marché des trajets et des repas n'apparaît plus dans l'Accueil ni dans le Centre d'aide tant qu'il n'est pas disponible",
+      "Les écrans de bienvenue décrivent ce que fait l'application aujourd'hui : envoyer vers un autre compte KiramoPay avec son numéro de téléphone ou un code QR"
+    ],
+    "hi": [
+      "राइड और खाने का मार्केटप्लेस उपलब्ध होने तक होम और सहायता केंद्र में नहीं दिखता",
+      "स्वागत स्क्रीन बताती हैं कि ऐप आज क्या करता है: फ़ोन नंबर या QR कोड से किसी दूसरे KiramoPay खाते में भेजें"
+    ],
+    "ja": [
+      "配車とフードのマーケットは、利用できるようになるまでホームとヘルプセンターに表示されません",
+      "ウェルカム画面で、アプリで今できることを説明します：電話番号またはQRコードで別のKiramoPayアカウントに送金できます"
+    ],
+    "pt": [
+      "O Mercado de viagens e comida não aparece mais no Início nem na Central de ajuda enquanto não estiver disponível",
+      "As telas de boas-vindas descrevem o que o aplicativo faz hoje: enviar para outra conta KiramoPay pelo número de telefone ou por um código QR"
+    ],
+    "zh-cn": [
+      "打车和外卖商城在可用之前不再显示在首页和帮助中心",
+      "欢迎页面介绍了应用目前的功能：通过电话号码或二维码向另一个 KiramoPay 账户转账"
+    ]
+  },
   "2.16.0": {
     "en": [
       "The app is now ready for new bitcoin features that will be turned on later; for now nothing you use changes",
