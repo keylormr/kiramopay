@@ -159,7 +159,7 @@ export const SeccionMediosDeCobro: React.FC<{ merchantId: string }> = ({ merchan
                 spellCheck={false}
                 value={direccion}
                 onChange={(e) => setDireccion(e.target.value)}
-                placeholder="nombre@breez.tips"
+                placeholder="nombre@pay.kiramopay.com"
                 maxLength={320}
                 className={CAMPO}
               />
