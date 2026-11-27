@@ -17,9 +17,9 @@ name: iOS IPA
 # Ojo: Xcode 26 RECHAZA los nombres viejos "ad-hoc" y "app-store". Los validos
 # desde Xcode 15.4 son "release-testing" y "app-store-connect".
 
+# Las versiones se compilan fuera de GitHub. Empujar un tag v* ya no dispara
+# este flujo; queda solo manual y, ademas, desactivado en Actions.
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       export_method:

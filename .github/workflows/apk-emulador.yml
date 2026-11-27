@@ -20,14 +20,9 @@ name: APK en emulador
 # Sin google-services.json ni VITE_PUSH_NATIVO: la app no ofrece los avisos y
 # nunca llama a PushNotifications.register(), que sin ese archivo cierra la app.
 
+# Nada se compila en GitHub: este flujo ya no corre en los PR. Queda solo
+# manual y, ademas, desactivado en Actions.
 on:
-  pull_request:
-    paths:
-      - 'android/**'
-      - 'package.json'
-      - 'capacitor.config.*'
-      - 'scripts/emulador/**'
-      - '.github/workflows/apk-emulador.yml'
   workflow_dispatch:
 
 permissions:
