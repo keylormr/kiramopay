@@ -151,7 +151,17 @@ const SparklineChart: React.FC<{ data: number[]; color: string; sinDatosLabel: s
   );
 };
 
-export const CryptoView: React.FC = () => {
+interface CryptoViewProps {
+  /**
+   * La moneda de una alerta de precio tocada (Layout): se abre su detalle. `vez`
+   * distingue un pedido de otro por la misma moneda.
+   */
+  monedaPedida?: { simbolo: string; vez: number } | null;
+  /** Avisa que el pedido ya se atendio, para que Layout lo suelte. */
+  onMonedaAtendida?: () => void;
+}
+
+export const CryptoView: React.FC<CryptoViewProps> = ({ monedaPedida = null, onMonedaAtendida }) => {
   const { state, dispatch } = useApp();
   const { t, language } = useLanguage();
   // Single shared USD->CRC rate (same source as the wallet + balance summary).
@@ -256,6 +266,25 @@ export const CryptoView: React.FC = () => {
     setAlertaActivo(simbolo ?? null);
     setActiveSheet('alerts');
   };
+
+  // Una alerta de precio tocada abre el detalle de su moneda. Si la lista de
+  // activos todavia no llego, se espera; si llego y no la tiene, queda Cripto.
+  // Se ajusta al pintar (no en un efecto), como las demas hojas que abren por
+  // una propiedad; el efecto solo le avisa a Layout que ya se atendio.
+  const [monedaVista, setMonedaVista] = useState<number | null>(null);
+  if (monedaPedida && monedaPedida.vez !== monedaVista) {
+    const activo = state.crypto.assets.find((a) => a.symbol.toUpperCase() === monedaPedida.simbolo);
+    if (activo || state.crypto.assets.length > 0) {
+      setMonedaVista(monedaPedida.vez);
+      if (activo) {
+        setSelectedAsset(activo);
+        setActiveSheet('assetDetail');
+      }
+    }
+  }
+  useEffect(() => {
+    if (monedaPedida && monedaPedida.vez === monedaVista) onMonedaAtendida?.();
+  }, [monedaPedida, monedaVista, onMonedaAtendida]);
 
   // Real-time price states
   const [isLoading, setIsLoading] = useState(true);

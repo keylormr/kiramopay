@@ -32,6 +32,12 @@ export type TranslationKeys = {
   notif_read_label: string;
   notif_unread_label: string;
   notif_delete: string;
+  // A donde lleva tocar el aviso; {asset} es el simbolo (BTC).
+  notif_go_asset: string;
+  notif_go_crypto: string;
+  notif_go_movement: string;
+  notif_go_activity: string;
+  notif_go_security: string;
   kyc_basic: string;
   kyc_verified: string;
   kyc_complete: string;

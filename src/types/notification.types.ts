@@ -11,6 +11,12 @@ export interface Notification {
    */
   dateISO?: string;
   read: boolean;
+  /**
+   * Con que abrir la pantalla del aviso (ver utils/destinoDeAviso): `activo`
+   * en una alerta de precio, `movimiento` en un SINPE recibido. No viene en
+   * los avisos de antes ni en los que no llevan a ninguna pantalla.
+   */
+  data?: Record<string, string>;
   action?: {
     label: string;
     route?: string;

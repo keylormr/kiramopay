@@ -3,6 +3,7 @@ import { getApiLayer } from '@/api';
 import {
   activarNativo,
   desactivarNativo,
+  escucharToquesDeAvisos,
   leerEstadoNativo,
   sincronizarNativo,
   soltarNativoAlSalir,
@@ -266,6 +267,16 @@ export async function sincronizarAvisos(userId: string): Promise<void> {
   } catch {
     // Se reintenta en el proximo arranque.
   }
+}
+
+/**
+ * Tocar un aviso del sistema lleva a su pantalla. En el APK con avisos se
+ * escucha el toque del plugin (escucharToquesDeAvisos); en el navegador y en el
+ * APK sin Firebase no hay nada que escuchar. Devuelve la funcion que deja de
+ * escuchar.
+ */
+export function escucharToquesDeAvisosDelSistema(): () => void {
+  return modoDeAvisos() === 'nativo' ? escucharToquesDeAvisos() : () => undefined;
 }
 
 /**

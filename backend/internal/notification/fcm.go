@@ -201,17 +201,28 @@ type mensajeFCM struct {
 // cerrada), con la ruta en data para cuando se toca, en el canal de la app y
 // con prioridad alta, que es la que despierta al telefono para un movimiento
 // de dinero.
+//
+// Al tocarlo, la app lee data: el tipo y los datos del aviso dicen a que
+// pantalla ir (src/utils/destinoDeAviso.ts) y "aviso", cual marcar leido. Los
+// datos del aviso no pisan url ni tipo.
 func armarMensajeFCM(token string, p *NotificationPayload) mensajeFCM {
 	var m mensajeFCM
 	m.Message.Token = token
 	m.Message.Notification = notificacionFCM{Title: p.Title, Body: p.Body}
+	m.Message.Data = map[string]string{}
+	for clave, valor := range p.Data {
+		m.Message.Data[clave] = valor
+	}
 	ruta := p.URL
 	if ruta == "" {
 		ruta = "/"
 	}
-	m.Message.Data = map[string]string{"url": ruta}
+	m.Message.Data["url"] = ruta
 	if p.Tag != "" {
 		m.Message.Data["tipo"] = p.Tag
+	}
+	if p.ID != "" {
+		m.Message.Data["aviso"] = p.ID
 	}
 	m.Message.Android.Priority = "HIGH"
 	m.Message.Android.Notification.ChannelID = canalDeAvisos

@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 
@@ -84,18 +85,49 @@ func (r *Repository) IdiomaDe(ctx context.Context, userID string) string {
 
 // InsertNotification saves a notification record.
 func (r *Repository) InsertNotification(ctx context.Context, n *NotificationRecord) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO notification_history (id, user_id, title, body, type)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		n.ID, n.UserID, n.Title, n.Body, n.Type,
+	datos, err := datosAGuardar(n.Datos)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(ctx,
+		`INSERT INTO notification_history (id, user_id, title, body, type, datos)
+		 VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+		n.ID, n.UserID, n.Title, n.Body, n.Type, datos,
 	)
 	return err
+}
+
+// datosAGuardar: sin datos va NULL, no un objeto vacio. Asi un aviso sin
+// pantalla se guarda igual que uno de antes de la migracion 092.
+func datosAGuardar(datos map[string]string) (*string, error) {
+	if len(datos) == 0 {
+		return nil, nil
+	}
+	b, err := json.Marshal(datos)
+	if err != nil {
+		return nil, err
+	}
+	texto := string(b)
+	return &texto, nil
+}
+
+// datosLeidos lee la columna datos. Un valor que no se puede leer se descarta
+// en vez de tumbar la lista: el aviso se muestra igual, solo sin pantalla.
+func datosLeidos(crudo []byte) map[string]string {
+	if len(crudo) == 0 {
+		return nil
+	}
+	var datos map[string]string
+	if err := json.Unmarshal(crudo, &datos); err != nil || len(datos) == 0 {
+		return nil
+	}
+	return datos
 }
 
 // ListNotifications returns paginated notifications for a user.
 func (r *Repository) ListNotifications(ctx context.Context, userID string, limit, offset int) ([]*NotificationRecord, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, user_id, title, body, type, read_at, created_at
+		`SELECT id, user_id, title, body, type, datos, read_at, created_at
 		 FROM notification_history
 		 WHERE user_id = $1 AND hidden_at IS NULL
 		 ORDER BY created_at DESC
@@ -110,9 +142,11 @@ func (r *Repository) ListNotifications(ctx context.Context, userID string, limit
 	var notifs []*NotificationRecord
 	for rows.Next() {
 		n := &NotificationRecord{}
-		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Type, &n.ReadAt, &n.CreatedAt); err != nil {
+		var datos []byte
+		if err := rows.Scan(&n.ID, &n.UserID, &n.Title, &n.Body, &n.Type, &datos, &n.ReadAt, &n.CreatedAt); err != nil {
 			return nil, err
 		}
+		n.Datos = datosLeidos(datos)
 		notifs = append(notifs, n)
 	}
 	return notifs, nil

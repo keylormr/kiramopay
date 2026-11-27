@@ -6,10 +6,31 @@ import { EstadoVacio } from '@/components/EstadoVacio';
 import { Notification } from '../../types';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { fechaYHora } from '@/utils/fechaPlazo';
+import { destinoDeAviso, type DestinoDeAviso } from '@/utils/destinoDeAviso';
 
 interface NotificationsViewProps {
   onClose: () => void;
+  /**
+   * Abre la pantalla de un aviso. Sin esta (modo negocio), tocar un aviso solo
+   * lo marca leido.
+   */
+  onAbrirDestino?: (destino: DestinoDeAviso) => boolean;
 }
+
+// A donde lleva el aviso, dicho en la tarjeta: sin esto no se sabe que tocarla
+// abre algo, ni que.
+const etiquetaDeDestino = (destino: DestinoDeAviso, t: (clave: string) => string): string => {
+  switch (destino.pantalla) {
+    case 'cripto':
+      return destino.simbolo ? t('notif_go_asset').replace('{asset}', destino.simbolo) : t('notif_go_crypto');
+    case 'movimiento':
+      return t('notif_go_movement');
+    case 'actividad':
+      return t('notif_go_activity');
+    case 'seguridad':
+      return t('notif_go_security');
+  }
+};
 
 const getNotificationIcon = (type: Notification['type']) => {
   switch (type) {
@@ -44,7 +65,7 @@ const getNotificationBg = (type: Notification['type'], read: boolean) => {
   }
 };
 
-export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose }) => {
+export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose, onAbrirDestino }) => {
   const { state, dispatch } = useApp();
   const { t, language } = useLanguage();
   const notifications = state.notifications || [];
@@ -63,6 +84,25 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
     dispatch({ type: 'MARK_ALL_NOTIFICATIONS_READ' });
   const handleDelete = (id: string) =>
     dispatch({ type: 'DELETE_NOTIFICATION', payload: id });
+
+  // Tocar un aviso lo marca leido, como siempre. Si lleva a una pantalla, ademas
+  // cierra el panel (con su animacion, por el mismo camino que la X) y la abre.
+  // Uno sin pantalla, o uno de antes sin datos de un tipo sin pantalla, se
+  // queda en marcarlo leido.
+  const destinoDe = (notification: Notification) =>
+    onAbrirDestino ? destinoDeAviso(notification.type, notification.data) : null;
+  const tocarAviso = (notification: Notification) => {
+    // Un segundo toque mientras el panel se cierra no navega otra vez.
+    if (!open) return;
+    handleMarkAsRead(notification.id);
+    const destino = destinoDe(notification);
+    if (!destino || !onAbrirDestino) return;
+    setOpen(false);
+    setTimeout(() => {
+      onClose();
+      onAbrirDestino(destino);
+    }, 300);
+  };
 
   return (
     <BottomSheet isOpen={open} onClose={handleClose} title={t('notif_title')}>
@@ -93,12 +133,15 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
         />
       ) : (
         <ul role="list" className="space-y-3">
-          {notifications.map((notification) => (
+          {notifications.map((notification) => {
+            const destino = destinoDe(notification);
+            const aDonde = destino ? etiquetaDeDestino(destino, t) : null;
+            return (
             <li key={notification.id} className="relative">
               <button
                 type="button"
-                onClick={() => handleMarkAsRead(notification.id)}
-                aria-label={`${notification.read ? t('notif_read_label') : t('notif_unread_label')}: ${notification.title}`}
+                onClick={() => tocarAviso(notification)}
+                aria-label={`${notification.read ? t('notif_read_label') : t('notif_unread_label')}: ${notification.title}${aDonde ? `. ${aDonde}` : ''}`}
                 className={`w-full text-left rounded-xl p-4 pr-10 transition-all ${getNotificationBg(
                   notification.type,
                   notification.read,
@@ -127,9 +170,19 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
                     >
                       {notification.message}
                     </p>
-                    <span className="text-xs text-gray-400 mt-2 block">
-                      {notification.dateISO ? fechaYHora(notification.dateISO, language) : notification.date}
-                    </span>
+                    {/* Si la fecha y el destino no caben en una linea, el
+                        destino baja entero: la fecha no se parte ("a." / "m."). */}
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="text-xs text-gray-400 whitespace-nowrap">
+                        {notification.dateISO ? fechaYHora(notification.dateISO, language) : notification.date}
+                      </span>
+                      {aDonde && (
+                        <span className="ml-auto flex shrink-0 items-center gap-0.5 whitespace-nowrap text-xs font-medium text-[var(--color-primary)] dark:text-[var(--color-primary-light)]">
+                          {aDonde}
+                          <Icons.ChevronRight size={14} aria-hidden="true" />
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </button>
@@ -144,11 +197,9 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({ onClose })
                 <Icons.X size={16} />
               </button>
 
-              {/* El boton de accion era codigo muerto: nada del backend llena
-                  `action` y no tenia onClick — un boton que no hacia nada. Si
-                  algun dia las notificaciones traen rutas, se recablea aqui. */}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </BottomSheet>

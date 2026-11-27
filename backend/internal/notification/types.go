@@ -22,18 +22,50 @@ type NotificationPayload struct {
 	Icon  string `json:"icon,omitempty"`
 	URL   string `json:"url,omitempty"`
 	Tag   string `json:"tag,omitempty"`
-	Data  any    `json:"data,omitempty"`
+	// Data son los datos con que la app abre la pantalla del aviso (ver
+	// DatosParaLaApp). Viajan en el historial, en el aviso en vivo y en el
+	// push.
+	Data map[string]string `json:"data,omitempty"`
+	// ID es el del aviso guardado. Lo pone SendToUser: el push lo lleva para
+	// que tocarlo en el telefono lo marque leido.
+	ID string `json:"id,omitempty"`
 }
 
 // NotificationRecord is a persisted notification for history.
 type NotificationRecord struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"user_id"`
-	Title     string     `json:"title"`
-	Body      string     `json:"body"`
-	Type      string     `json:"type"`
-	ReadAt    *time.Time `json:"read_at,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	Type   string `json:"type"`
+	// Datos para abrir la pantalla del aviso. nil en los avisos de antes de la
+	// migracion 092 y en los que no llevan a ninguna pantalla.
+	Datos     map[string]string `json:"data,omitempty"`
+	ReadAt    *time.Time        `json:"read_at,omitempty"`
+	CreatedAt time.Time         `json:"created_at"`
+}
+
+// datosParaLaApp son los datos del catalogo que la app usa para abrir la
+// pantalla de un aviso. Lo demas (montos, nombres, notas) se queda en el texto:
+// no hace falta para navegar y viajaria de mas en el push.
+var datosParaLaApp = []string{"activo", "movimiento"}
+
+// DatosParaLaApp saca de los datos de un aviso los que abren su pantalla: el
+// activo de una alerta de precio y el movimiento de un SINPE recibido. Solo
+// textos no vacios; sin ninguno devuelve nil.
+func DatosParaLaApp(datos map[string]any) map[string]string {
+	var out map[string]string
+	for _, clave := range datosParaLaApp {
+		texto, ok := datos[clave].(string)
+		if !ok || strings.TrimSpace(texto) == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[clave] = texto
+	}
+	return out
 }
 
 // SubscribeRequest is the request body for subscribing.
