@@ -49,7 +49,18 @@ function claseDeMonto(texto: string): string {
 // tecla seria una consulta.
 const ESPERA_BUSQUEDA_MS = 350;
 
-export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+interface TransactionsViewProps {
+  onClose: () => void;
+  /**
+   * El movimiento de un aviso tocado (Layout): se abre su detalle. `vez`
+   * distingue un pedido de otro por el mismo movimiento.
+   */
+  movimientoPedido?: { id: string; vez: number } | null;
+  /** Avisa que el pedido ya se atendio, para que Layout lo suelte. */
+  onMovimientoAtendido?: () => void;
+}
+
+export const TransactionsView: React.FC<TransactionsViewProps> = ({ onClose, movimientoPedido = null, onMovimientoAtendido }) => {
   const { state } = useApp();
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
@@ -212,6 +223,27 @@ export const TransactionsView: React.FC<{ onClose: () => void }> = ({ onClose })
 
   // Derived data
   const allTransactions = pagina ? pagina.txs : state.transactions;
+
+  // Un SINPE recibido tocado abre su movimiento. Se busca en lo que este
+  // dispositivo ya tiene y en la primera pagina del servidor; si esa pagina ya
+  // llego (o no hay servidor) y no esta, queda la lista. Se ajusta al pintar;
+  // el efecto solo le avisa a Layout que ya se atendio.
+  const [movimientoVisto, setMovimientoVisto] = useState<number | null>(null);
+  if (movimientoPedido && movimientoPedido.vez !== movimientoVisto) {
+    const tx =
+      state.transactions.find((x) => x.id === movimientoPedido.id) ??
+      pagina?.txs.find((x) => x.id === movimientoPedido.id);
+    if (tx || pagina || modoLocal) {
+      setMovimientoVisto(movimientoPedido.vez);
+      if (tx) {
+        setSelectedTx(tx);
+        setDetalleAbierto(true);
+      }
+    }
+  }
+  useEffect(() => {
+    if (movimientoPedido && movimientoPedido.vez === movimientoVisto) onMovimientoAtendido?.();
+  }, [movimientoPedido, movimientoVisto, onMovimientoAtendido]);
   // Los chips salen de la categoria NORMALIZADA (utils/categoriaMovimiento): un
   // slug desconocido cuenta como "otros" en vez de imprimirse crudo.
   const categories = useMemo(() => {

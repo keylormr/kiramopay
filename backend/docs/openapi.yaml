@@ -9041,7 +9041,13 @@ components:
           description: Notification kind (transfer, price_alert, fraud_alert, system)
         data:
           type: object
-          additionalProperties: true
+          description: >-
+            What the app needs to open the notification's screen: `activo` (asset
+            symbol) on a price_alert, `movimiento` (the receiver's transaction id)
+            on a received SINPE. Absent on notifications stored before migration
+            092 and on those that open no screen.
+          additionalProperties:
+            type: string
         read_at:
           type: string
           format: date-time

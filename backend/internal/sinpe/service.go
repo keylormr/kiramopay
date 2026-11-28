@@ -83,11 +83,18 @@ func (s *Service) GetHistory(ctx context.Context, userID string) ([]HistoryRecor
 // notifyReceiver delivers the "SINPE received" notification on a context
 // detached from the (already-completed) request, bounded by its own timeout.
 // Best-effort: never blocks or fails the transfer.
-func (s *Service) notifyReceiver(userID, monto string) {
+//
+// movimiento es el id del movimiento de quien RECIBE (su fila en
+// transactions): tocar el aviso abre ese movimiento en la app. Vacio si no se
+// tiene; el aviso abre entonces la actividad.
+func (s *Service) notifyReceiver(userID, monto, movimiento string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	_ = s.notifier.NotificarEnSuIdioma(ctx, userID, notification.AvisoSinpeRecibido,
-		map[string]any{"monto": monto}, "transaction")
+	datos := map[string]any{"monto": monto}
+	if movimiento != "" {
+		datos["movimiento"] = movimiento
+	}
+	_ = s.notifier.NotificarEnSuIdioma(ctx, userID, notification.AvisoSinpeRecibido, datos, "transaction")
 }
 
 // Send transfers CRC to a recipient phone. If the phone belongs to a
@@ -281,7 +288,7 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		}
 	}
 
-	senderTx, _, repetido, err := s.txService.TransferirOReconocer(ctx, pedido)
+	senderTx, receiverTx, repetido, err := s.txService.TransferirOReconocer(ctx, pedido)
 	if err != nil {
 		if errors.Is(err, transaction.ErrMFARequired) {
 			return nil, err
@@ -298,11 +305,15 @@ func (s *Service) Send(ctx context.Context, userID string, req *SendRequest, ipA
 		// fails the transfer).
 		if s.notifier != nil {
 			monto := notification.Monto(req.Amount, "CRC")
+			movimiento := ""
+			if receiverTx != nil {
+				movimiento = receiverTx.ID
+			}
 			// #nosec G118 -- intentionally detached: the request context is
 			// cancelled when the response returns, but this best-effort
 			// notification must outlive the request (notifyReceiver uses its own
 			// bounded context).
-			go s.notifyReceiver(peer.ID, monto)
+			go s.notifyReceiver(peer.ID, monto, movimiento)
 		}
 		if s.auditLogger != nil {
 			s.auditLogger.LogTransfer(userID, senderTx.ID, req.Amount, "CRC", ipAddr)

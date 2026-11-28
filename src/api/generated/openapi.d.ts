@@ -13202,8 +13202,9 @@ export interface components {
             body: string;
             /** @description Notification kind (transfer, price_alert, fraud_alert, system) */
             type: string;
+            /** @description What the app needs to open the notification's screen: `activo` (asset symbol) on a price_alert, `movimiento` (the receiver's transaction id) on a received SINPE. Absent on notifications stored before migration 092 and on those that open no screen. */
             data?: {
-                [key: string]: unknown;
+                [key: string]: string;
             };
             /** Format: date-time */
             read_at?: string | null;

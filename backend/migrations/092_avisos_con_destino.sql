@@ -1,0 +1,12 @@
+-- 092: el aviso guarda con que abrir su pantalla.
+--
+-- Tocar un aviso solo lo marcaba como leido: el registro tenia el titulo y el
+-- cuerpo ya escritos, y nada que dijera a que pantalla llevar. Ahora guarda los
+-- datos para abrirla: el activo de una alerta de precio ("BTC") y el
+-- movimiento de un SINPE recibido (su id en transactions).
+--
+-- Va en una columna aparte, no dentro del texto: el texto se vuelve a escribir
+-- en el idioma de quien lo lee (notification/localizar.go) y estos datos no
+-- cambian con el idioma. Los avisos de antes quedan en NULL: la app los manda
+-- a la pantalla general de su tipo o, si no tienen, solo los marca leidos.
+ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS datos JSONB;

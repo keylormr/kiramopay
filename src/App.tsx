@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { lazyConRecarga } from './utils/lazyConRecarga';
 import { useNotificationsWs } from './hooks/useNotificationsWs';
-import { sincronizarAvisos } from './utils/avisosPush';
+import { escucharToquesDeAvisosDelSistema, sincronizarAvisos } from './utils/avisosPush';
+import { suscribirToqueDeAviso, type DestinoDeAviso } from './utils/destinoDeAviso';
 import { useDeepLinks, publishDeepLink, subscribeDeepLink } from './hooks/useDeepLinks';
 import { campanaPendiente, marcarCampanaVista, type Campana } from './campanas';
 import { useApp } from '@/hooks/useApp';
@@ -470,6 +471,53 @@ const Layout = () => {
     setActiveTab(target.tab);
   }), []);
 
+  // Tocar un aviso lleva a su pantalla (utils/destinoDeAviso), desde la campana
+  // o desde el push del telefono. Lo que cada pantalla tiene que abrir adentro
+  // (la moneda, el movimiento, la seccion de Seguridad) queda pedido aqui hasta
+  // que la pantalla lo atiende y lo suelta: si quedara puesto, volver a esa
+  // pantalla otro dia la abriria otra vez en lo mismo.
+  // Cada pedido lleva un numero propio: tocar dos veces la misma alerta son dos
+  // pedidos, y la pantalla atiende el segundo aunque el primero haya sido igual.
+  const vecesPedidas = useRef(0);
+  const [monedaPedida, setMonedaPedida] = useState<{ simbolo: string; vez: number } | null>(null);
+  const [movimientoPedido, setMovimientoPedido] = useState<{ id: string; vez: number } | null>(null);
+  const [seguridadPedida, setSeguridadPedida] = useState(0);
+  const soltarMoneda = useCallback(() => setMonedaPedida(null), []);
+  const soltarMovimiento = useCallback(() => setMovimientoPedido(null), []);
+  const soltarSeguridad = useCallback(() => setSeguridadPedida(0), []);
+  // En modo negocio no se navega: las pantallas de los avisos son de la
+  // billetera personal, y sacar al cajero del perfil del comercio es una
+  // decision de producto (igual que con los enlaces, arriba). El aviso solo se
+  // marca leido, como antes.
+  const abrirDestino = useCallback((destino: DestinoDeAviso): boolean => {
+    if (businessMode) return false;
+    vecesPedidas.current += 1;
+    const vez = vecesPedidas.current;
+    setVolverDePlanes(null);
+    switch (destino.pantalla) {
+      case 'cripto':
+        setOverlayView(null);
+        setMonedaPedida(destino.simbolo ? { simbolo: destino.simbolo, vez } : null);
+        setActiveTab('crypto');
+        return true;
+      case 'movimiento':
+      case 'actividad':
+        setMovimientoPedido(destino.pantalla === 'movimiento' ? { id: destino.id, vez } : null);
+        setOverlayView('transactions');
+        return true;
+      case 'seguridad':
+        setOverlayView(null);
+        setSeguridadPedida(vez);
+        setActiveTab('profile');
+        return true;
+    }
+  }, [businessMode]);
+  useEffect(() => suscribirToqueDeAviso(({ destino, aviso }) => {
+    // Tocarlo en el telefono es leerlo, como en la campana.
+    if (aviso) dispatch({ type: 'MARK_NOTIFICATION_READ', payload: aviso });
+    abrirDestino(destino);
+  }), [abrirDestino, dispatch]);
+
   const TABS: (ElementoDeNavegacion & { id: TabId })[] = [
     { id: 'home', Icono: IconosLinea.Inicio, etiqueta: t('nav_home') },
     { id: 'sinpe', Icono: IconosLinea.Sinpe, etiqueta: t('nav_sinpe') },
@@ -612,9 +660,9 @@ const Layout = () => {
     switch (activeTab) {
       case 'home': return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} onOpenSplitPay={() => setOverlayView('splitpay')} onOpenLoyalty={() => setOverlayView('loyalty')} onOpenAssistant={() => setOverlayView('assistant')} onOpenMarketplace={() => setOverlayView('marketplace')} onOpenCards={() => setOverlayView('cards')} onOpenPlans={() => setOverlayView('plans')} onOpenCrypto={() => setActiveTab('crypto')} onNavigateToSinpe={(tab) => { setSinpeTab(tab ?? 'send'); setActiveTab('sinpe'); }} />;
       case 'sinpe': return <SinpeView initialTab={sinpeTab} />;
-      case 'crypto': return <CryptoView />;
+      case 'crypto': return <CryptoView monedaPedida={monedaPedida} onMonedaAtendida={soltarMoneda} />;
       case 'services': return <ServicesView />;
-      case 'profile': return <ProfileView onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenClosedMerchants={() => setOverlayView('closedMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenAdminCapital={() => setOverlayView('adminCapital')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} onOpenBudget={() => setOverlayView('budget')} onOpenRecurring={() => setOverlayView('recurring')} />;
+      case 'profile': return <ProfileView seguridadPedida={seguridadPedida} onSeguridadAtendida={soltarSeguridad} onOpenFAQ={() => setOverlayView('faq')} onOpenEscrow={() => setOverlayView('escrow')} onOpenPayout={() => setOverlayView('payout')} onOpenBusiness={() => setShowSwitcher(true)} onOpenAdminMerchants={() => setOverlayView('adminMerchants')} onOpenClosedMerchants={() => setOverlayView('closedMerchants')} onOpenAdminUsers={() => setOverlayView('adminUsers')} onOpenAdminDisputas={() => setOverlayView('adminDisputas')} onOpenAdminPromociones={() => setOverlayView('adminPromociones')} onOpenAdminCapital={() => setOverlayView('adminCapital')} onOpenPlans={() => setOverlayView('plans')} onOpenSessions={() => setOverlayView('sessions')} onOpenBudget={() => setOverlayView('budget')} onOpenRecurring={() => setOverlayView('recurring')} />;
       default: return <HomeView onViewAllTransactions={() => setOverlayView('transactions')} onOpenAnalytics={() => setOverlayView('analytics')} onOpenSavings={() => setOverlayView('savings')} />;
     }
   };
@@ -750,7 +798,7 @@ const Layout = () => {
       {/* Overlay Views */}
       <Suspense fallback={<LoadingSkeleton />}>
         {overlayView === 'notifications' && (
-          <NotificationsView onClose={() => setOverlayView(null)} />
+          <NotificationsView onClose={() => setOverlayView(null)} onAbrirDestino={businessMode ? undefined : abrirDestino} />
         )}
         {overlayView === 'faq' && (
           <FAQView onClose={() => setOverlayView(null)} />
@@ -762,7 +810,11 @@ const Layout = () => {
           <RecurringView onClose={() => setOverlayView(null)} />
         )}
         {overlayView === 'transactions' && (
-          <TransactionsView onClose={() => setOverlayView(null)} />
+          <TransactionsView
+            onClose={() => setOverlayView(null)}
+            movimientoPedido={movimientoPedido}
+            onMovimientoAtendido={soltarMovimiento}
+          />
         )}
         {overlayView === 'analytics' && (
           <AnalyticsView onClose={() => setOverlayView(null)} />
@@ -1011,6 +1063,11 @@ const AppContainer = () => {
     publishDeepLink({ tab, params: params ?? {} });
   }, []);
   useDeepLinks({ navigateTo, isAuthenticated: state.isAuthenticated });
+
+  // El toque de un aviso del sistema, tambien aqui arriba: con la app cerrada,
+  // el telefono lo entrega al arrancar, a veces con la pantalla de ingreso a la
+  // vista. Queda guardado hasta que Layout lo toma (utils/destinoDeAviso).
+  useEffect(() => escucharToquesDeAvisosDelSistema(), []);
 
   // El cierre por inactividad del servidor cuenta desde la ultima ACCION de la
   // persona: este gancho se lo avisa (a lo sumo una vez por minuto, y solo ante

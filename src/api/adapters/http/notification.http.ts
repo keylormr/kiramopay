@@ -41,6 +41,8 @@ export class HttpNotificationRepository implements INotificationRepository {
       read: n.read ?? n.read_at != null,
       date: new Date(n.created_at).toLocaleDateString('es-CR'),
       dateISO: n.created_at,
+      // Con que abrir la pantalla del aviso; los de antes no lo traen.
+      ...(n.data ? { data: n.data } : {}),
     }));
 
     return apiSuccess(notifications);

@@ -70,14 +70,31 @@ interface ProfileViewProps {
   onOpenBudget?: () => void;
   /** Pagos fijos: recordatorios de pagos que se repiten. */
   onOpenRecurring?: () => void;
+  /**
+   * Un aviso de seguridad tocado (Layout): la pantalla baja hasta Seguridad.
+   * Cada pedido es un numero distinto; 0 es ninguno.
+   */
+  seguridadPedida?: number;
+  /** Avisa que el pedido ya se atendio, para que Layout lo suelte. */
+  onSeguridadAtendida?: () => void;
 }
 
 // Mientras las secciones van en una sola columna no pasan de 42rem, como antes
 // de la columna ancha del escritorio; desde 52rem se reparten en dos.
 const UNA_COLUMNA = 'mx-auto w-full max-w-2xl @min-[52rem]/perfil:max-w-none';
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenAdminCapital, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscrow, onOpenPayout, onOpenBusiness, onOpenAdminMerchants, onOpenClosedMerchants, onOpenAdminUsers, onOpenAdminDisputas, onOpenAdminPromociones, onOpenAdminCapital, onOpenPlans, onOpenSessions, onOpenBudget, onOpenRecurring, seguridadPedida = 0, onSeguridadAtendida }) => {
   const { state, dispatch } = useApp();
+  // Un aviso de seguridad tocado lleva a esta seccion: se baja hasta ella y el
+  // foco queda en su titulo, para que el lector de pantalla diga donde se esta.
+  const seguridadRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!seguridadPedida) return;
+    const titulo = seguridadRef.current;
+    titulo?.scrollIntoView({ block: 'start' });
+    titulo?.focus({ preventScroll: true });
+    onSeguridadAtendida?.();
+  }, [seguridadPedida, onSeguridadAtendida]);
   // El gasto del mes del encabezado es el MISMO de la tarjeta de Inicio y de la
   // pantalla de analisis: resumen del servidor, dias civiles de Costa Rica.
   const gastoMes = useGastoDelMes(state.transactions, state.baseCurrency || 'CRC');
@@ -658,7 +675,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ onOpenFAQ, onOpenEscro
       {/* Security Section */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-semibold uv-text-muted">
+          <h3
+            ref={seguridadRef}
+            tabIndex={-1}
+            className="text-xs font-semibold uv-text-muted scroll-mt-24 focus:outline-none"
+          >
             {t('security')}
           </h3>
           <HelpButton topic="mfa" className="-mr-1" />

@@ -608,7 +608,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
 
-	-- Espeja las migraciones 013 y 073.
+	-- Espeja las migraciones 013, 073 y 092.
 	CREATE TABLE IF NOT EXISTS notification_history (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id),
@@ -619,6 +619,7 @@ func createSchema(ctx context.Context, pool *pgxpool.Pool) error {
 		created_at TIMESTAMP DEFAULT NOW()
 	);
 	ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ;
+	ALTER TABLE notification_history ADD COLUMN IF NOT EXISTS datos JSONB;
 
 	CREATE TABLE IF NOT EXISTS webhook_endpoints (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

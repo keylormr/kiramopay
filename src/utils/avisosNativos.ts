@@ -2,6 +2,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { getApiLayer } from '@/api';
 import type { EstadoAvisos, ResultadoAvisos } from './avisosPush';
+import { publicarToqueDeAviso, toqueDeAviso } from './destinoDeAviso';
 
 /**
  * Avisos de la app instalada en Android, por Firebase Cloud Messaging.
@@ -170,6 +171,34 @@ export function soltarNativoAlSalir(avisarAlServidor: boolean): void {
   }
   // Solo si habia avisos: a quien nunca los activo no se le toca FCM.
   if (habiaActivado) void PushNotifications.unregister().catch(() => undefined);
+}
+
+/**
+ * Tocar un aviso en el telefono abria la app y nada mas. Ahora lleva a la
+ * pantalla del aviso (ver destinoDeAviso). Se escucha desde el arranque, antes
+ * de saber si hay sesion: con la app cerrada, Android entrega el toque apenas
+ * hay quien escuche (el plugin lo guarda hasta entonces), y la pantalla que lo
+ * atiende lo toma cuando existe.
+ *
+ * Solo escucha: no registra el telefono en FCM, asi que no toca Firebase.
+ * Devuelve la funcion que deja de escuchar.
+ */
+export function escucharToquesDeAvisos(): () => void {
+  let escucha: PluginListenerHandle | null = null;
+  let suelta = false;
+  void PushNotifications.addListener('pushNotificationActionPerformed', (accion) => {
+    const toque = toqueDeAviso(accion.notification?.data as Record<string, unknown> | undefined);
+    if (toque) publicarToqueDeAviso(toque);
+  })
+    .then((h) => {
+      if (suelta) void h.remove();
+      else escucha = h;
+    })
+    .catch(() => undefined);
+  return () => {
+    suelta = true;
+    if (escucha) void escucha.remove();
+  };
 }
 
 /** Solo para pruebas. */

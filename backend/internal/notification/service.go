@@ -93,11 +93,17 @@ func (s *Service) SendToUser(ctx context.Context, userID string, payload *Notifi
 		Title:     payload.Title,
 		Body:      payload.Body,
 		Type:      payload.Tag,
+		Datos:     payload.Data,
 		CreatedAt: time.Now().UTC(),
 	}
 	if err := s.repo.InsertNotification(ctx, record); err != nil {
 		slog.Error("failed to save notification history", "error", err)
 	}
+	// El push lleva el id del aviso guardado: tocarlo en el telefono lo marca
+	// leido. Copia, para no cambiar el payload de quien llama.
+	conID := *payload
+	conID.ID = record.ID
+	payload = &conID
 
 	// Real-time delivery to any open sockets for this user. Independent of
 	// web-push subscriptions, so a foregrounded app gets it instantly even
@@ -152,6 +158,8 @@ type realtimeNotification struct {
 	// la persona. Date queda para las versiones de la app que no la leen.
 	DateISO string `json:"dateISO"`
 	Read    bool   `json:"read"`
+	// Data abre la pantalla del aviso (ver DatosParaLaApp).
+	Data map[string]string `json:"data,omitempty"`
 }
 
 // realtimeEnvelope is the {type:"notification", notification:{…}} frame the
@@ -180,6 +188,7 @@ func (s *Service) broadcast(userID string, record *NotificationRecord) {
 			Date:    record.CreatedAt.Format("2/1/2006"),
 			DateISO: record.CreatedAt.UTC().Format(time.RFC3339),
 			Read:    false,
+			Data:    record.Datos,
 		},
 	})
 }
@@ -319,11 +328,14 @@ func (s *Service) MarkAllRead(ctx context.Context, userID string) error {
 //
 // Reemplaza a NotifyUser, que recibia el titulo y el cuerpo ya escritos: cada
 // modulo los escribia en espanol, fuera cual fuera el idioma de quien los leia.
+//
+// De los datos, los que abren la pantalla del aviso (el activo, el movimiento)
+// se guardan ademas aparte: ver DatosParaLaApp.
 func (s *Service) NotificarEnSuIdioma(ctx context.Context, userID, clave string, datos Datos, tag string) error {
 	idioma := "es"
 	if s.repo != nil {
 		idioma = s.repo.IdiomaDe(ctx, userID)
 	}
 	titulo, cuerpo := Texto(clave, idioma, datos)
-	return s.SendToUser(ctx, userID, &NotificationPayload{Title: titulo, Body: cuerpo, Tag: tag})
+	return s.SendToUser(ctx, userID, &NotificationPayload{Title: titulo, Body: cuerpo, Tag: tag, Data: DatosParaLaApp(datos)})
 }
