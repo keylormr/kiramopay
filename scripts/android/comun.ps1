@@ -12,7 +12,10 @@
 #   Android: developer.android.com/studio, seccion "Command line tools only"
 # Gradle no se instala aparte: lo baja el wrapper del proyecto (android/gradlew), con su propia suma.
 
-$script:Raiz = Join-Path $env:LOCALAPPDATA 'KiramoPay'
+# Fuera de AppData a proposito: una app empaquetada (MSIX) que abre una terminal ve AppData\Local
+# redirigido a su propia carpeta, y la misma ruta deja de ser la misma segun desde donde se corra (las
+# claves guardadas no aparecerian, y Vite falla al ver dos rutas para el mismo index.html).
+$script:Raiz = Join-Path $env:USERPROFILE '.kiramopay'
 # Si Java 21 y el SDK de Android ya estan en otra carpeta (con la misma forma: java\ y
 # android-sdk\), KIRAMOPAY_HERRAMIENTAS apunta ahi y no se instalan de nuevo.
 $script:Herramientas = if ($env:KIRAMOPAY_HERRAMIENTAS) { $env:KIRAMOPAY_HERRAMIENTAS } else { Join-Path $script:Raiz 'herramientas' }

@@ -30,7 +30,7 @@ Lo que se pide la primera vez (las contrasenas y la llave de Breez no se ven al 
   - la llave de la API de Breez, para bitcoin;
   - el archivo .pem con la llave privada de la actualizacion interna. Sin ella, o con
     -SinActualizacionInterna, la version sale solo con el APK y los telefonos la instalan por APK.
-Cuando ya se comprobo que sirven, el script ofrece guardarlas en %LOCALAPPDATA%\KiramoPay\claves.json,
+Cuando ya se comprobo que sirven, el script ofrece guardarlas en %USERPROFILE%\.kiramopay\claves.json,
 cifradas con tu usuario de Windows (DPAPI). Ese archivo solo se puede abrir con la misma sesion de
 Windows en la misma PC: copiado a otro lado no sirve. Para borrarlas: publicar.ps1 -OlvidarClaves.
 

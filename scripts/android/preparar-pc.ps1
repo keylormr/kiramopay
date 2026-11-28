@@ -7,7 +7,7 @@ Una sola vez por PC. Instala, solo para el usuario actual y sin tocar el sistema
   - Java 21 (Temurin), el que piden Capacitor 8 y sus plugins
   - las herramientas de linea de comandos de Android, con platform-tools, la plataforma 36 y
     build-tools 36.0.0
-en %LOCALAPPDATA%\KiramoPay\herramientas (o en KIRAMOPAY_HERRAMIENTAS, si esta definida). No hace falta
+en %USERPROFILE%\.kiramopay\herramientas (o en KIRAMOPAY_HERRAMIENTAS, si esta definida). No hace falta
 Android Studio. Gradle lo baja el propio proyecto (android\gradlew) la primera vez que compila.
 
 Cada descarga se compara con su suma SHA-256 oficial (anotada en comun.ps1). Si no coincide, se borra
@@ -76,7 +76,7 @@ function Install-Descarga([string]$clave) {
 try {
     Test-ArquitecturaSoportada
 
-    $unidad = (Get-Item $env:LOCALAPPDATA).PSDrive
+    $unidad = (Get-Item $env:USERPROFILE).PSDrive
     $libreGb = [math]::Round($unidad.Free / 1GB, 1)
     if ($libreGb -lt 5) { Stop-ConMensaje "Hay $libreGb GB libres en $($unidad.Name): hacen falta al menos 5." }
 

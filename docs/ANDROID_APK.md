@@ -23,7 +23,7 @@ tag and the release that the app and the backend read.
 
 1. Once per PC: `powershell -ExecutionPolicy Bypass -File scripts\android\preparar-pc.ps1`.
    It installs Java 21 and the Android command-line tools (platform 36,
-   build-tools 36.0.0) under `%LOCALAPPDATA%\KiramoPay\herramientas`, each
+   build-tools 36.0.0) under `%USERPROFILE%\.kiramopay\herramientas`, each
    download checked against its official SHA-256, and asks you to accept the
    Android SDK licenses. Gradle comes from `android/gradlew`. To reuse Java 21
    and an SDK that are already installed elsewhere, point
@@ -40,7 +40,7 @@ password and alias, the Firebase `google-services.json`, the Breez API key and
 the `.pem` with the in-app update private key. Once the build proves they work
 (the APK carries the KiramoPay signature and the update package verifies
 against `capacitor.config.ts`), the script offers to keep them in
-`%LOCALAPPDATA%\KiramoPay\claves.json`, encrypted with the Windows user (DPAPI).
+`%USERPROFILE%\.kiramopay\claves.json`, encrypted with the Windows user (DPAPI).
 `-OlvidarClaves` deletes them.
 
 Before publishing it checks that the version is the same in every file, that it
