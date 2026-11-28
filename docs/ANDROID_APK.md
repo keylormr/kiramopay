@@ -45,10 +45,18 @@ against `capacitor.config.ts`), the script offers to keep them in
 
 Before publishing it checks that the version is the same in every file, that it
 is not published yet, that no workflow runs on a tag or a release, and that the
-APK and the AAB each carry the right distribution channel. It publishes only
-after you type `PUBLICAR`: annotated tag, release with the notes and
-`notas.json`, then the in-app update package, and the APK last (the backend
-offers a version only once it sees the APK).
+APK and the AAB each carry the right distribution channel and the KiramoPay
+signature. It publishes only after you type `PUBLICAR`: annotated tag, then a
+**draft** release with the notes, `notas.json`, the in-app update package and
+the APK. A draft is invisible to the backend (it reads `releases/latest`) and to
+the download button, so no phone sees the version half-uploaded. Once every
+asset is there with the right size, the draft becomes the latest release. If
+something fails midway, the message says what is left; the draft stays hidden
+until it is finished by hand.
+
+The native fingerprint includes the bytes of `google-services.json`: a copy that
+differs from the one the previous release used (a new download from Firebase,
+other line endings) makes that version go by APK once.
 
 Without the in-app update key, `-SinActualizacionInterna` publishes only the
 APK: every phone installs that version through the APK.

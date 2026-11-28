@@ -263,11 +263,14 @@ function archivosVersionados(plataforma) {
 // index.html en la raiz del .zip: el plugin toma como raiz la carpeta que lo
 // contiene. En Linux y macOS, zip. Windows no trae zip, pero si el tar de
 // System32 (bsdtar), que arma .zip; se le pasan las entradas de dist una por
-// una, porque con "." los nombres saldrian como ./index.html.
+// una, porque con "." los nombres saldrian como ./index.html. Ese tar se cae
+// sin mensaje con un nombre que no es ASCII, asi que eso se revisa antes.
 export function comprimir(carpeta, zip) {
   if (process.platform === 'win32') {
     const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
     if (!existsSync(tar)) throw new Error(`no se encontro ${tar} para armar el .zip`);
+    const noAscii = readdirSync(carpeta, { recursive: true }).filter((n) => /[^\x20-\x7e]/.test(String(n)));
+    if (noAscii.length > 0) throw new Error(`el tar de Windows no puede comprimir nombres que no son ASCII: ${noAscii.join(', ')}`);
     execFileSync(tar, ['-a', '-c', '-f', zip, '-C', carpeta, ...readdirSync(carpeta)]);
     return;
   }
