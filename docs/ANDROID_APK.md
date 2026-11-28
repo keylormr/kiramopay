@@ -1,15 +1,67 @@
 # Android APK — build, sign and publish
 
-GitHub Actions builds and signs two things from the same compilation, and
-nothing needs a local Android toolchain:
+Releases are built and signed **on a PC**, not on GitHub. The
+`android-apk.yml` and `ios-ipa.yml` workflows are disabled and no longer run on
+tags; they stay in the repository as the reference for what a release build
+does. `scripts/android/publicar.ps1` does the same steps on Windows (see
+[Building on a PC](#building-on-a-pc) below).
+
+One compilation produces two things:
 
 - **`kiramopay.apk`** — attached to the GitHub Release. The website's login
   screen shows a **Download Android app** button pointing at the latest one, and
   the app updates itself from it.
 - **`kiramopay.aab`** — the Android App Bundle, the only format Google Play
-  accepts. It is kept as a workflow **artifact**, not attached to the release: a
-  bundle cannot be installed, so on a download page it would only confuse
-  someone who came for the APK.
+  accepts. It is **not** attached to the release (a bundle cannot be installed,
+  so on a download page it would only confuse someone who came for the APK); it
+  stays in `Documents\KiramoPay\<version>` on the PC that built it.
+
+## Building on a PC
+
+Windows 11, x64 or ARM64. Nothing is compiled on GitHub; GitHub only hosts the
+tag and the release that the app and the backend read.
+
+1. Once per PC: `powershell -ExecutionPolicy Bypass -File scripts\android\preparar-pc.ps1`.
+   It installs Java 21 and the Android command-line tools (platform 36,
+   build-tools 35.0.0) under `%USERPROFILE%\.kiramopay\herramientas`, each
+   download checked against its official SHA-256, and asks you to accept the
+   Android SDK licenses. Gradle comes from `android/gradlew`. To reuse Java 21
+   and an SDK that are already installed elsewhere, point
+   `KIRAMOPAY_HERRAMIENTAS` at a folder with `java\` and `android-sdk\`.
+2. Check that the PC builds, without any key:
+   `scripts\android\publicar.ps1 -Ensayo -SinFirma`.
+3. Bump the version in a PR (see [Cutting a release](#cutting-a-release)) and
+   merge it.
+4. `scripts\android\publicar.ps1`. It always builds the latest `main` in a
+   separate worktree, so the local checkout and branch do not matter.
+
+The first run asks for the signing keystore (`kiramopay-release.jks`), its
+password and alias, the Firebase `google-services.json`, the Breez API key and
+the `.pem` with the in-app update private key. Once the build proves they work
+(the APK carries the KiramoPay signature and the update package verifies
+against `capacitor.config.ts`), the script offers to keep them in
+`%USERPROFILE%\.kiramopay\claves.json`, encrypted with the Windows user (DPAPI).
+`-OlvidarClaves` deletes them.
+
+Before publishing it checks that the version is the same in every file, that it
+is not published yet, that no workflow runs on a tag or a release, and that the
+APK and the AAB each carry the right distribution channel and the KiramoPay
+signature. It publishes only after you type `PUBLICAR`: annotated tag, then a
+**draft** release with the notes, `notas.json`, the in-app update package and
+the APK. A draft is invisible to the backend (it reads `releases/latest`) and to
+the download button, so no phone sees the version half-uploaded. Once every
+asset is there with the right size, the draft becomes the latest release. If
+something fails midway, the message says what is left; the draft stays hidden
+until it is finished by hand.
+
+The native fingerprint includes the bytes of `google-services.json`: a copy that
+differs from the one the previous release used (a new download from Firebase,
+other line endings) makes that version go by APK once.
+
+Without the in-app update key, `-SinActualizacionInterna` publishes only the
+APK: every phone installs that version through the APK.
+
+iOS is not built on a PC: the `.ipa` needs a Mac.
 
 ## One-time setup
 
@@ -69,24 +121,25 @@ still need this CORS allow-list entry.
 
 ## Cutting a release
 
-1. Bump `versionCode` (must increase) and `versionName` in
-   `android/app/build.gradle`.
-2. Tag and push:
-   ```bash
-   git tag v2.0.1
-   git push origin v2.0.1
-   ```
-3. The workflow builds and signs both outputs. It attaches `kiramopay.apk` to
-   the `v2.0.1` release — the download button, which points at
-   `releases/latest/download/kiramopay.apk`, then serves it automatically — and
-   leaves `kiramopay.aab` as an artifact of that run.
+1. In a PR, bump the version everywhere it lives: `versionCode` (must
+   increase) and `versionName` in `android/app/build.gradle`,
+   `CURRENT_PROJECT_VERSION` and `MARKETING_VERSION` in
+   `ios/App/App.xcodeproj/project.pbxproj`, `package.json` and
+   `package-lock.json`, `backend/internal/buildinfo/version.txt`, the new
+   `current` entry in `src/config/version.ts` (the previous one moves to
+   `history`) and its translations in `src/config/notasTraducidas.json`.
+2. Merge it, then run `scripts\android\publicar.ps1` on the PC. Do not push the
+   tag by hand: the script creates it on the built commit and publishes the
+   release in the right order. The download button, which points at
+   `releases/latest/download/kiramopay.apk`, then serves the new APK.
 
 Keep `versionCode` and the app's own version in step: `npm run check:version`
 (the **Version Sync** job) fails the build if `package.json`, `versionName` and
 the changelog entry in `src/config/version.ts` disagree.
 
-To test a build without releasing, run the workflow manually from the Actions
-tab — it produces both artifacts and publishes nothing.
+To test a build without releasing, run `scripts\android\publicar.ps1 -Ensayo`
+(or `-Ensayo -Rama <branch>` for a PR): it builds and signs both outputs and
+publishes nothing.
 
 ## In-app updates (no new APK)
 
@@ -122,7 +175,9 @@ Same hash as the previous published release: the minimum is inherited. Changed,
 or nothing to compare with: the minimum is this build, so the version goes by
 APK. When in doubt, it always falls on the APK side.
 
-Signatures are RSA-2048, PKCS#1 v1.5, SHA-256, with `LIVE_UPDATE_PRIVATE_KEY`.
+Signatures are RSA-2048, PKCS#1 v1.5, SHA-256, with the in-app update private
+key (`LIVE_UPDATE_PRIVATE_KEY` for the script; `publicar.ps1` keeps it encrypted
+on the PC that builds).
 The phone checks twice: the app verifies the manifest with WebCrypto before
 downloading anything (`src/utils/paqueteFirmado.ts`), and the plugin verifies
 the zip natively, before unzipping, with `plugins.LiveUpdate.publicKey` from
@@ -130,21 +185,23 @@ the zip natively, before unzipping, with `plugins.LiveUpdate.publicKey` from
 change it: a zip without a valid signature is rejected even if foreign code
 asks the plugin for it.
 
-If the secret is missing or does not match that public key (or the step fails
-for any other reason), the release still goes out with the APK and the AAB, but
-without a package: that version installs by APK. The APK is the emergency exit
-and does not depend on this step. The run ends red so it gets noticed.
+If the key does not match that public key, `publicar.ps1` stops before
+publishing: no phone would accept the package. `-SinActualizacionInterna`
+publishes the APK without a package; that version installs by APK. The APK is
+the emergency exit and does not depend on the package.
 
 The app only downloads a package from
 `https://github.com/keylormr/kiramopay/releases/download/v<version>/kiramopay-web-<platform>.zip`.
 Any other URL the server sends goes the APK way: the plugin never contacts
 another host (it sends a device id with the download).
 
-**Rotating the key** (only if the private key leaked): generate a new pair,
-replace the secret and both copies of the public key (`capacitor.config.ts` and
+**Rotating the key** (if the private key leaked or was lost): generate a new
+pair and replace both copies of the public key (`capacitor.config.ts` and
 `LLAVE_PUBLICA_PAQUETES`; a test keeps them equal). The native fingerprint
-changes with `capacitor.config.ts`, so that version goes by APK; from then on,
-in-app again.
+changes with `capacitor.config.ts`, and the previous release's manifest no
+longer verifies, so that version goes by APK; from then on, in-app again. It
+was rotated in 2.16.2: the previous private key existed only as a GitHub
+secret, which cannot be read back, and releases no longer build on GitHub.
 
 If a new web package does not start (the app does not reach its first render
 within the 20 s `readyTimeout`), the plugin goes back to the package inside the
@@ -171,8 +228,9 @@ up to 2.8.0 do not have it.
 - **Restart mid-use.** A new version found when the app comes back to the
   foreground raises the barrier and restarts the app when the download ends,
   even with a form open. Idempotency keys prevent duplicated money operations.
-- **The private key is a repository secret**, like the keystore. A GitHub
-  environment limited to `v*` tags, with approval, would narrow who can use it.
+- **The private key lives on the PC that builds**, encrypted with its Windows
+  user (DPAPI), plus the owner's offline backup next to the keystore. Losing
+  both means a rotation, and that version goes by APK.
 
 ## Google Play variant
 

@@ -42,15 +42,23 @@ export interface AppVersion {
 
 export const APP_VERSION: AppVersion = {
   current: {
-    version: '2.16.1',
-    buildNumber: 29,
+    version: '2.16.2',
+    buildNumber: 30,
     releaseDate: '2026-11-27',
     changes: [
-      'El Mercado de viajes y comida ya no aparece en el Inicio ni en el Centro de ayuda mientras no esté disponible',
-      'Las pantallas de bienvenida describen lo que la aplicación hace hoy: enviar a otra cuenta de KiramoPay con su número de teléfono o un código QR',
+      'Tocar un aviso de precio, de un SINPE recibido o de seguridad, en la campana o en el teléfono, abre su pantalla; antes solo lo marcaba como leído',
     ],
   },
   history: [
+    {
+      version: '2.16.1',
+      buildNumber: 29,
+      releaseDate: '2026-11-27',
+      changes: [
+        'El Mercado de viajes y comida ya no aparece en el Inicio ni en el Centro de ayuda mientras no esté disponible',
+        'Las pantallas de bienvenida describen lo que la aplicación hace hoy: enviar a otra cuenta de KiramoPay con su número de teléfono o un código QR',
+      ],
+    },
     {
       version: '2.16.0',
       buildNumber: 28,
