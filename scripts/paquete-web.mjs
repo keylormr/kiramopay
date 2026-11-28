@@ -1,5 +1,5 @@
 // Arma el paquete de la actualizacion interna de una plataforma y su manifiesto
-// firmado. Lo corren android-apk.yml e ios-ipa.yml despues de `npm run build`.
+// firmado. Lo corre scripts/android/publicar.ps1 (en la PC) despues de `npm run build`.
 //
 // La app instalada puede reemplazar su capa web (lo que hay en dist/) bajandola
 // por dentro, sin otro APK. Lo nativo no: un plugin nuevo, otra version de
@@ -40,7 +40,7 @@
 
 import { createHash, createPrivateKey, createPublicKey, sign, verify, constants } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -260,6 +260,20 @@ function archivosVersionados(plataforma) {
     .map((ruta) => ({ ruta, contenido: leer(ruta) }));
 }
 
+// index.html en la raiz del .zip: el plugin toma como raiz la carpeta que lo
+// contiene. En Linux y macOS, zip. Windows no trae zip, pero si el tar de
+// System32 (bsdtar), que arma .zip; se le pasan las entradas de dist una por
+// una, porque con "." los nombres saldrian como ./index.html.
+export function comprimir(carpeta, zip) {
+  if (process.platform === 'win32') {
+    const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    if (!existsSync(tar)) throw new Error(`no se encontro ${tar} para armar el .zip`);
+    execFileSync(tar, ['-a', '-c', '-f', zip, '-C', carpeta, ...readdirSync(carpeta)]);
+    return;
+  }
+  execFileSync('zip', ['-q', '-r', '-X', zip, '.'], { cwd: carpeta });
+}
+
 async function manifiestoAnterior(tag, plataforma, llavePublica) {
   const repo = process.env.GITHUB_REPOSITORY || 'keylormr/kiramopay';
   const cabeceras = { Accept: 'application/vnd.github+json' };
@@ -313,8 +327,7 @@ async function principal() {
   const { paquete, manifiesto: archivoManifiesto } = adjuntosDe(plataforma);
   const zip = path.join(raizDelRepo(), paquete);
   if (existsSync(zip)) unlinkSync(zip);
-  // index.html en la raiz del .zip: el plugin toma como raiz la carpeta que lo contiene.
-  execFileSync('zip', ['-q', '-r', '-X', zip, '.'], { cwd: path.join(raizDelRepo(), 'dist') });
+  comprimir(path.join(raizDelRepo(), 'dist'), zip);
   const bytesZip = readFileSync(zip);
   const firmaPaquete = firmar(bytesZip, llavePrivada);
 
