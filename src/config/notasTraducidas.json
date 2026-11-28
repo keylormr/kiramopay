@@ -1,4 +1,24 @@
 {
+  "2.16.2": {
+    "en": [
+      "Tapping a price alert, a received SINPE or a security notice, in the bell or on your phone, opens its screen; before, it only marked it as read"
+    ],
+    "fr": [
+      "Toucher une alerte de prix, un SINPE reçu ou un avis de sécurité, dans la cloche ou sur le téléphone, ouvre son écran ; avant, cela le marquait seulement comme lu"
+    ],
+    "hi": [
+      "घंटी में या फ़ोन पर कीमत अलर्ट, मिले हुए SINPE या सुरक्षा सूचना पर टैप करने से उसकी स्क्रीन खुलती है; पहले यह उसे सिर्फ़ पढ़ा हुआ चिह्नित करता था"
+    ],
+    "ja": [
+      "ベルまたはスマートフォンで、価格アラート、受け取ったSINPE、セキュリティのお知らせをタップすると、その画面が開きます。以前は既読になるだけでした"
+    ],
+    "pt": [
+      "Tocar em um alerta de preço, em um SINPE recebido ou em um aviso de segurança, no sino ou no telefone, abre a tela dele; antes, só o marcava como lido"
+    ],
+    "zh-cn": [
+      "在铃铛或手机上点按价格提醒、收到的 SINPE 或安全通知，会打开对应的页面；以前只会把它标记为已读"
+    ]
+  },
   "2.16.1": {
     "en": [
       "The rides and food Marketplace no longer appears on Home or in the Help Center while it is not available",
