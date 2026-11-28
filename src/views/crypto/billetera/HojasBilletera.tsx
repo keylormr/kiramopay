@@ -41,7 +41,7 @@ const CAMPO =
   'kp-foco w-full rounded-xl border border-[var(--color-border)] dark:border-[var(--color-border-dark)] uv-surface-1 px-3 py-3 uv-text-primary';
 const ERROR = 'text-sm font-semibold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]';
 
-function BotonCopiar({ texto }: { texto: string }) {
+export function BotonCopiar({ texto }: { texto: string }) {
   const { t } = useLanguage();
   const [copiado, setCopiado] = useState(false);
   return (
@@ -84,9 +84,11 @@ interface HojaRecibirProps {
   onClose: () => void;
   direccionEvm: string | null;
   btc: BilleteraBitcoin | null;
+  /** La direccion de cobro (nombre@dominio), si ya esta registrada. */
+  direccionDeCobro?: string | null;
 }
 
-export function HojaRecibir({ activo, onClose, direccionEvm, btc }: HojaRecibirProps) {
+export function HojaRecibir({ activo, onClose, direccionEvm, btc, direccionDeCobro }: HojaRecibirProps) {
   const { t } = useLanguage();
   const [via, setVia] = useState<'lightning' | 'red'>('lightning');
   const [sats, setSats] = useState('');
@@ -161,6 +163,13 @@ export function HojaRecibir({ activo, onClose, direccionEvm, btc }: HojaRecibirP
               <CodigoParaRecibir valor={factura} />
             ) : (
               <div className="space-y-3">
+                {direccionDeCobro && (
+                  <div className="space-y-2 rounded-xl uv-surface-2 p-3">
+                    <p className="text-xs uv-text-muted">{t('bp_direccion_lightning')}</p>
+                    <p className="break-all font-semibold uv-text-primary">{direccionDeCobro}</p>
+                    <BotonCopiar texto={direccionDeCobro} />
+                  </div>
+                )}
                 <p className="text-sm uv-text-secondary">{t('bp_btc_lightning_ayuda')}</p>
                 <label className="block space-y-1">
                   <span className="text-sm font-semibold uv-text-secondary">{t('bp_monto_sats_opcional')}</span>

@@ -18,7 +18,8 @@ import { rellenar } from '@/utils/planes';
 import { ACTIVOS_EVM, direccionEvm as derivarDireccionEvm, enlaceDeDireccion, saldoEvm, saldoLegible } from '@/billetera/evm';
 import { recortarDecimales, satsABtc, valorEnUsd } from '@/billetera/formato';
 import { CrearBilletera } from './CrearBilletera';
-import { HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera, type IntentosDeEnvio } from './HojasBilletera';
+import { BotonCopiar, HojaEnviar, HojaPalabras, HojaQuitar, HojaRecibir, type ActivoDeLaBilletera, type IntentosDeEnvio } from './HojasBilletera';
+import { BotonCompartir, HojaRespaldo } from './RespaldoBilletera';
 import { SeccionHerencia } from '../herencia/SeccionHerencia';
 
 // 'error': el almacen seguro no contesto. No es 'sin-billetera': ofrecer crear
@@ -70,6 +71,7 @@ export function BilleteraPropia() {
   const [recibir, setRecibir] = useState<ActivoDeLaBilletera | null>(null);
   const [enviar, setEnviar] = useState<ActivoDeLaBilletera | null>(null);
   const [palabrasVisibles, setPalabrasVisibles] = useState<string | null>(null);
+  const [respaldando, setRespaldando] = useState<string | null>(null);
   const [quitando, setQuitando] = useState(false);
   const btcRef = useRef<BilleteraBitcoin | null>(null);
   // Cada apertura es una sesion. Lo que termina de cargar despues de quitar la
@@ -121,6 +123,7 @@ export function BilleteraPropia() {
     setRecibir(null);
     setEnviar(null);
     setPalabrasVisibles(null);
+    setRespaldando(null);
     setQuitando(false);
     setFase('cerrada');
   }, []);
@@ -272,6 +275,7 @@ export function BilleteraPropia() {
     setMovimientos([]);
     setDepositos([]);
     setDireccionDeCobro(null);
+    setRespaldando(null);
     setQuitando(false);
     setFase('sin-billetera');
   };
@@ -434,14 +438,22 @@ export function BilleteraPropia() {
         >
           {t('bp_ver_palabras')}
         </button>
+        <button
+          type="button"
+          className={BOTON_SECUNDARIO}
+          onClick={async () => { if (await confirmarConHuella(t('bp_respaldo_razon'))) setRespaldando(semilla); }}
+        >
+          {t('bp_respaldo_boton')}
+        </button>
         <button type="button" className="kp-foco w-full py-3 text-sm font-semibold text-[var(--color-danger)]" onClick={() => setQuitando(true)}>
           {t('bp_quitar')}
         </button>
       </section>
 
-      <HojaRecibir activo={recibir} onClose={() => setRecibir(null)} direccionEvm={direccionEvm} btc={btc} />
+      <HojaRecibir activo={recibir} onClose={() => setRecibir(null)} direccionEvm={direccionEvm} btc={btc} direccionDeCobro={direccionDeCobro} />
       <HojaEnviar activo={enviar} onClose={() => setEnviar(null)} semilla={semilla} btc={btc} onEnviado={() => void leerSaldos(semilla, btc)} onEnviando={alEnviando} intentos={intentosRef.current} />
       <HojaPalabras semilla={palabrasVisibles} onClose={() => setPalabrasVisibles(null)} />
+      <HojaRespaldo semilla={respaldando} onClose={() => setRespaldando(null)} onExportando={alEnviando} />
       <HojaQuitar abierta={quitando} onClose={() => setQuitando(false)} onQuitar={quitar} />
     </div>
   );
@@ -511,9 +523,13 @@ function DireccionDeCobro({ btc, actual, sugerida, onCreada }: {
 
   if (actual) {
     return (
-      <div className="rounded-xl uv-surface-2 p-3">
+      <div className="space-y-2 rounded-xl uv-surface-2 p-3">
         <p className="text-xs uv-text-muted">{t('bp_direccion_lightning')}</p>
         <p className="break-all font-semibold uv-text-primary">{actual}</p>
+        <div className="grid grid-cols-2 gap-2 [&:has(>:only-child)]:grid-cols-1">
+          <BotonCopiar texto={actual} />
+          <BotonCompartir texto={actual} />
+        </div>
       </div>
     );
   }

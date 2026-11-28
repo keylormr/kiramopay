@@ -52,7 +52,7 @@ describe('Ajustes: cobrar fuera de KiramoPay', () => {
     const user = userEvent.setup();
     pintar();
     await user.click(await screen.findByRole('button', { name: 'Editar medios de cobro' }));
-    await user.type(screen.getByPlaceholderText('nombre@breez.tips'), 'Soda@breez.tips');
+    await user.type(screen.getByPlaceholderText('nombre@pay.kiramopay.com'), 'Soda@breez.tips');
     await user.type(screen.getByPlaceholderText('8888-7777'), '8888 7777');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
 
@@ -88,11 +88,11 @@ describe('Ajustes: cobrar fuera de KiramoPay', () => {
     const user = userEvent.setup();
     pintar();
     await user.click(await screen.findByRole('button', { name: 'Editar medios de cobro' }));
-    await user.type(screen.getByPlaceholderText('nombre@breez.tips'), 'soda');
+    await user.type(screen.getByPlaceholderText('nombre@pay.kiramopay.com'), 'soda');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Esa dirección no respondió como billetera Lightning');
 
-    await user.clear(screen.getByPlaceholderText('nombre@breez.tips'));
+    await user.clear(screen.getByPlaceholderText('nombre@pay.kiramopay.com'));
     await user.type(screen.getByPlaceholderText('8888-7777'), '2222-2222');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Escribe un celular de Costa Rica de 8 dígitos.');
@@ -109,7 +109,7 @@ describe('Ajustes: cobrar fuera de KiramoPay', () => {
     const user = userEvent.setup();
     pintar();
     await user.click(await screen.findByRole('button', { name: 'Editar medios de cobro' }));
-    await user.type(screen.getByPlaceholderText('nombre@breez.tips'), 'soda@breez.tips');
+    await user.type(screen.getByPlaceholderText('nombre@pay.kiramopay.com'), 'soda@breez.tips');
     await user.click(screen.getByRole('button', { name: 'Guardar' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(texto);
     expect(screen.queryByText('server text')).not.toBeInTheDocument();

@@ -15,6 +15,7 @@ import {
 } from '@/billetera/semilla';
 import { BilleteraYaGuardada } from '@/billetera/boveda';
 import { usePantallaSegura, type EstadoDeLaProteccion } from '@/billetera/pantalla';
+import { RestaurarDesdeArchivo } from './RespaldoBilletera';
 
 interface Props {
   modo: 'crear' | 'restaurar';
@@ -188,12 +189,11 @@ export function CrearBilletera({ modo, onListo, onCancelar }: Props) {
         onChange={e => { setError(''); setTexto(e.target.value); }}
       />
       {error && <p role="alert" className="text-sm font-semibold text-[var(--color-danger)] dark:text-[var(--color-danger-strong-dark)]">{error}</p>}
-      <div className="space-y-2">
-        <button type="button" className={BOTON_PRINCIPAL} disabled={!texto.trim() || guardando} onClick={restaurar}>
-          {t('bp_guardar')}
-        </button>
-        <button type="button" className={BOTON_SECUNDARIO} disabled={guardando} onClick={onCancelar}>{t('cancel')}</button>
-      </div>
+      <button type="button" className={BOTON_PRINCIPAL} disabled={!texto.trim() || guardando} onClick={restaurar}>
+        {t('bp_guardar')}
+      </button>
+      <RestaurarDesdeArchivo onSemilla={s => void terminar(s)} deshabilitado={guardando} />
+      <button type="button" className={BOTON_SECUNDARIO} disabled={guardando} onClick={onCancelar}>{t('cancel')}</button>
     </section>
   );
 }

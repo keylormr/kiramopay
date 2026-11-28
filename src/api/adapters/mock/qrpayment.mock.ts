@@ -120,7 +120,7 @@ const FACTURA_DE_LA_DEMO =
 // El precio de un bitcoin de la demo: el de mock-data (42.850 USD) y, en
 // colones, por el tipo de cambio de country.mock (526,50).
 const PRECIO_DEMO_BTC: Readonly<Record<string, number>> = { USD: 42_850, CRC: 42_850 * 526.5 };
-const DOMINIOS_DE_LA_DEMO = ['breez.tips'];
+const DOMINIOS_DE_LA_DEMO = ['pay.kiramopay.com', 'breez.tips'];
 
 type MediosGuardados = { lightningAddress?: string; sinpeMovil?: string };
 
