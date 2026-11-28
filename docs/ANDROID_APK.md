@@ -23,7 +23,7 @@ tag and the release that the app and the backend read.
 
 1. Once per PC: `powershell -ExecutionPolicy Bypass -File scripts\android\preparar-pc.ps1`.
    It installs Java 21 and the Android command-line tools (platform 36,
-   build-tools 36.0.0) under `%USERPROFILE%\.kiramopay\herramientas`, each
+   build-tools 35.0.0) under `%USERPROFILE%\.kiramopay\herramientas`, each
    download checked against its official SHA-256, and asks you to accept the
    Android SDK licenses. Gradle comes from `android/gradlew`. To reuse Java 21
    and an SDK that are already installed elsewhere, point
@@ -167,7 +167,9 @@ Same hash as the previous published release: the minimum is inherited. Changed,
 or nothing to compare with: the minimum is this build, so the version goes by
 APK. When in doubt, it always falls on the APK side.
 
-Signatures are RSA-2048, PKCS#1 v1.5, SHA-256, with `LIVE_UPDATE_PRIVATE_KEY`.
+Signatures are RSA-2048, PKCS#1 v1.5, SHA-256, with the in-app update private
+key (`LIVE_UPDATE_PRIVATE_KEY` for the script; `publicar.ps1` keeps it encrypted
+on the PC that builds).
 The phone checks twice: the app verifies the manifest with WebCrypto before
 downloading anything (`src/utils/paqueteFirmado.ts`), and the plugin verifies
 the zip natively, before unzipping, with `plugins.LiveUpdate.publicKey` from
@@ -175,21 +177,23 @@ the zip natively, before unzipping, with `plugins.LiveUpdate.publicKey` from
 change it: a zip without a valid signature is rejected even if foreign code
 asks the plugin for it.
 
-If the secret is missing or does not match that public key (or the step fails
-for any other reason), the release still goes out with the APK and the AAB, but
-without a package: that version installs by APK. The APK is the emergency exit
-and does not depend on this step. The run ends red so it gets noticed.
+If the key does not match that public key, `publicar.ps1` stops before
+publishing: no phone would accept the package. `-SinActualizacionInterna`
+publishes the APK without a package; that version installs by APK. The APK is
+the emergency exit and does not depend on the package.
 
 The app only downloads a package from
 `https://github.com/keylormr/kiramopay/releases/download/v<version>/kiramopay-web-<platform>.zip`.
 Any other URL the server sends goes the APK way: the plugin never contacts
 another host (it sends a device id with the download).
 
-**Rotating the key** (only if the private key leaked): generate a new pair,
-replace the secret and both copies of the public key (`capacitor.config.ts` and
+**Rotating the key** (if the private key leaked or was lost): generate a new
+pair and replace both copies of the public key (`capacitor.config.ts` and
 `LLAVE_PUBLICA_PAQUETES`; a test keeps them equal). The native fingerprint
-changes with `capacitor.config.ts`, so that version goes by APK; from then on,
-in-app again.
+changes with `capacitor.config.ts`, and the previous release's manifest no
+longer verifies, so that version goes by APK; from then on, in-app again. It
+was rotated in 2.16.2: the previous private key existed only as a GitHub
+secret, which cannot be read back, and releases no longer build on GitHub.
 
 If a new web package does not start (the app does not reach its first render
 within the 20 s `readyTimeout`), the plugin goes back to the package inside the
@@ -216,8 +220,9 @@ up to 2.8.0 do not have it.
 - **Restart mid-use.** A new version found when the app comes back to the
   foreground raises the barrier and restarts the app when the download ends,
   even with a form open. Idempotency keys prevent duplicated money operations.
-- **The private key is a repository secret**, like the keystore. A GitHub
-  environment limited to `v*` tags, with approval, would narrow who can use it.
+- **The private key lives on the PC that builds**, encrypted with its Windows
+  user (DPAPI), plus the owner's offline backup next to the keystore. Losing
+  both means a rotation, and that version goes by APK.
 
 ## Google Play variant
 

@@ -6,7 +6,7 @@ Prepara una PC con Windows (x64 o ARM64) para compilar el APK de KiramoPay sin G
 Una sola vez por PC. Instala, solo para el usuario actual y sin tocar el sistema ni sus variables:
   - Java 21 (Temurin), el que piden Capacitor 8 y sus plugins
   - las herramientas de linea de comandos de Android, con platform-tools, la plataforma 36 y
-    build-tools 36.0.0
+    build-tools 35.0.0
 en %USERPROFILE%\.kiramopay\herramientas (o en KIRAMOPAY_HERRAMIENTAS, si esta definida). No hace falta
 Android Studio. Gradle lo baja el propio proyecto (android\gradlew) la primera vez que compila.
 

@@ -23,8 +23,9 @@ $script:RutaJava = Join-Path $script:Herramientas 'java'
 $script:RutaSdk = Join-Path $script:Herramientas 'android-sdk'
 $script:Bitacora = Join-Path $script:Raiz 'publicaciones.log'
 
-# compileSdk 36 (android/variables.gradle). build-tools trae apksigner, con el que se revisa la firma.
-$script:VersionBuildTools = '36.0.0'
+# compileSdk 36 (android/variables.gradle). build-tools 35.0.0 es el que usa el plugin de Android 8.13
+# (si falta, Gradle lo baja solo); trae apksigner, con el que se revisa la firma.
+$script:VersionBuildTools = '35.0.0'
 $script:PaquetesSdk = @('platform-tools', 'platforms;android-36', "build-tools;$($script:VersionBuildTools)")
 
 # Huella SHA-256 del certificado de la llave de firma de KiramoPay (kiramopay-release.jks, alias
