@@ -1,6 +1,6 @@
 // Verificacion del manifiesto de la actualizacion interna, en el telefono.
 //
-// El CI (scripts/paquete-web.mjs) publica por plataforma un .zip con la capa
+// El release (scripts/paquete-web.mjs) publica por plataforma un .zip con la capa
 // web y un manifiesto firmado que dice de que version es, que version nativa
 // minima necesita y cual es la firma del .zip. Hay dos verificaciones, y las dos
 // tienen que pasar:
@@ -22,7 +22,7 @@
  * capacitor.config.ts (una prueba lo exige).
  */
 export const LLAVE_PUBLICA_PAQUETES =
-  '-----BEGIN PUBLIC KEY-----MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAinaoOAWrdZndWTRl6kg8sD/fWUjNVXtbApeJAUR6V1c0gRMLlfQUFzQ5WkdNA2nODA3Rqq7Jw4j71caG+EsafRDZ96Y2T9jH9mgl17pFGGZmAjzQICnC04X2r3iQQzlC0vuBsEAeNCEN2ZClSds9YZUim9UakI1SviU0qhVYPrfjDydb7/64JSh5EJUNoJsZfNwC6oXa0QPhQ7HktYhOVpiZFQGEDVCQ5SvfgXoAUjEXDWAmaYirTqBRQBc/5bSNYEbelBWMoYTJV8f+8A4CcxfWCCTsSMhmnN7sLKV7GSnyl67GXclvfL9qj1HOLiUgh8DdD+7Jjo2ywT55N4lnTQIDAQAB-----END PUBLIC KEY-----';
+  '-----BEGIN PUBLIC KEY-----MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt4JJscYPjdakIABFebQpEJZhiefyFm+/xnJh6xIX6OmqB/GeAFxpm2piC3SBn8rOGH+vdxu1TmxopXRTrr0+uDp+g+fHimU+Hrz3ltj6zA8+wEOLnI2fWLO/C/855ixbtFrtvfpEycayiaUznZ8gy/gABtZE82WHC2bq1b5lSN8qdXixcpGyRQIS2e1W8uyPDkDvJfbeXfu88Cv774B2sEQzP7BvtpH8bqsm0qC3kKaFdU8WC5wSCbXIhEaZevpb+x/LFh66tkngtce+twwlk4aCtNVCAp+vdNpbyMbba6WE5zSubgbxCnEI7d0v1+j4OAEWHMWVGpYZPtiQbSwP6QIDAQAB-----END PUBLIC KEY-----';
 
 /** El formato que esta version de la app sabe leer. */
 const FORMATO = 1;
@@ -93,7 +93,7 @@ function comoManifiesto(m: unknown): ManifiestoPaquete | null {
 }
 
 /**
- * Devuelve el manifiesto si la firma es de la llave del CI y los campos tienen
+ * Devuelve el manifiesto si la firma es de la llave de los paquetes y los campos tienen
  * sentido; si no, null. Nunca lanza.
  */
 export async function verificarManifiesto(
